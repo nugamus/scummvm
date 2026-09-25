@@ -111,7 +111,7 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 				readFloats(s, f.uvs.data(), f.uvs.size());
 			}
 			f.material = s.readUint32LE();
-			s.skip(3 * 4); // normal
+			readFloats(s, f.normal, 3);
 		}
 
 		s.skip(10 * 4); // bounds

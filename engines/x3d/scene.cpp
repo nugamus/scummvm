@@ -70,6 +70,7 @@ bool Scene::load(const Common::String &scriptName) {
 	if (s) {
 		for (byte &c : _ambient)
 			c = s->readUint32LE();
+		scale = s->readFloatLE();
 		delete s;
 	}
 	s = openBinChunk(Common::Path(_dir + "SCENE.BIN"), "#CAMERA#");
@@ -154,6 +155,7 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 	// Static view: bake each object's world transform into its vertices
 	m->worldVertices.resize(m->file.objects.size());
 	m->lods.resize(m->file.objects.size());
+	m->hiddenObjects.resize(m->file.objects.size());
 	for (uint i = 0; i < m->file.objects.size(); i++) {
 		const O3DObject &o = m->file.objects[i];
 		const float *w = o.world;
@@ -166,6 +168,13 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 		}
 	}
 	return m;
+}
+
+void Scene::hideObject(const Common::String &name) {
+	for (Model *m : _models)
+		for (uint i = 0; i < m->file.objects.size(); i++)
+			if (m->file.objects[i].name.equalsIgnoreCase(name))
+				m->hiddenObjects[i] = true;
 }
 
 void Scene::attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold) {
@@ -267,6 +276,8 @@ void Scene::draw(const Camera &cam, int width, int height) {
 		if (m->hidden)
 			continue;
 		for (uint i = 0; i < m->file.objects.size(); i++) {
+			if (m->hiddenObjects[i])
+				continue;
 			// Level of detail by squared distance from the object's origin to the camera
 			const float *origin = m->file.objects[i].world + 12;
 			float s = 0;

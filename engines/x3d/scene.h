@@ -24,6 +24,7 @@
 #define X3D_SCENE_H
 
 #include "common/array.h"
+#include "common/hash-str.h"
 #include "common/hashmap.h"
 #include "common/path.h"
 #include "common/str.h"
@@ -58,8 +59,8 @@ public:
 	void draw(const Camera &cam, int width, int height);
 
 	Camera camera; // #CAMERA# values; position and angles are set by the unit
+	float scale = 1; // #SCENE# unit length (eye height and collision sphere derive from it)
 
-private:
 	struct Model;
 
 	// A lower-detail stand-in for a base object (docs/engine-spec/scene.md, Levels of detail)
@@ -74,8 +75,16 @@ private:
 		bool hidden = false;
 		Common::Array<Common::Array<float> > worldVertices; // per object; empty for weld objects
 		Common::Array<Common::Array<Lod> > lods;            // per object, by threshold
+		Common::Array<bool> hiddenObjects;
 	};
 
+	// X3d_Object_Hide by object name, in every loaded file
+	void hideObject(const Common::String &name);
+
+	// Files loaded by object= lines (not their LODs), in script order
+	const Common::Array<Model *> &models() const { return _models; }
+
+private:
 	Model *loadModel(const Common::String &path);
 	void attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold);
 	void drawObject(const Model &m, uint object);

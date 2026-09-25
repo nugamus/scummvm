@@ -1,9 +1,11 @@
 MODULE := engines/x3d
 
 MODULE_OBJS = \
+	collision.o \
 	dmf.o \
 	metaengine.o \
 	o3d.o \
+	player.o \
 	scene.o \
 	x3d.o
 

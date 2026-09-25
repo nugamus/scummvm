@@ -44,6 +44,7 @@ struct O3DFace {
 	Common::Array<uint32> indices;
 	Common::Array<float> uvs; // u, v per index; empty without UVs
 	uint32 material;
+	float normal[3]; // object-local plane normal, the front side for collision
 };
 
 struct O3DObject {

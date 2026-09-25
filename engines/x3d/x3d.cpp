@@ -20,6 +20,7 @@
  */
 
 #include "common/config-manager.h"
+#include "common/debug.h"
 #include "common/events.h"
 #include "common/file.h"
 #include "common/system.h"
@@ -37,6 +38,8 @@
 
 #include "video/avi_decoder.h"
 
+#include "x3d/collision.h"
+#include "x3d/player.h"
 #include "x3d/scene.h"
 #include "x3d/x3d.h"
 
@@ -87,27 +90,73 @@ Common::Error X3DEngine::run() {
 		if (!scene.load(sceneName))
 			error("Unable to load scene %s", sceneName.c_str());
 
-		// U01's normal entry holds this first shot for 1.5 s (E-0041)
-		// ponytail: only U01's start camera, other units need their Uxx_Start values
-		Camera camera = scene.camera;
+		// Free roam as after U01's scripted entry (movement.md, U01 hand-over). The entry
+		// itself and the TakeCard action that unlocks movement are not implemented yet, so
+		// the player can move at once.
+		// ponytail: only U01's values; other units need their Uxx_Start state
+		Player player;
+		player.init(scene.scale);
+		player.fov = scene.camera.fov;
+		Common::StringArray noCollision;
 		if (sceneName.hasPrefixIgnoreCase("U01")) {
-			camera.position[0] = -258.44f;
-			camera.position[1] = -508.20f;
-			camera.position[2] = 29.546f;
-			camera.yaw = 1.31f;
-			camera.pitch = 1.5707960f;
+			player.eye.set(-466.36f, -452.495f, 30.48f);
+			player.yaw = 4.7f;
+			player.sphereOffset = 37.0f;
+			noCollision.push_back("Box203");
+			scene.hideObject("Box203");
 		}
 		// Development shortcut: start_camera=x,y,z,yaw,pitch places the camera anywhere
 		if (ConfMan.hasKey("start_camera"))
-			sscanf(ConfMan.get("start_camera").c_str(), "%f,%f,%f,%f,%f", &camera.position[0],
-			       &camera.position[1], &camera.position[2], &camera.yaw, &camera.pitch);
+			sscanf(ConfMan.get("start_camera").c_str(), "%f,%f,%f,%f,%f", &player.eye.x(),
+			       &player.eye.y(), &player.eye.z(), &player.yaw, &player.pitch);
 
-		// Game logic ticks will run here at a fixed rate once there is logic (movement, scripts);
-		// rendering stays once per loop iteration
+		Collision collision;
+		collision.build(scene, noCollision);
+
+		// Logic runs in fixed steps; rendering runs every loop iteration and interpolates
+		// the camera between the last two steps (movement.md, Engine model)
+		const uint32 stepMs = 1000 / kStepsPerSecond;
+		Keys keys;
+		Player previous = player;
+		uint32 last = _system->getMillis(), pending = 0;
 		while (!shouldQuit()) {
 			Common::Event e;
 			while (_system->getEventManager()->pollEvent(e)) {
+				if (e.type != Common::EVENT_KEYDOWN && e.type != Common::EVENT_KEYUP)
+					continue;
+				const bool down = e.type == Common::EVENT_KEYDOWN;
+				if (!down)
+					debug(1, "camera %g,%g,%g,%g,%g", player.eye.x(), player.eye.y(), player.eye.z(), player.yaw, player.pitch);
+				switch (e.kbd.keycode) {
+				case Common::KEYCODE_UP: keys.up = down; break;
+				case Common::KEYCODE_DOWN: keys.down = down; break;
+				case Common::KEYCODE_LEFT: keys.left = down; break;
+				case Common::KEYCODE_RIGHT: keys.right = down; break;
+				case Common::KEYCODE_PAGEUP: keys.pageUp = down; break;
+				case Common::KEYCODE_PAGEDOWN: keys.pageDown = down; break;
+				case Common::KEYCODE_LCTRL:
+				case Common::KEYCODE_RCTRL: keys.ctrl = down; break;
+				default: break;
+				}
 			}
+
+			const uint32 now = _system->getMillis();
+			pending += now - last;
+			last = now;
+			while (pending >= stepMs) {
+				pending -= stepMs;
+				previous = player;
+				if (player.tick(stepMs / 1000.0f, keys, collision))
+					playSound("SAUT.WAV");
+			}
+
+			const float alpha = (float)pending / stepMs;
+			Camera camera;
+			for (int k = 0; k < 3; k++)
+				camera.position[k] = previous.eye.getData()[k] + (player.eye.getData()[k] - previous.eye.getData()[k]) * alpha;
+			camera.yaw = previous.yaw + (player.yaw - previous.yaw) * alpha;
+			camera.pitch = previous.pitch + (player.pitch - previous.pitch) * alpha;
+			camera.fov = player.fov;
 
 			scene.draw(camera, _screen->w, _screen->h);
 			TinyGL::presentBuffer();
@@ -115,7 +164,7 @@ Common::Error X3DEngine::run() {
 			TinyGL::getSurfaceRef(frame);
 			_system->copyRectToScreen(frame.getPixels(), frame.pitch, 0, 0, frame.w, frame.h);
 			_system->updateScreen();
-			_system->delayMillis(10);
+			_system->delayMillis(1);
 		}
 	}
 
@@ -141,6 +190,18 @@ void X3DEngine::wait(uint32 ms) {
 		}
 		_system->delayMillis(10);
 	}
+}
+
+void X3DEngine::playSound(const Common::String &name) {
+	Common::File *file = new Common::File();
+	if (!file->open(Common::Path(name))) {
+		delete file;
+		warning("Unable to open sound %s", name.c_str());
+		return;
+	}
+	Audio::RewindableAudioStream *stream = Audio::makeWAVStream(file, DisposeAfterUse::YES);
+	if (stream)
+		_mixer->playStream(Audio::Mixer::kSFXSoundType, nullptr, stream);
 }
 
 void X3DEngine::playVideo(const Common::String &name) {

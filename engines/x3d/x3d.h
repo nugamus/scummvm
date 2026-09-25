@@ -50,6 +50,11 @@ private:
 	void showBitmap(const Common::Path &path);
 	void wait(uint32 ms);
 	void playVideo(const Common::String &name);
+	void playSound(const Common::String &name);
+
+	// Logic steps per second. The original ran one step per rendered frame; its frame rate
+	// is unknown (Q-0022), so this rate is provisional and sets the turn speed.
+	static const uint kStepsPerSecond = 60;
 
 	const ADGameDescription *_gameDescription;
 	Graphics::Screen *_screen = nullptr;
