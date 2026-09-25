@@ -19,7 +19,7 @@
  *
  */
 
-namespace Monet {
+namespace X3D {
 
 const PlainGameDescriptor monetGames[] = {
 	{ "monet", "Monet: The Mystery of the Orangerie Museum" },
@@ -41,4 +41,4 @@ const ADGameDescription gameDescriptions[] = {
 	AD_TABLE_END_MARKER
 };
 
-} // End of namespace Monet
+} // End of namespace X3D

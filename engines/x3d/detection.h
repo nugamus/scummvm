@@ -19,42 +19,46 @@
  *
  */
 
-#ifndef MONET_MONET_H
-#define MONET_MONET_H
+#ifndef X3D_DETECTION_H
+#define X3D_DETECTION_H
 
-#include "common/scummsys.h"
-#include "common/str.h"
-#include "engines/engine.h"
+#include "engines/advancedDetector.h"
 
-#include "monet/detection.h"
+namespace X3D {
 
-namespace Graphics {
-class Screen;
-}
-
-namespace Monet {
-
-class MonetEngine : public Engine {
-public:
-	MonetEngine(OSystem *syst, const ADGameDescription *gameDesc);
-	~MonetEngine() override;
-
-	bool hasFeature(EngineFeature f) const override {
-		return f == kSupportsReturnToLauncher;
-	}
-
-protected:
-	Common::Error run() override;
-
-private:
-	void showBitmap(const Common::Path &path);
-	void wait(uint32 ms);
-	void playVideo(const Common::String &name);
-
-	const ADGameDescription *_gameDescription;
-	Graphics::Screen *_screen = nullptr;
+enum X3DDebugChannels {
+	kDebugLoad = 1,
+	kDebugGraphics,
 };
 
-} // End of namespace Monet
+extern const PlainGameDescriptor monetGames[];
 
-#endif // MONET_MONET_H
+extern const ADGameDescription gameDescriptions[];
+
+} // End of namespace X3D
+
+class X3DMetaEngineDetection : public AdvancedMetaEngineDetection<ADGameDescription> {
+	static const DebugChannelDef debugFlagList[];
+
+public:
+	X3DMetaEngineDetection();
+	~X3DMetaEngineDetection() override {}
+
+	const char *getName() const override {
+		return "x3d";
+	}
+
+	const char *getEngineName() const override {
+		return "X3D";
+	}
+
+	const char *getOriginalCopyright() const override {
+		return "X3D (C) 1998-2000 4X Technologies";
+	}
+
+	const DebugChannelDef *getDebugChannels() const override {
+		return debugFlagList;
+	}
+};
+
+#endif // X3D_DETECTION_H

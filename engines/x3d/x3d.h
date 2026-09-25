@@ -19,46 +19,42 @@
  *
  */
 
-#ifndef MONET_DETECTION_H
-#define MONET_DETECTION_H
+#ifndef X3D_X3D_H
+#define X3D_X3D_H
 
-#include "engines/advancedDetector.h"
+#include "common/scummsys.h"
+#include "common/str.h"
+#include "engines/engine.h"
 
-namespace Monet {
+#include "x3d/detection.h"
 
-enum MonetDebugChannels {
-	kDebugLoad = 1,
-	kDebugGraphics,
-};
+namespace Graphics {
+class Screen;
+}
 
-extern const PlainGameDescriptor monetGames[];
+namespace X3D {
 
-extern const ADGameDescription gameDescriptions[];
-
-} // End of namespace Monet
-
-class MonetMetaEngineDetection : public AdvancedMetaEngineDetection<ADGameDescription> {
-	static const DebugChannelDef debugFlagList[];
-
+class X3DEngine : public Engine {
 public:
-	MonetMetaEngineDetection();
-	~MonetMetaEngineDetection() override {}
+	X3DEngine(OSystem *syst, const ADGameDescription *gameDesc);
+	~X3DEngine() override;
 
-	const char *getName() const override {
-		return "monet";
+	bool hasFeature(EngineFeature f) const override {
+		return f == kSupportsReturnToLauncher;
 	}
 
-	const char *getEngineName() const override {
-		return "Monet";
-	}
+protected:
+	Common::Error run() override;
 
-	const char *getOriginalCopyright() const override {
-		return "Monet: The Mystery of the Orangerie Museum (C) 2000 index+ / Media Factory";
-	}
+private:
+	void showBitmap(const Common::Path &path);
+	void wait(uint32 ms);
+	void playVideo(const Common::String &name);
 
-	const DebugChannelDef *getDebugChannels() const override {
-		return debugFlagList;
-	}
+	const ADGameDescription *_gameDescription;
+	Graphics::Screen *_screen = nullptr;
 };
 
-#endif // MONET_DETECTION_H
+} // End of namespace X3D
+
+#endif // X3D_X3D_H

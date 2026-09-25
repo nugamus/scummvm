@@ -19,16 +19,27 @@
  *
  */
 
-#ifndef MONET_METAENGINE_H
-#define MONET_METAENGINE_H
+#include "base/plugins.h"
+#include "x3d/detection.h"
+#include "x3d/detection_tables.h"
 
-#include "engines/advancedDetector.h"
-
-class MonetMetaEngine : public AdvancedMetaEngine<ADGameDescription> {
-public:
-	const char *getName() const override;
-
-	Common::Error createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override;
+const DebugChannelDef X3DMetaEngineDetection::debugFlagList[] = {
+	{ X3D::kDebugLoad, "Load", "File loading" },
+	{ X3D::kDebugGraphics, "Graphics", "Graphics debug level" },
+	DEBUG_CHANNEL_END
 };
 
-#endif // MONET_METAENGINE_H
+static const char *const directoryGlobs[] = {
+	"data",
+	"2dbit",
+	nullptr
+};
+
+X3DMetaEngineDetection::X3DMetaEngineDetection() : AdvancedMetaEngineDetection(
+	X3D::gameDescriptions, X3D::monetGames) {
+	_flags = kADFlagMatchFullPaths;
+	_maxScanDepth = 3;
+	_directoryGlobs = directoryGlobs;
+}
+
+REGISTER_PLUGIN_STATIC(X3D_DETECTION, PLUGIN_TYPE_ENGINE_DETECTION, X3DMetaEngineDetection);

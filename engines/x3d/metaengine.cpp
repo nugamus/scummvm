@@ -19,21 +19,21 @@
  *
  */
 
-#include "monet/metaengine.h"
-#include "monet/detection.h"
-#include "monet/monet.h"
+#include "x3d/metaengine.h"
+#include "x3d/detection.h"
+#include "x3d/x3d.h"
 
-const char *MonetMetaEngine::getName() const {
-	return "monet";
+const char *X3DMetaEngine::getName() const {
+	return "x3d";
 }
 
-Common::Error MonetMetaEngine::createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const {
-	*engine = new Monet::MonetEngine(syst, desc);
+Common::Error X3DMetaEngine::createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const {
+	*engine = new X3D::X3DEngine(syst, desc);
 	return Common::kNoError;
 }
 
-#if PLUGIN_ENABLED_DYNAMIC(MONET)
-REGISTER_PLUGIN_DYNAMIC(MONET, PLUGIN_TYPE_ENGINE, MonetMetaEngine);
+#if PLUGIN_ENABLED_DYNAMIC(X3D)
+REGISTER_PLUGIN_DYNAMIC(X3D, PLUGIN_TYPE_ENGINE, X3DMetaEngine);
 #else
-REGISTER_PLUGIN_STATIC(MONET, PLUGIN_TYPE_ENGINE, MonetMetaEngine);
+REGISTER_PLUGIN_STATIC(X3D, PLUGIN_TYPE_ENGINE, X3DMetaEngine);
 #endif

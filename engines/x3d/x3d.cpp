@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/events.h"
 #include "common/file.h"
 #include "common/system.h"
@@ -35,33 +36,37 @@
 
 #include "video/avi_decoder.h"
 
-#include "monet/monet.h"
+#include "x3d/x3d.h"
 
-namespace Monet {
+namespace X3D {
 
-MonetEngine::MonetEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
+X3DEngine::X3DEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 	_gameDescription(gameDesc) {
 }
 
-MonetEngine::~MonetEngine() {
+X3DEngine::~X3DEngine() {
 	delete _screen;
 }
 
-Common::Error MonetEngine::run() {
+Common::Error X3DEngine::run() {
 	// All original paths are relative to Data/, which the detector (kADFlagMatchFullPaths)
 	// has already added to SearchMan
 	initGraphics(640, 480, nullptr);
 	_screen = new Graphics::Screen();
 
-	// Boot sequence: docs/engine-spec/boot.md
-	showBitmap("2dbit/Intro1.bmp");
-	wait(3000);
-	showBitmap("2dbit/Intro2.bmp");
-	wait(2000);
+	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
+	// sequence and the scene's entry video
+	if (!ConfMan.hasKey("start_scene")) {
+		// Boot sequence: docs/engine-spec/boot.md
+		showBitmap("2dbit/Intro1.bmp");
+		wait(3000);
+		showBitmap("2dbit/Intro2.bmp");
+		wait(2000);
 
-	// The original shows the U00 menu scene and its OptionUser frame here. Until that is
-	// specified, a new game goes straight to U01, whose normal entry plays the prologue.
-	playVideo("Prologue");
+		// The original shows the U00 menu scene and its OptionUser frame here. Until that is
+		// specified, a new game goes straight to U01, whose normal entry plays the prologue.
+		playVideo("Prologue");
+	}
 
 	while (!shouldQuit()) {
 		Common::Event e;
@@ -73,7 +78,7 @@ Common::Error MonetEngine::run() {
 	return Common::kNoError;
 }
 
-void MonetEngine::showBitmap(const Common::Path &path) {
+void X3DEngine::showBitmap(const Common::Path &path) {
 	Common::File file;
 	Image::BitmapDecoder bmp;
 	if (!file.open(path) || !bmp.loadStream(file))
@@ -83,7 +88,7 @@ void MonetEngine::showBitmap(const Common::Path &path) {
 	_screen->update();
 }
 
-void MonetEngine::wait(uint32 ms) {
+void X3DEngine::wait(uint32 ms) {
 	const uint32 start = _system->getMillis();
 	while (!shouldQuit() && _system->getMillis() - start < ms) {
 		Common::Event e;
@@ -93,7 +98,7 @@ void MonetEngine::wait(uint32 ms) {
 	}
 }
 
-void MonetEngine::playVideo(const Common::String &name) {
+void X3DEngine::playVideo(const Common::String &name) {
 	Video::AVIDecoder video;
 	if (!video.loadFile(Common::Path("Video/" + name + ".avi"))) {
 		warning("Unable to open video %s", name.c_str());
@@ -135,4 +140,4 @@ void MonetEngine::playVideo(const Common::String &name) {
 	_mixer->stopHandle(sound);
 }
 
-} // End of namespace Monet
+} // End of namespace X3D
