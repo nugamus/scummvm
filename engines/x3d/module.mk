@@ -1,11 +1,11 @@
-MODULE := engines/monet
+MODULE := engines/x3d
 
 MODULE_OBJS = \
 	metaengine.o \
-	monet.o
+	x3d.o
 
 # This module can be built as a plugin
-ifeq ($(ENABLE_MONET), DYNAMIC_PLUGIN)
+ifeq ($(ENABLE_X3D), DYNAMIC_PLUGIN)
 PLUGIN := 1
 endif
 
