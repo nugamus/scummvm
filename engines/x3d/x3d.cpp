@@ -378,7 +378,7 @@ void X3DEngine::frame(bool input) {
 	_last = now;
 	while (_pending >= stepMs && !shouldQuit()) {
 		_pending -= stepMs;
-		logicStep(input);
+		logicStep(input || _walk);
 	}
 
 	Camera camera;
@@ -490,11 +490,14 @@ void X3DEngine::frame(bool input) {
 	}
 }
 
-void X3DEngine::runFor(uint32 ms) {
+void X3DEngine::runFor(uint32 ms, bool walk) {
 	const uint32 end = _logicMs + ms;
+	const bool outer = _walk;
+	_walk = walk;
 	do
 		frame(false);
 	while (_logicMs < end && !shouldQuit() && _nextScene.empty());
+	_walk = outer;
 }
 
 // Reduces an angle to [0, 2pi)

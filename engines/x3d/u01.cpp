@@ -205,7 +205,7 @@ bool U01::handle(const Common::String &action) {
 			// Hang up
 			scene->runNodeTo("*U01_11", -1, true);
 			while (scene->nodeRunning("*U01_11") && !_vm->shouldQuit())
-				_vm->runFor(0);
+				_vm->runFor(0, true); // the input hook runs during the waits (E-0085)
 			sound->stopEmitter(Sound::kPhoneEmitter);
 			sound->emit(Sound::kEffectsEmitter, Common::Path(soundDir + "TelGrisi.WAV"), at("*U01_11"), false);
 		} else if (interaction->exhausted(16)) {
@@ -216,7 +216,7 @@ bool U01::handle(const Common::String &action) {
 		} else {
 			sound->emit(Sound::kEffectsEmitter, Common::Path(soundDir + "TelGrisi.WAV"), at("*U01_11"), false);
 			while (sound->isGroupPlaying(Sound::kEffects) && !_vm->shouldQuit())
-				_vm->runFor(0);
+				_vm->runFor(0, true);
 			sound->emit(Sound::kPhoneEmitter, Common::Path(soundDir + "TelGrisi2.wav"), at("*U01_11"), true);
 			scene->runNodeTo("*U01_11", -1, false);
 		}

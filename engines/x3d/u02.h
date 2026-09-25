@@ -51,7 +51,7 @@ private:
 	Math::Vector3d hotspotPosition(const char *hotspot);
 	void resetCalls();
 	void waitClip(const char *node);
-	void waitGroup(int group);
+	void waitGroup(int group, bool walk = false);
 	void startSnore();
 	void walkPath(uint32 ms, const Math::Vector3d &target);
 	void follow(const char *object, float untilFrame);
