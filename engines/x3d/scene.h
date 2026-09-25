@@ -138,7 +138,8 @@ public:
 	float nodeFrame(const Common::String &name);
 	float nodeLastFrame(const Common::String &name);
 	bool nodeRunning(const Common::String &name);
-	// Replaces the node's animation with a whole .A3D in its clip slot, paused
+	// Replaces the node's animation with a whole .A3D in its clip slot, paused, driving the
+	// node object's parent (U01's siding clip, u01.md)
 	void loadClip(const Common::String &name, const Common::String &path, float fps, float frame);
 
 	byte ambient[3] = { 255, 255, 255 };
@@ -162,6 +163,7 @@ private:
 		bool loop = true, running = true, backward = false;
 		float stopAt = -1; // stop target, < 0 for none
 		float first = -1, last = -1; // range override, < 0: the animation's
+		int object = -1;             // the object it drives, < 0: the node's
 
 		void advance(float dt);
 	};
