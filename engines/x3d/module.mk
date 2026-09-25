@@ -20,6 +20,7 @@ MODULE_OBJS = \
 	u00.o \
 	u01.o \
 	u02.o \
+	u05.o \
 	x3d.o
 
 # This module can be built as a plugin

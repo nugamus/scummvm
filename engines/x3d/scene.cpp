@@ -458,6 +458,32 @@ void Scene::hideObject(const Common::String &name, bool hidden) {
 	}
 }
 
+void Scene::hideObjectOnly(const Common::String &name, bool hidden) {
+	for (Model *m : _models)
+		for (uint i = 0; i < m->file.objects.size(); i++)
+			if (m->file.objects[i].name.equalsIgnoreCase(name))
+				m->hiddenObjects[i] = hidden;
+}
+
+void Scene::hideAll() {
+	for (Model *m : _models)
+		for (uint i = 0; i < m->hiddenObjects.size(); i++)
+			m->hiddenObjects[i] = true;
+}
+
+Common::StringArray Scene::siblings(const Common::String &name) const {
+	Common::StringArray out;
+	Model *m;
+	uint o;
+	if (!findObject(name, m, o))
+		return out;
+	const Common::Array<O3DObject> &objects = m->file.objects;
+	for (uint i = 0; i < objects.size(); i++)
+		if (i != o && objects[i].parent == objects[o].parent)
+			out.push_back(objects[i].name);
+	return out;
+}
+
 Scene::AnimNode *Scene::findNode(const Common::String &objectName) {
 	// Steps name hotspot nodes without their '*' (op 4 "U01_24" is node "*U01_24")
 	for (AnimNode &n : _nodes)
@@ -698,14 +724,21 @@ bool Scene::clipPlaying(const Common::String &objectName) {
 	return n && n->clipActive && n->clip.running;
 }
 
-int Scene::addFaceClip(const Common::String &faceObject, const Common::String &path) {
+int Scene::addFaceClip(const Common::String &faceObject, const Common::String &path, const Common::String &owner) {
 	Model *model = nullptr;
 	uint object = 0;
+	bool owned = false;
 	for (Model *m : _models)
-		for (uint i = 0; i < m->file.objects.size() && !model; i++)
+		for (uint i = 0; i < m->file.objects.size() && !owned; i++)
 			if (m->file.objects[i].name.equalsIgnoreCase(faceObject)) {
-				model = m;
-				object = i;
+				bool below = false;
+				for (int a = m->file.objects[i].parent; a >= 0 && !owner.empty() && !below; a = m->file.objects[a].parent)
+					below = m->file.objects[a].name.equalsIgnoreCase(owner) || m->file.objects[a].name.equalsIgnoreCase("*" + owner);
+				if (!model || below) {
+					model = m;
+					object = i;
+					owned = below;
+				}
 			}
 	Common::File f;
 	A3DFile *file = new A3DFile();

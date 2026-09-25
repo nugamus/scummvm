@@ -262,6 +262,17 @@ void Interaction::runAction(uint32 id, Common::StringArray &unitActions) {
 		}
 }
 
+void Interaction::exhaust(uint32 id) {
+	if (id >= kIds)
+		return;
+	for (const Action &a : _actions)
+		if (a.id == id) {
+			_runs[id] = a.maxRuns;
+			break;
+		}
+	_exhausted[id] = true;
+}
+
 void Interaction::setCondition(uint32 id, const Common::String &condition) {
 	for (Action &a : _actions)
 		if (a.id == id)

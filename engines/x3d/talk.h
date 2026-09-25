@@ -39,6 +39,7 @@ public:
 	// A speaking character and its face object, e.g. U01_01 / $$$DUMMY.*01SParle
 	// clipDir: the mouth clips' folder, Anim/<character>/ when empty
 	void addTalker(const Common::String &character, const Common::String &face, const Common::String &clipDir = "");
+	// (the face is looked up below the character's object first)
 
 	// Plays Sound/<name> as the character; false when the character is not a talker
 	bool say(const Common::String &character, const Common::String &name);

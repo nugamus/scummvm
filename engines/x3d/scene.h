@@ -99,6 +99,11 @@ public:
 
 	// X3d_Object_Hide by object name, in every loaded file
 	void hideObject(const Common::String &name, bool hidden = true);
+	void hideObjectOnly(const Common::String &name, bool hidden = true); // not its children
+	void hideAll(); // every object of every file (U05's game over)
+	// The names of the object's siblings (same parent, itself excluded; top-level objects
+	// of its file when it has no parent)
+	Common::StringArray siblings(const Common::String &name) const;
 
 	// Animation nodes by object name (animation.md, E-0056/E-0057; interaction.md)
 	void startAnimation(const Common::String &objectName);
@@ -112,7 +117,9 @@ public:
 	// Mouth clips for talk (sound.md, Talkers): a node that plays the sub-animation named
 	// like the face object from a whole-body .A3D, created disabled and paused. -1 if the
 	// file or the object is missing.
-	int addFaceClip(const Common::String &faceObject, const Common::String &path);
+	// owner: prefer the face object below the object of that name (two talkers may share
+	// a face name, U05's $$$DUMMY.*visage)
+	int addFaceClip(const Common::String &faceObject, const Common::String &path, const Common::String &owner = "");
 	void setNode(int node, bool enabled, bool running);
 	void setNodeFrame(int node, float frame);
 	void setNodeFps(int node, float fps);

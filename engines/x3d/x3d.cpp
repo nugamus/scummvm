@@ -54,6 +54,7 @@
 #include "x3d/u00.h"
 #include "x3d/u01.h"
 #include "x3d/u02.h"
+#include "x3d/u05.h"
 #include "x3d/x3d.h"
 
 namespace X3D {
@@ -281,9 +282,11 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	U00 unit00(this, _practice);
 	U01 unit01(this);
 	U02 unit02(this);
+	U05 unit05(this);
 	_unit = sceneName.hasPrefixIgnoreCase("U00") ? (Unit *)&unit00 :
 	        sceneName.hasPrefixIgnoreCase("U01") ? (Unit *)&unit01 :
-	        sceneName.hasPrefixIgnoreCase("U02") ? (Unit *)&unit02 : nullptr;
+	        sceneName.hasPrefixIgnoreCase("U02") ? (Unit *)&unit02 :
+	        sceneName.hasPrefixIgnoreCase("U05") ? (Unit *)&unit05 : nullptr;
 	if (_unit)
 		_unit->afterLoad();
 
