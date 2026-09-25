@@ -167,7 +167,56 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 				out[v + k] = x * w[k] + y * w[4 + k] + z * w[8 + k] + w[12 + k];
 		}
 	}
+
+	// Bounding spheres of what each object draws, for view culling
+	m->bounds.resize(m->file.objects.size() * 4);
+	for (uint i = 0; i < m->file.objects.size(); i++) {
+		int owner = i;
+		while (owner >= 0 && m->file.objects[owner].vertices.empty())
+			owner = m->file.objects[owner].parent;
+		float lo[3] = { 1e30f, 1e30f, 1e30f }, hi[3] = { -1e30f, -1e30f, -1e30f };
+		bool any = false;
+		if (owner >= 0) {
+			const Common::Array<float> &v = m->worldVertices[owner];
+			for (const O3DFace &face : m->file.objects[i].faces) {
+				for (uint32 index : face.indices) {
+					if (index * 3 + 2 >= v.size())
+						continue;
+					for (int k = 0; k < 3; k++) {
+						lo[k] = MIN(lo[k], v[index * 3 + k]);
+						hi[k] = MAX(hi[k], v[index * 3 + k]);
+					}
+					any = true;
+				}
+			}
+		}
+		float *b = &m->bounds[i * 4];
+		float r2 = 0;
+		for (int k = 0; k < 3; k++) {
+			b[k] = (lo[k] + hi[k]) / 2;
+			r2 += (hi[k] - lo[k]) * (hi[k] - lo[k]) / 4;
+		}
+		b[3] = any ? sqrtf(r2) : -1;
+	}
 	return m;
+}
+
+bool Scene::inView(const float *sphere) const {
+	if (sphere[3] < 0)
+		return false;
+	float v[3];
+	for (int k = 0; k < 3; k++)
+		v[k] = sphere[k] - _eye[k];
+	const float depth = v[0] * _forward[0] + v[1] * _forward[1] + v[2] * _forward[2];
+	const float x = v[0] * _right[0] + v[1] * _right[1] + v[2] * _right[2];
+	const float y = v[0] * _up[0] + v[1] * _up[1] + v[2] * _up[2];
+	const float r = sphere[3];
+	// Signed distances to the four side planes (positive inside), then the near plane
+	return depth * _halfWidth - x > -r * sqrtf(1 + _halfWidth * _halfWidth) &&
+	       depth * _halfWidth + x > -r * sqrtf(1 + _halfWidth * _halfWidth) &&
+	       depth * _halfHeight - y > -r * sqrtf(1 + _halfHeight * _halfHeight) &&
+	       depth * _halfHeight + y > -r * sqrtf(1 + _halfHeight * _halfHeight) &&
+	       depth > -r;
 }
 
 void Scene::hideObject(const Common::String &name) {
@@ -272,6 +321,16 @@ void Scene::draw(const Camera &cam, int width, int height) {
 	tglMatrixMode(TGL_MODELVIEW);
 	tglLoadMatrixf(view);
 
+	for (int k = 0; k < 3; k++) {
+		_eye[k] = p[k];
+		_right[k] = right[k];
+		_up[k] = up[k];
+		_forward[k] = forward[k];
+	}
+	_halfWidth = 1 / sx;
+	_halfHeight = 1 / sy;
+	_boundTexture = ~0u;
+
 	tglEnable(TGL_DEPTH_TEST);
 	tglDisable(TGL_CULL_FACE);
 	tglDisable(TGL_LIGHTING);
@@ -283,6 +342,9 @@ void Scene::draw(const Camera &cam, int width, int height) {
 			continue;
 		for (uint i = 0; i < m->file.objects.size(); i++) {
 			if (m->hiddenObjects[i])
+				continue;
+			// ponytail: culls on the base object's sphere; a LOD far outside it would be missed
+			if (!inView(&m->bounds[i * 4]))
 				continue;
 			// Level of detail by squared distance from the object's origin to the camera
 			const float *origin = m->file.objects[i].world + 12;
@@ -316,12 +378,18 @@ void Scene::drawObject(const Model &m, uint object) {
 		const O3DMaterial &mat = m.file.materials[face.material];
 		const TGLuint tex = mat.textureMap.empty() ? 0 : texture(mat.textureMap);
 		// Lighting is not specified (Q-0019): texture x ambient, or the second colour
+		if (tex != _boundTexture) {
+			if (tex) {
+				tglEnable(TGL_TEXTURE_2D);
+				tglBindTexture(TGL_TEXTURE_2D, tex);
+			} else {
+				tglDisable(TGL_TEXTURE_2D);
+			}
+			_boundTexture = tex;
+		}
 		if (tex) {
-			tglEnable(TGL_TEXTURE_2D);
-			tglBindTexture(TGL_TEXTURE_2D, tex);
 			tglColor3ub(_ambient[0], _ambient[1], _ambient[2]);
 		} else {
-			tglDisable(TGL_TEXTURE_2D);
 			tglColor3ub(mat.colors[1][0] * _ambient[0] / 255, mat.colors[1][1] * _ambient[1] / 255,
 			            mat.colors[1][2] * _ambient[2] / 255);
 		}

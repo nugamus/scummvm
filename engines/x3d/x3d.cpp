@@ -118,7 +118,7 @@ Common::Error X3DEngine::run() {
 		const uint32 stepMs = 1000 / kStepsPerSecond;
 		Keys keys;
 		Player previous = player;
-		uint32 last = _system->getMillis(), pending = 0;
+		uint32 last = _system->getMillis(), pending = 0, frames = 0, fpsStart = last;
 		while (!shouldQuit()) {
 			Common::Event e;
 			while (_system->getEventManager()->pollEvent(e)) {
@@ -166,6 +166,13 @@ Common::Error X3DEngine::run() {
 			_system->copyRectToScreen(frame.getPixels(), frame.pitch, 0, 0, frame.w, frame.h);
 			_system->updateScreen();
 			_system->delayMillis(1);
+
+			frames++;
+			if (now - fpsStart >= 5000) {
+				debug(2, "%u frames per second", frames * 1000 / (now - fpsStart));
+				frames = 0;
+				fpsStart = now;
+			}
 		}
 	}
 
