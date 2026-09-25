@@ -35,6 +35,7 @@ struct Surface;
 
 namespace X3D {
 
+class Inventory;
 class Scene;
 class Sound;
 class Talk;
@@ -61,6 +62,12 @@ public:
 	void click(int hotspot, Common::StringArray &unitActions);
 
 	void setCursorKind(const Common::String &hotspot, uint kind);
+
+	// The item on the cursor ("U01_04", empty: none) and the plain cursor over 2D frames
+	const Common::String &heldItem() const { return _heldItem; }
+	void holdItem(const Common::String &item);
+	void showCursor(uint kind);
+	Inventory *inventory = nullptr; // take and use-up steps show and hide it
 
 	// Unit code access to actions by id (Mnn)
 	void runAction(uint32 id, Common::StringArray &unitActions); // steps, then count the run
@@ -95,7 +102,6 @@ private:
 	Common::Path soundPath(const Common::String &name) const;
 	Common::String hotspotName(const Action &a) const;
 	void setCursor(uint kind);
-	void holdItem(const Common::String &item);
 
 	Sound &_sound;
 	Talk &_talk;

@@ -19,11 +19,13 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/system.h"
 #include "common/textconsole.h"
 
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
+#include "x3d/inventory.h"
 #include "x3d/renderer.h"
 #include "x3d/scene.h"
 #include "x3d/sound.h"
@@ -101,10 +103,23 @@ void U01::start(bool newGame, bool video) {
 	if (!newGame)
 		return;
 
+	// Development shortcut: dev_handover goes straight to the end of the entry
+	if (ConfMan.getBool("dev_handover")) {
+		const float handover[3] = { -466.36f, -452.495f, 30.48f };
+		_vm->setView(handover, 4.7f, kHalfPi);
+		if (!_vm->inventory()->has("U02_01P"))
+			_vm->inventory()->add("U02_01P");
+		scene->playClip("*U01_02", "Anim/U01_02/Action03.A3D");
+		player.canMove = player.canTurn = false;
+		interaction->setCursorKind("*U01_01", 3);
+		return;
+	}
+
 	_vm->suspend(true);
 	interaction->setCursorKind("*U01_02", 0);
 	interaction->setCursorKind("*U01_01", 0);
-	// ponytail: the inventory item U02_01P is not added (Q-0046, no inventory yet)
+	if (!_vm->inventory()->has("U02_01P"))
+		_vm->inventory()->add("U02_01P"); // a banknote (ui.md)
 	const float first[3] = { -258.44f, -508.20f, 29.546f };
 	_vm->setView(first, 1.31f, 1.5707960f);
 	_vm->runFor(1500);

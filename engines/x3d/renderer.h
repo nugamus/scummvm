@@ -24,6 +24,11 @@
 
 #include "common/scummsys.h"
 
+namespace Common {
+class Path;
+class SeekableReadStream;
+}
+
 namespace Graphics {
 struct Surface;
 }
@@ -64,6 +69,11 @@ public:
 protected:
 	int _width = 0, _height = 0;
 };
+
+// A BMP as RGBA32 (caller frees), or nullptr. Some of the game's BMPs lack their last
+// row's padding (E-0024); the data is padded before decoding.
+Graphics::Surface *loadBitmap(Common::SeekableReadStream &s);
+Graphics::Surface *loadBitmap(const Common::Path &path);
 
 Renderer *createTinyGLRenderer(int width, int height);
 Renderer *createOpenGLRenderer(int width, int height);
