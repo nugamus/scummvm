@@ -323,7 +323,7 @@ void Scene::update(float dt) {
 		}
 		Playback &p = n.clipActive ? n.clip : n.base;
 		p.advance(dt);
-		animate(*p.file, p.animation, *n.model, n.object, p.frame);
+		animate(*p.file, p.animation, *n.model, p.object >= 0 ? p.object : n.object, p.frame);
 	}
 
 	// ponytail: re-poses every animated file each step; track dirty objects if it shows up in profiles
@@ -562,6 +562,7 @@ bool Scene::nodeRunning(const Common::String &name) {
 void Scene::loadClip(const Common::String &name, const Common::String &path, float fps, float frame) {
 	playClip(name, path);
 	if (AnimNode *n = findNode(name)) {
+		n->clip.object = n->model->file.objects[n->object].parent;
 		n->clip.fps = fps;
 		n->clip.running = false;
 		n->clip.frame = frame;

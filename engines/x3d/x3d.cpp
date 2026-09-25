@@ -456,9 +456,11 @@ Common::String X3DEngine::command(const Common::String &line) {
 	if (a.empty())
 		return "";
 	const Common::String &c = a[0];
-	if (c == "where")
-		return Common::String::format("%g,%g,%g,%g,%g fov %g", _player.eye.x(), _player.eye.y(), _player.eye.z(),
-		                              _player.yaw, _player.pitch, _player.fov);
+	if (c == "where") {
+		_player.probeGround(*_collision);
+		return Common::String::format("%g,%g,%g,%g,%g fov %g, over %s", _player.eye.x(), _player.eye.y(), _player.eye.z(),
+		                              _player.yaw, _player.pitch, _player.fov, _player.groundObject.c_str());
+	}
 	if (c == "goto" && a.size() >= 4) {
 		const float p[3] = { (float)atof(a[1].c_str()), (float)atof(a[2].c_str()), (float)atof(a[3].c_str()) };
 		setView(p, a.size() > 4 ? atof(a[4].c_str()) : _player.yaw, a.size() > 5 ? atof(a[5].c_str()) : _player.pitch);
