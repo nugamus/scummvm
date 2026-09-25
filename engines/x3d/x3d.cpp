@@ -47,6 +47,7 @@
 #include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
+#include "x3d/u00.h"
 #include "x3d/u01.h"
 #include "x3d/x3d.h"
 
@@ -78,30 +79,11 @@ Common::Error X3DEngine::run() {
 		wait(3000);
 		showBitmap("2dbit/Intro2.bmp");
 		wait(2000);
-
-		// The players screen, then the Option menu (ui.md, Boot to U01). Monet's tutorial in
-		// U00 (a new player) and player profiles are not implemented.
-		for (;;) {
-			const Common::String c = runMenu("OptionUser");
-			if (shouldQuit() || c == "escape")
-				return Common::kNoError;
-			if ((c == "SelectUser" || c == "enter") && !_menuText.empty())
-				break;
-		}
-		if (!optionMenu())
-			return Common::kNoError;
 	}
 
-	// A new game starts at the scene named in App.bin #GAME# (E-0037). The original shows
-	// the U00 menu scene and its OptionUser frame first; until that is specified, a new
-	// game goes straight there.
-	Common::String sceneName = "U01.X3D";
-	if (ConfMan.hasKey("start_scene")) {
-		sceneName = ConfMan.get("start_scene");
-	} else if (Common::SeekableReadStream *game = openBinChunk("App.bin", "#GAME#")) {
-		sceneName = game->readString(0, 30);
-		delete game;
-	}
+	// U00 shows the players screen and runs Monet's tutorial; the Option menu's New game
+	// then goes to App.bin's start scene (ui.md, Boot to U01)
+	Common::String sceneName = ConfMan.hasKey("start_scene") ? ConfMan.get("start_scene") : "U00.X3D";
 
 	while (!shouldQuit() && !sceneName.empty()) {
 		_nextScene.clear();
@@ -122,7 +104,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_sound->setGroupVolume(4, 80);
 	_sound->setGroupVolume(5, 80);
 	_sound->setScale(scene.scale);
-	Talk talk(scene, *_sound, scene.dir());
+	Talk talk(scene, *_sound, scene.dataDir());
 	_talk = &talk;
 	Interaction interaction(scene, *_sound, talk);
 	_interaction = &interaction;
@@ -131,12 +113,12 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_inventory = &inventory;
 	interaction.inventory = &inventory;
 
-	const bool u01 = sceneName.hasPrefixIgnoreCase("U01");
+	U00 unit00(this, _practice);
 	U01 unit01(this);
-	_u01 = u01 ? &unit01 : nullptr;
-	if (_u01)
-		_u01->afterLoad();
-	interaction.load(scene.dir());
+	_unit = sceneName.hasPrefixIgnoreCase("U00") ? (Unit *)&unit00 : sceneName.hasPrefixIgnoreCase("U01") ? (Unit *)&unit01 : nullptr;
+	if (_unit)
+		_unit->afterLoad();
+	interaction.load(scene.dataDir());
 
 	_player = Player();
 	_player.init(scene.scale);
@@ -195,11 +177,11 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	if (ConfMan.hasKey("start_camera")) {
 		sscanf(ConfMan.get("start_camera").c_str(), "%f,%f,%f,%f,%f", &_player.eye.x(),
 		       &_player.eye.y(), &_player.eye.z(), &_player.yaw, &_player.pitch);
-		if (_u01)
-			_u01->start(false);
-	} else if (_u01) {
+		if (_unit)
+			_unit->start(false, false);
+	} else if (_unit) {
 		// start_scene skips the prologue as well as the boot sequence
-		_u01->start(true, !ConfMan.hasKey("start_scene"));
+		_unit->start(true, !ConfMan.hasKey("start_scene"));
 	}
 	_previous = _player;
 
@@ -212,14 +194,14 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_interaction = nullptr;
 	_talk = nullptr;
 	_inventory = nullptr;
-	_u01 = nullptr;
+	_unit = nullptr;
 }
 
 void X3DEngine::logicStep(bool input) {
 	const uint32 stepMs = 1000 / kStepsPerSecond;
 	_previous = _player;
 	if (input && !_suspended) {
-		const bool handled = _u01 && _u01->input(stepMs / 1000.0f);
+		const bool handled = _unit && _unit->input(stepMs / 1000.0f);
 		if (!handled && _player.tick(stepMs / 1000.0f, _keys, *_collision))
 			_sound->emit(Sound::kEffectsEmitter, "SAUT.WAV", _player.eye, false);
 	}
@@ -279,9 +261,12 @@ void X3DEngine::frame(bool input) {
 		case Common::KEYCODE_RETURN:
 		case Common::KEYCODE_KP_ENTER: _enterHeld = down; break;
 		case Common::KEYCODE_SPACE:
+			_keys.space = down;
 			if (down && input && !_suspended)
 				_inventory->toggle();
 			break;
+		case Common::KEYCODE_LSHIFT:
+		case Common::KEYCODE_RSHIFT: _keys.shift = down; break;
 		case Common::KEYCODE_ESCAPE:
 			if (down && input && !_suspended)
 				_escapeNow = true;
@@ -354,8 +339,8 @@ void X3DEngine::frame(bool input) {
 	_camera = camera;
 	_scene->draw(camera, _renderer->width(), _renderer->height());
 	_inventory->draw(*_renderer, x2d);
-	if (_u01)
-		_u01->draw();
+	if (_unit)
+		_unit->draw();
 	_renderer->present();
 	_system->delayMillis(1);
 
@@ -374,11 +359,17 @@ void X3DEngine::frame(bool input) {
 			_inventory->add(held + "P");
 			_interaction->holdItem("");
 		}
-		const Common::String c = runMenu("Save");
-		if (c == "SaveOui")
-			warning("Saving is not implemented");
-		else if (c == "SaveNon" && optionMenu())
-			gotoScene("U01.X3D"); // ponytail: a new game restarts at U01 without App.bin
+		if (_unit && !_unit->gameStarted()) {
+			// No game yet (U00): the Option menu at once, the ambient stopped (ui.md, Escape)
+			_sound->stopGroup(Sound::kAmbient);
+			afterOptionMenu(optionMenu());
+		} else {
+			const Common::String c = runMenu("Save");
+			if (c == "SaveOui")
+				warning("Saving is not implemented");
+			else if (c == "SaveNon")
+				afterOptionMenu(optionMenu());
+		}
 		_last = _system->getMillis();
 	}
 
@@ -387,11 +378,11 @@ void X3DEngine::frame(bool input) {
 	if (input) {
 		while (!_unitActions.empty() && !shouldQuit()) {
 			const Common::String action = _unitActions.remove_at(0);
-			if (!_u01 || !_u01->handle(action))
+			if (!_unit || !_unit->handle(action))
 				warning("Unit action %s is not implemented", action.c_str());
 		}
-		if (_u01)
-			_u01->afterFrame();
+		if (_unit)
+			_unit->afterFrame();
 	}
 }
 
@@ -516,21 +507,37 @@ Common::String X3DEngine::runMenu(const Common::String &name) {
 	return result;
 }
 
-bool X3DEngine::optionMenu() {
+Common::String X3DEngine::optionMenu() {
 	for (;;) {
 		const Common::String c = runMenu("Option");
 		if (shouldQuit())
-			return false;
-		if (c == "OptionNouvelleP")
-			return true;
+			return "";
+		if (c == "OptionNouvelleP" || c == "OptionEntrenement")
+			return c;
 		if (c == "OptionQuitter") {
 			if (runMenu("OptionQuitter") == "QuitterOK") {
 				quitGame();
-				return false;
+				return "";
 			}
 		} else if (!c.empty() && c != "escape" && c != "enter") {
 			warning("Menu command %s is not implemented", c.c_str());
 		}
+	}
+}
+
+void X3DEngine::afterOptionMenu(const Common::String &command) {
+	if (command == "OptionNouvelleP") {
+		// A new game starts at the scene named in App.bin #GAME# (E-0037)
+		Common::String scene = "U01.X3D";
+		if (Common::SeekableReadStream *game = openBinChunk("App.bin", "#GAME#")) {
+			scene = game->readString(0, 30);
+			delete game;
+		}
+		_practice = false;
+		gotoScene(scene);
+	} else if (command == "OptionEntrenement") {
+		_practice = true;
+		gotoScene("U00.X3D");
 	}
 }
 

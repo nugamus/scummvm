@@ -68,15 +68,16 @@ bool Scene::load(const Common::String &scriptName) {
 	// Asset directory from the unit number; U00 borrows U04's (E-0034)
 	const Common::String unit = scriptName.substr(0, 3);
 	_dir = (unit.equalsIgnoreCase("U00") ? Common::String("U04") : unit) + "/";
+	_dataDir = unit + "/";
 
-	Common::SeekableReadStream *s = openBinChunk(Common::Path(_dir + "SCENE.BIN"), "#SCENE#");
+	Common::SeekableReadStream *s = openBinChunk(Common::Path(_dataDir + "SCENE.BIN"), "#SCENE#");
 	if (s) {
 		for (byte &c : ambient)
 			c = s->readUint32LE();
 		scale = s->readFloatLE();
 		delete s;
 	}
-	s = openBinChunk(Common::Path(_dir + "SCENE.BIN"), "#CAMERA#");
+	s = openBinChunk(Common::Path(_dataDir + "SCENE.BIN"), "#CAMERA#");
 	if (s) {
 		camera.fov = s->readFloatLE();
 		delete s;
