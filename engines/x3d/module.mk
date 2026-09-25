@@ -5,6 +5,7 @@ MODULE_OBJS = \
 	collision.o \
 	console.o \
 	dmf.o \
+	frame.o \
 	interaction.o \
 	inventory.o \
 	metaengine.o \
