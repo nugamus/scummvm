@@ -88,9 +88,23 @@ public:
 	void playVideo(const Common::String &name, const Common::String &wav = "");
 	void fadeToBlack(uint32 ms); // the ambient light down to 0 over ms (u01.md, caught)
 
+	// A frame's list view (save.md "Lists"): its rows, the selected one, and the names a
+	// row click copies into the edit (players list)
+	struct MenuList {
+		Common::StringArray rows, names;
+		int selected = -1;
+	};
 	// Shows a frame until a command is chosen (ui.md); returns the command, "escape", or
-	// "enter". The scene, if any, stays frozen underneath.
-	Common::String runMenu(const Common::String &name);
+	// "enter". The scene, if any, stays frozen underneath. placeholder: the edit's text
+	// until the player types.
+	Common::String runMenu(const Common::String &name, MenuList *list = nullptr, const Common::String &placeholder = "");
+	// The OptionSave and OptionLoad screens over ScummVM's save slots (save.md); load:
+	// true when a game was loaded
+	void saveMenu();
+	bool loadMenu();
+	// Players (ui.md SelectUser): true when the name is new, which is then added
+	bool selectPlayer(const Common::String &name);
+	Common::StringArray players() const;
 	// The Option menu (ui.md): its chosen command (OptionNouvelleP, OptionEntrenement), or
 	// empty when quitting; afterOptionMenu goes where it leads
 	Common::String optionMenu();
@@ -98,7 +112,7 @@ public:
 	const Common::String &menuText() const { return _menuText; }
 
 	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold, pos, act,
-	// save <slot>, load <slot>
+	// save <slot>, load <slot>, savemenu, loadmenu
 	Common::String command(const Common::String &line);
 
 	static constexpr float kKeep = 100.0f;

@@ -21,6 +21,7 @@
 
 #include "common/config-manager.h"
 #include "common/memstream.h"
+#include "common/savefile.h"
 #include "common/serializer.h"
 #include "common/debug.h"
 #include "common/events.h"
@@ -31,6 +32,7 @@
 #include "audio/decoders/wave.h"
 #include "audio/mixer.h"
 
+#include "engines/metaengine.h"
 #include "engines/util.h"
 
 #include "graphics/cursorman.h"
@@ -151,10 +153,99 @@ Graphics::Surface *X3DEngine::thumbnail(int width, int height) {
 	return _renderer->thumbnail(width, height);
 }
 
+void X3DEngine::saveMenu() {
+	// OptionSave (save.md): slots 1..98, the first free one selected; OK saves and stays
+	for (;;) {
+		Common::StringArray names;
+		names.resize(99);
+		for (const SaveStateDescriptor &d : getMetaEngine()->listSaves(_targetName.c_str()))
+			if (d.getSaveSlot() >= 1 && d.getSaveSlot() <= 98)
+				names[d.getSaveSlot()] = d.getDescription();
+		MenuList list;
+		for (int s = 1; s <= 98; s++) {
+			list.rows.push_back(Common::String::format("%d - %s", s + 1, names[s].empty() ? "Empty" : names[s].c_str()));
+			if (list.selected < 0 && names[s].empty())
+				list.selected = s - 1;
+		}
+		if (list.selected < 0)
+			list.selected = 0;
+		// ponytail: the original appends typing to "Save without name"; here typing replaces it
+		const Common::String c = runMenu("OptionSave", &list, "Save without name");
+		if (shouldQuit())
+			return;
+		if (c == "OptionSelectSave" || c == "enter") {
+			const Common::String name = _menuText.empty() ? "Save without name" : _menuText;
+			saveGameState(list.selected + 1, name);
+			continue;
+		}
+		if (c == "OptionSaveSommaire" || c == "escape") {
+			afterOptionMenu(optionMenu());
+			return;
+		}
+		if (c == "SaveQuit") {
+			if (runMenu("OptionQuitter") == "QuitterOK")
+				quitGame();
+			continue;
+		}
+		return; // OptionSave3D: back to the game
+	}
+}
+
+bool X3DEngine::loadMenu() {
+	// OptionLoad (save.md): the used slots only, nothing selected; OK loads
+	MenuList list;
+	Common::Array<int> slots;
+	for (const SaveStateDescriptor &d : getMetaEngine()->listSaves(_targetName.c_str())) {
+		slots.push_back(d.getSaveSlot());
+		list.rows.push_back(Common::String::format("%d - %s", d.getSaveSlot() + 1, d.getDescription().c_str()));
+	}
+	for (;;) {
+		const Common::String c = runMenu("OptionLoad", &list);
+		if (shouldQuit())
+			return false;
+		if ((c == "OptionSelectGame" || c == "enter") && list.selected >= 0)
+			return loadGameState(slots[list.selected]).getCode() == Common::kNoError;
+		if (c == "OptionScreen" || c == "escape")
+			return false;
+	}
+}
+
+Common::StringArray X3DEngine::players() const {
+	Common::StringArray names;
+	const Common::String all = ConfMan.get("players");
+	Common::String name;
+	for (const char *p = all.c_str(); ; p++) {
+		if (*p == '|' || !*p) {
+			if (!name.empty())
+				names.push_back(name);
+			name.clear();
+			if (!*p)
+				break;
+		} else {
+			name += *p;
+		}
+	}
+	return names;
+}
+
+bool X3DEngine::selectPlayer(const Common::String &name) {
+	// ponytail: players share ScummVM's save slots; the original keeps saves per player
+	Common::StringArray names = players();
+	for (const Common::String &n : names)
+		if (n == name)
+			return false;
+	names.push_back(name);
+	Common::String all;
+	for (const Common::String &n : names)
+		all += (all.empty() ? "" : "|") + n;
+	ConfMan.set("players", all);
+	ConfMan.flushToDisk();
+	return true;
+}
+
 void X3DEngine::gameOver() {
-	// ponytail: ScummVM's load dialog stands in for the OptionLoad frame (save.md)
 	_sound->stopAll();
-	if (!loadGameDialog())
+	if (!loadMenu())
 		afterOptionMenu(optionMenu());
 }
 
@@ -463,7 +554,7 @@ void X3DEngine::frame(bool input) {
 		} else {
 			const Common::String c = runMenu("Save");
 			if (c == "SaveOui")
-				saveGameDialog(); // ponytail: ScummVM's dialog stands in for OptionSave
+				saveMenu();
 			else if (c == "SaveNon")
 				afterOptionMenu(optionMenu());
 		}
@@ -571,10 +662,14 @@ void X3DEngine::setView(const float *position, float yaw, float pitch) {
 	_previous = _player;
 }
 
-Common::String X3DEngine::runMenu(const Common::String &name) {
+Common::String X3DEngine::runMenu(const Common::String &name, MenuList *list, const Common::String &placeholder) {
 	Frame frame;
 	if (!frame.load(name))
 		return "escape";
+	if (!placeholder.empty())
+		frame.setText(placeholder, true);
+	if (list)
+		frame.setList(list->rows, list->selected);
 	const int x2d = (_renderer->width() - 640) / 2;
 	CursorMan.showMouse(true);
 	Common::String result;
@@ -584,8 +679,18 @@ Common::String X3DEngine::runMenu(const Common::String &name) {
 			if (e.type == Common::EVENT_MOUSEMOVE || e.type == Common::EVENT_LBUTTONDOWN)
 				_mouse = e.mouse;
 			// A click acts on press (ui.md, Events)
-			if (e.type == Common::EVENT_LBUTTONDOWN)
-				result = frame.commandAt(frame.viewAt(Common::Point(_mouse.x - x2d, _mouse.y)));
+			if (e.type == Common::EVENT_LBUTTONDOWN) {
+				const Common::Point p(_mouse.x - x2d, _mouse.y);
+				const int row = list ? frame.listRowAt(p) : -1;
+				if (row >= 0) {
+					list->selected = row;
+					frame.selectRow(row);
+					if (row < (int)list->names.size())
+						frame.setText(list->names[row]);
+				} else {
+					result = frame.commandAt(frame.viewAt(p));
+				}
+			}
 			if (e.type == Common::EVENT_KEYDOWN) {
 				if (e.kbd.keycode == Common::KEYCODE_ESCAPE)
 					result = "escape";
@@ -621,7 +726,7 @@ Common::String X3DEngine::optionMenu() {
 			return "";
 		if (c == "OptionNouvelleP" || c == "OptionEntrenement")
 			return c;
-		if (c == "OptionLoad" && loadGameDialog())
+		if (c == "OptionLoad" && loadMenu())
 			return c; // the load has chosen the next scene
 		if (c == "OptionQuitter") {
 			if (runMenu("OptionQuitter") == "QuitterOK") {
@@ -710,6 +815,12 @@ Common::String X3DEngine::command(const Common::String &line) {
 		return saveGameState(atoi(a[1].c_str()), "console").getCode() == Common::kNoError ? "saved" : "save failed";
 	if (c == "load" && a.size() >= 2)
 		return loadGameState(atoi(a[1].c_str())).getCode() == Common::kNoError ? "loading" : "load failed";
+	if (c == "savemenu") {
+		saveMenu();
+		return "ok";
+	}
+	if (c == "loadmenu")
+		return loadMenu() ? "loaded" : "no load";
 	if (c == "act" && a.size() >= 2) {
 		_interaction->runAction(atoi(a[1].c_str()), _unitActions); // Mnn, bypassing the click
 		return "ok";

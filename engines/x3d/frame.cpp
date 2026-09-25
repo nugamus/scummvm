@@ -82,7 +82,8 @@ bool Frame::load(const Common::String &name) {
 			if (v.bitmap && !v.h)
 				v.h = v.bitmap->h + v.bitmapDy;
 		} else if (v.tag == "RCS#" || v.tag == "AOL#" || v.tag == "VAS#" || v.tag == "cSU#") {
-			f.skip(108); // lists (Q-0061)
+			f.skip(108); // the scroll bar's bitmaps (Q-0061)
+			v.list = v.tag != "RCS#";
 		} else if (v.tag == "loV#" || v.tag == "BoV#" || v.tag == "AoV#" || v.tag == "nCC#" || v.tag == "nIC#") {
 			f.skip(36);
 		} else if (v.tag == "dEU#" || v.tag == "dES#" || v.tag == "idE#") {
@@ -181,6 +182,38 @@ void Frame::backspace() {
 	}
 }
 
+void Frame::setText(const Common::String &text, bool placeholder) {
+	const int e = editView();
+	if (e >= 0) {
+		_views[e].text = text;
+		_views[e].placeholder = placeholder;
+	}
+}
+
+int Frame::listView() const {
+	for (uint i = 0; i < _views.size(); i++)
+		if (_views[i].list)
+			return i;
+	return -1;
+}
+
+void Frame::setList(const Common::Array<Common::String> &rows, int selected) {
+	_rows = rows;
+	_selected = selected;
+}
+
+int Frame::listRowAt(const Common::Point &p) const {
+	const int l = listView();
+	if (l < 0)
+		return -1;
+	const View &v = _views[l];
+	if (!Common::Rect(v.x, v.y, v.x + v.w - 38, v.y + v.h).contains(p))
+		return -1;
+	// ponytail: no scrolling (the scroll bar is Q-0061); rows beyond the view are not shown
+	const int row = (p.y - v.y) / 32;
+	return row < (int)_rows.size() ? row : -1;
+}
+
 Common::String Frame::text() const {
 	const int e = editView();
 	return e >= 0 && !_views[e].placeholder ? _views[e].text : Common::String();
@@ -207,6 +240,19 @@ void Frame::draw(Renderer &r, int xOffset, int hovered) {
 			s.fillRect(Common::Rect(v.w, v.h), s.format.ARGBToColor(255, 31, 33, 80));
 			font->drawString(&s, v.text, 2, (v.h - font->getFontHeight()) / 2, v.w - 4, s.format.ARGBToColor(255, 255, 255, 255));
 			r.drawImage(s, xOffset + v.x, v.y, false);
+			s.free();
+		}
+		if (v.list && !_rows.empty()) {
+			// Rows centred in (0, 32 row, w - 38, 32), keyed over the frame (save.md, Lists)
+			const Graphics::Font *font = FontMan.getFontByUsage(Graphics::FontManager::kBigGUIFont);
+			Graphics::Surface s;
+			s.create(v.w, v.h, Graphics::PixelFormat::createFormatRGBA32());
+			s.fillRect(Common::Rect(v.w, v.h), s.format.ARGBToColor(255, 255, 255, 255));
+			for (int row = 0; row < (int)_rows.size() && (row + 1) * 32 <= v.h; row++) {
+				const uint32 color = row == _selected ? s.format.ARGBToColor(255, 247, 196, 90) : s.format.ARGBToColor(255, 135, 186, 235);
+				font->drawString(&s, _rows[row], 0, row * 32 + (32 - font->getFontHeight()) / 2, v.w - 38, color, Graphics::kTextAlignCenter);
+			}
+			r.drawImage(s, xOffset + v.x, v.y, true);
 			s.free();
 		}
 	}

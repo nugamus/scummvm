@@ -51,6 +51,14 @@ public:
 	void backspace();
 	Common::String text() const;
 
+	// The edit's text; a placeholder shows until the player types
+	void setText(const Common::String &text, bool placeholder = false);
+
+	// List views (AOL#, VAS#, cSU#; save.md "Lists"): rows 32 px high, one selected
+	void setList(const Common::Array<Common::String> &rows, int selected);
+	int listRowAt(const Common::Point &p) const; // -1 outside the rows
+	void selectRow(int row) { _selected = row; }
+
 	// Draws the views, the hover highlight of the view under the mouse and edit text
 	void draw(Renderer &r, int xOffset, int hovered);
 
@@ -69,7 +77,12 @@ private:
 		Common::String text;
 		uint maxLength = 30;
 		bool placeholder = false; // the text is the default one, replaced when typing
+		bool list = false;
 	};
+
+	int listView() const;
+	Common::Array<Common::String> _rows;
+	int _selected = -1;
 
 	int editView() const;
 
