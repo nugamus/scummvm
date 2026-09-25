@@ -31,6 +31,7 @@
 
 #include "graphics/tinygl/tinygl.h"
 
+#include "x3d/a3d.h"
 #include "x3d/o3d.h"
 
 namespace Common {
@@ -57,6 +58,9 @@ public:
 
 	// Loads a unit from its .X3D script name, e.g. "U01.X3D"
 	bool load(const Common::String &scriptName);
+
+	// One logic step of dt seconds: animation playback, then the posed vertices
+	void update(float dt);
 	void draw(const Camera &cam, int width, int height);
 
 	Camera camera; // #CAMERA# values; position and angles are set by the unit
@@ -87,7 +91,23 @@ public:
 	const Common::Array<Model *> &models() const { return _models; }
 
 private:
+	// A playing animation bound to an object (animation.md, Binding and Per-frame playback)
+	struct AnimNode {
+		const A3DFile *file;
+		uint animation;
+		Model *model;
+		uint object;
+		float fps, frame;
+		bool loop, running;
+
+		AnimNode(const A3DFile *f, uint a, Model *m, uint o, float rate, float start)
+			: file(f), animation(a), model(m), object(o), fps(rate), frame(start), loop(true), running(true) {}
+	};
+
 	Model *loadModel(const Common::String &path);
+	void bindAnimation(const Common::String &path, float fps);
+	void animate(const A3DFile &file, uint animation, Model &m, uint object, float frame);
+	void pose(Model &m); // world vertices and bounds from the live transforms
 	void attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold);
 	void drawObject(const Model &m, uint object);
 	bool inView(const float *sphere) const;
@@ -97,6 +117,8 @@ private:
 	byte _ambient[3] = { 255, 255, 255 };
 	Common::Array<Model *> _models;
 	Common::Array<Model *> _lodModels; // only drawn through their base objects
+	Common::Array<A3DFile *> _animationFiles;
+	Common::Array<AnimNode> _nodes;
 
 	// The view of the frame being drawn, for culling: eye, axes, half-extents per unit depth
 	float _eye[3], _right[3], _up[3], _forward[3], _halfWidth, _halfHeight;

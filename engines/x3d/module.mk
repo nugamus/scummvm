@@ -1,6 +1,7 @@
 MODULE := engines/x3d
 
 MODULE_OBJS = \
+	a3d.o \
 	collision.o \
 	dmf.o \
 	metaengine.o \
