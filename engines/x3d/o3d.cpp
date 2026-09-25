@@ -69,7 +69,9 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 		m.name = readName(s);
 		m.renderClass = s.readUint32LE();
 		s.read(m.colors, sizeof(m.colors));
-		s.skip(4 * 4); // shininess, strength, transparency, draw mode
+		s.skip(2 * 4); // shininess, strength
+		m.transparency = s.readUint32LE();
+		m.mode = s.readUint32LE();
 		m.wrap = s.readUint32LE() != 0;
 		if (s.readUint32LE()) {
 			m.textureMap = readName(s);

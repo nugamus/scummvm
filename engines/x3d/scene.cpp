@@ -1052,6 +1052,17 @@ void Scene::draw(const Camera &cam, int width, int height) {
 			drawObject(*drawn, object);
 		}
 	}
+
+	// The held-back faces, farthest key first; equal keys: last queued first
+	Common::sort(_deferred.begin(), _deferred.end(), [](const Deferred &x, const Deferred &y) {
+		return x.key != y.key ? x.key > y.key : x.order > y.order;
+	});
+	for (const Deferred &d : _deferred) {
+		_renderer->setBlend(d.additive ? Renderer::kAdditive : Renderer::kAlpha, d.keyed);
+		drawFace(d);
+	}
+	_deferred.clear();
+	_renderer->setBlend(Renderer::kOpaque, true);
 }
 
 void Scene::faceCamera(const Model &m, uint object, Common::Array<float> &v) const {
@@ -1094,48 +1105,69 @@ void Scene::drawObject(const Model &m, uint object) {
 
 	for (const O3DFace &face : objects[object].faces) {
 		const O3DMaterial &mat = m.file.materials[face.material];
-		const uint32 tex = mat.textureMap.empty() ? 0 : texture(mat.textureMap);
-		_renderer->setTexture(tex);
-		if (tex)
-			_renderer->setClamp(!mat.wrap);
+		Deferred f;
+		f.tex = mat.textureMap.empty() ? 0 : texture(mat.textureMap);
+		f.clamp = !mat.wrap;
+		// The colour key cuts texels only in draw modes 1..3 (E-0481)
+		f.keyed = mat.mode >= 1 && mat.mode <= 3;
+		f.additive = mat.mode == 2;
+		f.alpha = mat.transparency ? (byte)(255 - 2.55f * MIN<uint32>(mat.transparency, 100)) : 255;
 
 		// Class 0 draws the texture as stored; class 2 is lit per vertex (lighting.md)
 		const Common::Array<byte> *lit = mat.renderClass == 0 ? nullptr : &lighting(m, owner);
-		float xyz[3 * 64], uv[2 * 64];
-		byte rgb[3 * 64], spec[3 * 64];
-		bool anySpecular = false;
-		uint count = 0;
-		for (uint k = 0; k < face.indices.size() && count < 64; k++) {
+		f.lit = lit != nullptr;
+		f.hasUV = !face.uvs.empty();
+		f.anySpecular = false;
+		f.count = 0;
+		float farthest = -1e30f;
+		for (uint k = 0; k < face.indices.size() && f.count < 64; k++) {
 			const uint32 index = face.indices[k] * 3;
 			if (index + 2 >= vertices->size())
 				break;
-			for (int c = 0; c < 3; c++)
-				xyz[count * 3 + c] = (*vertices)[index + c];
-			if (!face.uvs.empty()) {
-				uv[count * 2] = face.uvs[k * 2];
-				uv[count * 2 + 1] = face.uvs[k * 2 + 1];
+			float depth = 0;
+			for (int c = 0; c < 3; c++) {
+				f.xyz[f.count * 3 + c] = (*vertices)[index + c];
+				depth += ((*vertices)[index + c] - _eye[c]) * _forward[c];
+			}
+			farthest = MAX(farthest, depth);
+			if (f.hasUV) {
+				f.uv[f.count * 2] = face.uvs[k * 2];
+				f.uv[f.count * 2 + 1] = face.uvs[k * 2 + 1];
 			}
 			if (lit) {
 				const byte *c = &(*lit)[face.indices[k] * 6];
 				for (int j = 0; j < 3; j++) {
 					// Untextured faces: the diffuse colour times the light
-					rgb[count * 3 + j] = tex ? c[j] : mat.colors[1][j] * c[j] / 256;
-					spec[count * 3 + j] = tex ? c[3 + j] : 0;
-					anySpecular |= spec[count * 3 + j] != 0;
+					f.rgb[f.count * 3 + j] = f.tex ? c[j] : mat.colors[1][j] * c[j] / 256;
+					f.spec[f.count * 3 + j] = f.tex ? c[3 + j] : 0;
+					f.anySpecular |= f.spec[f.count * 3 + j] != 0;
 				}
 			}
-			count++;
+			f.count++;
 		}
-		_renderer->drawFan(xyz, face.uvs.empty() ? nullptr : uv, lit ? rgb : nullptr, count);
+		if (mat.transparency || f.additive) {
+			f.key = (int)farthest;
+			f.order = _deferred.size();
+			_deferred.push_back(f);
+		} else {
+			_renderer->setBlend(Renderer::kOpaque, f.keyed);
+			drawFace(f);
+		}
+	}
+}
 
-		// Light beyond 255 is added on top: pixel = texture * D / 255 + S
-		if (anySpecular) {
-			_renderer->setAdditive(true);
-			_renderer->setTexture(0);
-			_renderer->drawFan(xyz, nullptr, spec, count);
-			_renderer->setAdditive(false);
-			_renderer->setTexture(tex);
-		}
+void Scene::drawFace(const Deferred &f) {
+	_renderer->setTexture(f.tex);
+	if (f.tex)
+		_renderer->setClamp(f.clamp);
+	_renderer->drawFan(f.xyz, f.hasUV ? f.uv : nullptr, f.lit ? f.rgb : nullptr, f.count, f.alpha);
+
+	// Light beyond 255 is added on top: pixel = texture * D / 255 + S
+	if (f.anySpecular) {
+		_renderer->setBlend(Renderer::kAdditive, false);
+		_renderer->setTexture(0);
+		_renderer->drawFan(f.xyz, nullptr, f.spec, f.count);
+		_renderer->setBlend(f.alpha == 255 && !f.additive ? Renderer::kOpaque : f.additive ? Renderer::kAdditive : Renderer::kAlpha, f.keyed);
 	}
 }
 
