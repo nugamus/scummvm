@@ -39,6 +39,7 @@
 #include "video/avi_decoder.h"
 
 #include "x3d/collision.h"
+#include "x3d/interaction.h"
 #include "x3d/player.h"
 #include "x3d/scene.h"
 #include "x3d/x3d.h"
@@ -85,101 +86,180 @@ Common::Error X3DEngine::run() {
 
 	// U01 draws ~5,000 immediate-mode faces a frame, more than the default 5 MB of draw calls
 	TinyGL::createContext(_screen->w, _screen->h, _screen->format, 256, false, false, 64 * 1024 * 1024);
-	{
-		Scene scene;
-		if (!scene.load(sceneName))
-			error("Unable to load scene %s", sceneName.c_str());
-
-		// Free roam as after U01's scripted entry (movement.md, U01 hand-over). The entry
-		// itself and the TakeCard action that unlocks movement are not implemented yet, so
-		// the player can move at once.
-		// ponytail: only U01's values; other units need their Uxx_Start state
-		Player player;
-		player.init(scene.scale);
-		player.fov = scene.camera.fov;
-		Common::StringArray noCollision;
-		if (sceneName.hasPrefixIgnoreCase("U01")) {
-			player.eye.set(-466.36f, -452.495f, 30.48f);
-			player.yaw = 4.7f;
-			player.sphereOffset = 37.0f;
-			noCollision.push_back("Box203");
-			scene.hideObject("Box203");
-			scene.hideObject("Cylinder07");
-		}
-		// Development shortcut: start_camera=x,y,z,yaw,pitch places the camera anywhere
-		if (ConfMan.hasKey("start_camera"))
-			sscanf(ConfMan.get("start_camera").c_str(), "%f,%f,%f,%f,%f", &player.eye.x(),
-			       &player.eye.y(), &player.eye.z(), &player.yaw, &player.pitch);
-
-		Collision collision;
-		collision.build(scene, noCollision);
-
-		// Logic runs in fixed steps; rendering runs every loop iteration and interpolates
-		// the camera between the last two steps (movement.md, Engine model)
-		const uint32 stepMs = 1000 / kStepsPerSecond;
-		Keys keys;
-		Player previous = player;
-		uint32 last = _system->getMillis(), pending = 0, frames = 0, fpsStart = last;
-		while (!shouldQuit()) {
-			Common::Event e;
-			while (_system->getEventManager()->pollEvent(e)) {
-				if (e.type != Common::EVENT_KEYDOWN && e.type != Common::EVENT_KEYUP)
-					continue;
-				const bool down = e.type == Common::EVENT_KEYDOWN;
-				if (!down)
-					debug(1, "camera %g,%g,%g,%g,%g", player.eye.x(), player.eye.y(), player.eye.z(), player.yaw, player.pitch);
-				switch (e.kbd.keycode) {
-				case Common::KEYCODE_UP: keys.up = down; break;
-				case Common::KEYCODE_DOWN: keys.down = down; break;
-				case Common::KEYCODE_LEFT: keys.left = down; break;
-				case Common::KEYCODE_RIGHT: keys.right = down; break;
-				case Common::KEYCODE_PAGEUP: keys.pageUp = down; break;
-				case Common::KEYCODE_PAGEDOWN: keys.pageDown = down; break;
-				case Common::KEYCODE_LCTRL:
-				case Common::KEYCODE_RCTRL: keys.ctrl = down; break;
-				default: break;
-				}
-			}
-
-			const uint32 now = _system->getMillis();
-			pending += now - last;
-			last = now;
-			while (pending >= stepMs) {
-				pending -= stepMs;
-				previous = player;
-				if (player.tick(stepMs / 1000.0f, keys, collision))
-					playSound("SAUT.WAV");
-				scene.update(stepMs / 1000.0f);
-			}
-
-			const float alpha = (float)pending / stepMs;
-			Camera camera;
-			for (int k = 0; k < 3; k++)
-				camera.position[k] = previous.eye.getData()[k] + (player.eye.getData()[k] - previous.eye.getData()[k]) * alpha;
-			camera.yaw = previous.yaw + (player.yaw - previous.yaw) * alpha;
-			camera.pitch = previous.pitch + (player.pitch - previous.pitch) * alpha;
-			camera.fov = player.fov;
-			camera.roll = player.roll;
-
-			scene.draw(camera, _screen->w, _screen->h);
-			TinyGL::presentBuffer();
-			Graphics::Surface frame;
-			TinyGL::getSurfaceRef(frame);
-			_system->copyRectToScreen(frame.getPixels(), frame.pitch, 0, 0, frame.w, frame.h);
-			_system->updateScreen();
-			_system->delayMillis(1);
-
-			frames++;
-			if (now - fpsStart >= 5000) {
-				debug(2, "%u frames per second", frames * 1000 / (now - fpsStart));
-				frames = 0;
-				fpsStart = now;
-			}
-		}
-	}
-
+	playScene(sceneName);
 	TinyGL::destroyContext();
 	return Common::kNoError;
+}
+
+void X3DEngine::playScene(const Common::String &sceneName) {
+	Scene scene;
+	if (!scene.load(sceneName))
+		error("Unable to load scene %s", sceneName.c_str());
+	Interaction interaction(this, scene);
+	interaction.load(scene.dir());
+
+	// U01 as its scripted entry leaves it (movement.md, U01 hand-over): the mayor holds out
+	// the card (GiveCard) and the player can only click until TakeCard. The entry itself
+	// is not implemented yet.
+	// ponytail: only U01's values; other units need their Uxx_Start state
+	Player player;
+	player.init(scene.scale);
+	player.fov = scene.camera.fov;
+	Common::StringArray noCollision;
+	const bool u01 = sceneName.hasPrefixIgnoreCase("U01");
+	bool takingCard = false;
+	if (u01) {
+		player.eye.set(-466.36f, -452.495f, 30.48f);
+		player.yaw = 4.7f;
+		player.sphereOffset = 37.0f;
+		player.canMove = player.canTurn = false;
+		noCollision.push_back("Box203");
+		scene.hideObject("Box203");
+		scene.hideObject("Cylinder07");
+		scene.playClip("*U01_02", "Anim/U01_02/Action03.A3D");
+	}
+	// Development shortcut: start_camera=x,y,z,yaw,pitch places the camera anywhere
+	if (ConfMan.hasKey("start_camera")) {
+		sscanf(ConfMan.get("start_camera").c_str(), "%f,%f,%f,%f,%f", &player.eye.x(),
+		       &player.eye.y(), &player.eye.z(), &player.yaw, &player.pitch);
+		player.canMove = player.canTurn = true;
+	}
+
+	Collision collision;
+	collision.build(scene, noCollision);
+
+	// Logic runs in fixed steps; rendering runs every loop iteration and interpolates
+	// the camera between the last two steps (movement.md, Engine model)
+	const uint32 stepMs = 1000 / kStepsPerSecond;
+	Keys keys;
+	Player previous = player;
+	Camera camera;
+	int hotspot = -1;
+	Common::Point mouse(320, 240);
+	bool hoverNow = false, clickNow = false;
+	uint32 last = _system->getMillis(), pending = 0, frames = 0, fpsStart = last, lastClick = 0;
+	// Development shortcut: dev_click=x,y,ms clicks at game pixel (x, y) ms after the scene
+	// starts, for testing without focus (SDL takes click positions from the real cursor)
+	int devClick[3] = { -1, -1, -1 };
+	if (ConfMan.hasKey("dev_click"))
+		sscanf(ConfMan.get("dev_click").c_str(), "%d,%d,%d", &devClick[0], &devClick[1], &devClick[2]);
+	const uint32 sceneStart = last;
+	while (!shouldQuit()) {
+		if (devClick[2] >= 0 && _system->getMillis() - sceneStart >= (uint32)devClick[2]) {
+			mouse = Common::Point(devClick[0], devClick[1]);
+			clickNow = true;
+			devClick[2] = -1;
+		}
+		Common::Event e;
+		while (_system->getEventManager()->pollEvent(e)) {
+			if (e.type == Common::EVENT_MOUSEMOVE) {
+				mouse = e.mouse;
+				hoverNow = true;
+				continue;
+			}
+			if (e.type == Common::EVENT_LBUTTONDOWN) {
+				debug(1, "click %d,%d", e.mouse.x, e.mouse.y);
+				mouse = e.mouse;
+				clickNow = true;
+				continue;
+			}
+			if (e.type != Common::EVENT_KEYDOWN && e.type != Common::EVENT_KEYUP)
+				continue;
+			const bool down = e.type == Common::EVENT_KEYDOWN;
+			if (!down) {
+				debug(1, "camera %g,%g,%g,%g,%g", player.eye.x(), player.eye.y(), player.eye.z(), player.yaw, player.pitch);
+				hoverNow = true; // the original re-hovers on every key release
+			}
+			switch (e.kbd.keycode) {
+			case Common::KEYCODE_UP: keys.up = down; break;
+			case Common::KEYCODE_DOWN: keys.down = down; break;
+			case Common::KEYCODE_LEFT: keys.left = down; break;
+			case Common::KEYCODE_RIGHT: keys.right = down; break;
+			case Common::KEYCODE_PAGEUP: keys.pageUp = down; break;
+			case Common::KEYCODE_PAGEDOWN: keys.pageDown = down; break;
+			case Common::KEYCODE_LCTRL:
+			case Common::KEYCODE_RCTRL: keys.ctrl = down; break;
+			default: break;
+			}
+		}
+
+		const uint32 now = _system->getMillis();
+		pending += now - last;
+		last = now;
+		while (pending >= stepMs) {
+			pending -= stepMs;
+			previous = player;
+			if (player.tick(stepMs / 1000.0f, keys, collision))
+				playSound("SAUT.WAV");
+			scene.update(stepMs / 1000.0f);
+
+			// TakeCard waits for the card animation, then allows walking (E-0050, E-0057)
+			if (takingCard && !scene.clipPlaying("*U01_02")) {
+				takingCard = false;
+				player.canMove = player.canTurn = true;
+			}
+		}
+
+		const float alpha = (float)pending / stepMs;
+		for (int k = 0; k < 3; k++)
+			camera.position[k] = previous.eye.getData()[k] + (player.eye.getData()[k] - previous.eye.getData()[k]) * alpha;
+		camera.yaw = previous.yaw + (player.yaw - previous.yaw) * alpha;
+		camera.pitch = previous.pitch + (player.pitch - previous.pitch) * alpha;
+		camera.fov = player.fov;
+		camera.roll = player.roll;
+
+		// Hover and click (interaction.md): clicks closer together than one frame + 10 ms
+		// are ignored; nothing counts beyond 4 scene units of depth
+		if (clickNow && now - lastClick < 1000 / kStepsPerSecond + 10)
+			clickNow = false;
+		if (hoverNow || clickNow) {
+			hotspot = -1;
+			const Scene::Model *model;
+			uint object;
+			float depth;
+			if (scene.pick(camera, _screen->w, _screen->h, mouse.x, mouse.y, model, object, depth) &&
+			    depth <= 4 * scene.scale) {
+				Common::StringArray names;
+				for (int o = object; o >= 0; o = model->file.objects[o].parent)
+					names.push_back(model->file.objects[o].name);
+				hotspot = interaction.hotspotFor(names);
+				debug(2, "pick %s at depth %g: hotspot %d", names[0].c_str(), depth, hotspot);
+			}
+			hoverNow = false;
+		}
+		if (clickNow) {
+			lastClick = now;
+			clickNow = false;
+			Common::StringArray unitActions;
+			interaction.click(hotspot, unitActions);
+			for (const Common::String &action : unitActions) {
+				// U01's unit code (interaction.md, Click -> action)
+				if (u01 && action.equalsIgnoreCase("TakeCard")) {
+					scene.rewindClip("*U01_02");
+					takingCard = true;
+					interaction.setCursorKind("*U01_02", 3);
+				} else {
+					warning("Unit action %s is not implemented", action.c_str());
+				}
+			}
+		}
+		interaction.hover(hotspot, now);
+
+		scene.draw(camera, _screen->w, _screen->h);
+		TinyGL::presentBuffer();
+		Graphics::Surface frame;
+		TinyGL::getSurfaceRef(frame);
+		_system->copyRectToScreen(frame.getPixels(), frame.pitch, 0, 0, frame.w, frame.h);
+		_system->updateScreen();
+		_system->delayMillis(1);
+
+		frames++;
+		if (now - fpsStart >= 5000) {
+			debug(2, "%u frames per second", frames * 1000 / (now - fpsStart));
+			frames = 0;
+			fpsStart = now;
+		}
+	}
 }
 
 void X3DEngine::showBitmap(const Common::Path &path) {

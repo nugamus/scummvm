@@ -1,0 +1,99 @@
+/* ScummVM - Graphic Adventure Engine
+ *
+ * ScummVM is the legal property of its developers, whose names
+ * are too numerous to list here. Please refer to the COPYRIGHT
+ * file distributed with this source distribution.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
+#ifndef X3D_INTERACTION_H
+#define X3D_INTERACTION_H
+
+#include "common/array.h"
+#include "common/str.h"
+#include "common/str-array.h"
+
+namespace Graphics {
+struct Surface;
+}
+
+namespace X3D {
+
+class Scene;
+class X3DEngine;
+
+// Hotspots, cursors and click actions of a unit (docs/engine-spec/interaction.md)
+class Interaction {
+public:
+	Interaction(X3DEngine *vm, Scene &scene);
+	~Interaction();
+
+	// Data/Uxx/INFOOBJ.BIN hotspots and INFOACT.BIN actions
+	void load(const Common::String &unitDir);
+
+	// Hotspot index for a picked object, given its name then its parents' names, or -1
+	// (interaction.md, Hotspots)
+	int hotspotFor(const Common::StringArray &names) const;
+
+	// Sets the cursor for the hotspot under the mouse (-1: none); call every frame
+	void hover(int hotspot, uint32 millis);
+
+	// Runs the hotspot's first runnable action; op-10 names go to unitActions
+	void click(int hotspot, Common::StringArray &unitActions);
+
+	void setCursorKind(const Common::String &hotspot, uint kind);
+
+	bool actionsEnabled = true;
+
+private:
+	struct Hotspot {
+		Common::String name; // "*U01_04"
+		uint32 type, cursor;
+	};
+
+	struct Action {
+		uint32 id;
+		Common::String name, condition, item, hotspot, target;
+		int32 maxRuns;
+		uint32 trigger, hotspotType, targetType;
+		Common::Array<uint32> ops;
+		Common::StringArray args;
+		int runs = 0;
+		bool exhausted = false;
+	};
+
+	int findHotspot(const Common::String &name) const; // "U01_04" or "*U01_04"
+	bool runnable(const Action &a, uint32 trigger) const;
+	bool evaluate(const Common::String &condition) const;
+	void run(Action &a, Common::StringArray &unitActions);
+	void setCursor(uint kind);
+	void holdItem(const Common::String &item);
+
+	X3DEngine *_vm;
+	Scene &_scene;
+	Common::String _soundDir;
+	Common::Array<Hotspot> _hotspots;
+	Common::Array<Action> _actions;
+
+	Common::String _heldItem; // "U01_04" while an item is held
+	Graphics::Surface *_heldImage = nullptr;
+	Graphics::Surface *_cursors[6] = {};
+	int _shownCursor = -2; // -1: held item, -3: nothing (blink off)
+};
+
+} // End of namespace X3D
+
+#endif // X3D_INTERACTION_H
