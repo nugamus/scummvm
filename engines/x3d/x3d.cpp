@@ -39,6 +39,7 @@
 
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
+#include "x3d/inventory.h"
 #include "x3d/player.h"
 #include "x3d/renderer.h"
 #include "x3d/scene.h"
@@ -110,6 +111,10 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_talk = &talk;
 	Interaction interaction(scene, *_sound, talk);
 	_interaction = &interaction;
+	// The bar is opened, empty, when the player is chosen (ui.md, Boot to U01)
+	Inventory inventory(interaction);
+	_inventory = &inventory;
+	interaction.inventory = &inventory;
 
 	const bool u01 = sceneName.hasPrefixIgnoreCase("U01");
 	U01 unit01(this);
@@ -171,6 +176,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_collision = nullptr;
 	_interaction = nullptr;
 	_talk = nullptr;
+	_inventory = nullptr;
 	_u01 = nullptr;
 }
 
@@ -183,6 +189,7 @@ void X3DEngine::logicStep(bool input) {
 			_sound->emit(Sound::kEffectsEmitter, "SAUT.WAV", _player.eye, false);
 	}
 	_logicMs += stepMs;
+	_inventory->tick(_logicMs);
 	_talk->tick(_logicMs);
 	_scene->update(stepMs / 1000.0f);
 	_collision->refresh();
@@ -214,6 +221,7 @@ void X3DEngine::frame(bool input) {
 		if (e.type != Common::EVENT_KEYDOWN && e.type != Common::EVENT_KEYUP)
 			continue;
 		const bool down = e.type == Common::EVENT_KEYDOWN;
+		debug(3, "key %d %s", e.kbd.keycode, down ? "down" : "up");
 		if (!down) {
 			debug(1, "camera %g,%g,%g,%g,%g", _player.eye.x(), _player.eye.y(), _player.eye.z(), _player.yaw, _player.pitch);
 			_hoverNow = true; // the original re-hovers on every key release
@@ -229,6 +237,10 @@ void X3DEngine::frame(bool input) {
 		case Common::KEYCODE_RCTRL: _keys.ctrl = down; break;
 		case Common::KEYCODE_RETURN:
 		case Common::KEYCODE_KP_ENTER: _enterHeld = down; break;
+		case Common::KEYCODE_SPACE:
+			if (down && input && !_suspended)
+				_inventory->toggle();
+			break;
 		default: break;
 		}
 	}
@@ -258,7 +270,20 @@ void X3DEngine::frame(bool input) {
 	const bool interactive = input && !_suspended;
 	if (_clickNow && (!interactive || now - _lastClick < 1000 / kStepsPerSecond + 10))
 		_clickNow = false;
-	if (interactive && (_hoverNow || _clickNow)) {
+	// The inventory bar takes the mouse before the scene (ui.md, Frame manager)
+	const int x2d = (_renderer->width() - 640) / 2;
+	const Common::Point mouse2d(_mouse.x - x2d, _mouse.y);
+	const bool overBar = interactive && _inventory->contains(mouse2d);
+	if (overBar) {
+		if (_clickNow) {
+			_lastClick = now;
+			_clickNow = false;
+			_inventory->click(mouse2d);
+		}
+		_interaction->showCursor(_inventory->cursorAt(mouse2d));
+		_hoverNow = false;
+	}
+	if (interactive && !overBar && (_hoverNow || _clickNow)) {
 		_hotspot = -1;
 		const Scene::Model *model;
 		uint object;
@@ -278,10 +303,11 @@ void X3DEngine::frame(bool input) {
 		_clickNow = false;
 		_interaction->click(_hotspot, _unitActions);
 	}
-	if (interactive)
+	if (interactive && !overBar)
 		_interaction->hover(_hotspot, now);
 
 	_scene->draw(camera, _renderer->width(), _renderer->height());
+	_inventory->draw(*_renderer, x2d);
 	if (_u01)
 		_u01->draw();
 	_renderer->present();
@@ -391,14 +417,15 @@ void X3DEngine::suspend(bool suspended) {
 }
 
 void X3DEngine::showBitmap(const Common::Path &path) {
-	Common::File file;
-	Image::BitmapDecoder bmp;
-	if (!file.open(path) || !bmp.loadStream(file))
+	Graphics::Surface *image = loadBitmap(path);
+	if (!image)
 		error("Unable to load %s", path.toString().c_str());
 
 	_renderer->clear();
-	_renderer->drawImage(*bmp.getSurface(), (_renderer->width() - 640) / 2, 0, false);
+	_renderer->drawImage(*image, (_renderer->width() - 640) / 2, 0, false);
 	_renderer->present();
+	image->free();
+	delete image;
 }
 
 void X3DEngine::wait(uint32 ms) {

@@ -5,6 +5,7 @@ MODULE_OBJS = \
 	collision.o \
 	dmf.o \
 	interaction.o \
+	inventory.o \
 	metaengine.o \
 	o3d.o \
 	player.o \

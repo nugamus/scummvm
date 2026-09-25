@@ -20,9 +20,13 @@
  */
 
 #include "common/config-manager.h"
+#include "common/file.h"
+#include "common/memstream.h"
 
 #include "graphics/renderer.h"
 #include "graphics/surface.h"
+
+#include "image/bmp.h"
 
 #include "x3d/renderer.h"
 
@@ -40,6 +44,25 @@ Renderer *Renderer::create(int width, int height) {
 		if (Renderer *r = createOpenGLRenderer(width, height))
 			return r;
 	return createTinyGLRenderer(width, height);
+}
+
+Graphics::Surface *loadBitmap(Common::SeekableReadStream &s) {
+	const uint32 size = s.size();
+	byte *data = (byte *)calloc(size + 4, 1);
+	s.read(data, size);
+	// Image size 0: the decoder takes the rest of the (padded) data
+	if (size >= 38)
+		WRITE_LE_UINT32(data + 34, 0);
+	Common::MemoryReadStream padded(data, size + 4, DisposeAfterUse::YES);
+	Image::BitmapDecoder bmp;
+	if (!bmp.loadStream(padded))
+		return nullptr;
+	return bmp.getSurface()->convertTo(Graphics::PixelFormat::createFormatRGBA32(), bmp.getPalette().data());
+}
+
+Graphics::Surface *loadBitmap(const Common::Path &path) {
+	Common::File f;
+	return f.open(path) ? loadBitmap(f) : nullptr;
 }
 
 void Renderer::fillRect(int x0, int y0, int x1, int y1, byte r, byte g, byte b) {

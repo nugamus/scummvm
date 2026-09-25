@@ -35,6 +35,7 @@ namespace X3D {
 
 class Collision;
 class Interaction;
+class Inventory;
 class Renderer;
 class Scene;
 class Sound;
@@ -72,6 +73,7 @@ public:
 	Player &player() { return _player; }
 	Collision *collision() { return _collision; }
 	Interaction *interaction() { return _interaction; }
+	Inventory *inventory() { return _inventory; }
 	Talk *talk() { return _talk; }
 	Sound *sound() { return _sound; }
 	Renderer *renderer() { return _renderer; }
@@ -100,6 +102,7 @@ private:
 	Scene *_scene = nullptr;
 	Collision *_collision = nullptr;
 	Interaction *_interaction = nullptr;
+	Inventory *_inventory = nullptr;
 	Talk *_talk = nullptr;
 	U01 *_u01 = nullptr;
 	Player _player, _previous;

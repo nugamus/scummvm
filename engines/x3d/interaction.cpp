@@ -32,6 +32,8 @@
 #include "image/bmp.h"
 
 #include "x3d/interaction.h"
+#include "x3d/inventory.h"
+#include "x3d/renderer.h"
 #include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
@@ -45,10 +47,13 @@ static Common::String readString(Common::SeekableReadStream &s, uint size) {
 
 // A BMP image as a surface in the screen format, or nullptr
 static Graphics::Surface *decodeBitmap(Common::SeekableReadStream &s) {
-	Image::BitmapDecoder bmp;
-	if (!bmp.loadStream(s))
+	Graphics::Surface *rgba = loadBitmap(s);
+	if (!rgba)
 		return nullptr;
-	return bmp.getSurface()->convertTo(g_system->getScreenFormat(), bmp.getPalette().data());
+	Graphics::Surface *screen = rgba->convertTo(g_system->getScreenFormat());
+	rgba->free();
+	delete rgba;
+	return screen;
 }
 
 // Cursor kinds 0..5 (interaction.md, Cursors): EXE bitmap resources and their hotspots
@@ -210,6 +215,13 @@ void Interaction::hover(int hotspot, uint32 millis) {
 		return;
 	}
 	setCursor(hotspot >= 0 ? _hotspots[hotspot].cursor : 0);
+}
+
+void Interaction::showCursor(uint kind) {
+	if (_heldImage)
+		hover(-1, g_system->getMillis());
+	else
+		setCursor(kind);
 }
 
 void Interaction::holdItem(const Common::String &item) {
@@ -384,11 +396,15 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 				_hotspots[target].cursor = 0;
 			_scene.hideObject(targetName);
 			holdItem(targetName.hasPrefix("*") ? targetName.substr(1) : targetName);
+			if (inventory)
+				inventory->show();
 			break;
 		case 3: // use up the held item
 			holdItem("");
 			if (target >= 0)
 				_hotspots[target].cursor = 0;
+			if (inventory)
+				inventory->hide();
 			break;
 		case 4:
 			_scene.startAnimation(arg);
