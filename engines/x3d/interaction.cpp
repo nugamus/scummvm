@@ -276,6 +276,13 @@ bool Interaction::exhausted(uint32 id) const {
 	return false;
 }
 
+Common::StringArray Interaction::hotspotNames() const {
+	Common::StringArray names;
+	for (const Hotspot &h : _hotspots)
+		names.push_back(Common::String::format("%s (type %u, cursor %u)", h.name.c_str(), h.type, h.cursor));
+	return names;
+}
+
 const Common::String &Interaction::hotspotObject(const Common::String &hotspot) const {
 	const int h = findHotspot(hotspot);
 	return h >= 0 ? _hotspots[h].name : hotspot;

@@ -66,6 +66,9 @@ public:
 	void addUnitAction(const Common::String &name) { _unitActions.push_back(name); }
 	void playVideo(const Common::String &name);
 
+	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold
+	Common::String command(const Common::String &line);
+
 	static constexpr float kKeep = 100.0f;
 
 	// The running scene
@@ -113,6 +116,7 @@ private:
 	int _hotspot = -1;
 	uint32 _last = 0, _pending = 0, _logicMs = 0, _lastClick = 0, _frames = 0, _fpsStart = 0;
 	Common::Array<int> _devClicks;
+	Common::StringArray _devCommands; // "ms:command", from dev_commands
 	uint32 _sceneStart = 0;
 	Common::String _nextScene;
 	Common::StringArray _unitActions;
