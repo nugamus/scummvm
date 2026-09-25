@@ -73,7 +73,10 @@ public:
 		tglMatrixMode(TGL_MODELVIEW);
 		tglLoadMatrixf(view);
 		tglEnable(TGL_DEPTH_TEST);
-		tglDisable(TGL_CULL_FACE);
+		// D3D's default culling: xd3d never sets D3DRENDERSTATE_CULLMODE (E-0205)
+		tglEnable(TGL_CULL_FACE);
+		tglCullFace(TGL_BACK);
+		tglFrontFace(TGL_CCW);
 		tglDisable(TGL_LIGHTING);
 		tglEnable(TGL_ALPHA_TEST);
 		tglAlphaFunc(TGL_GREATER, 0.5f);
