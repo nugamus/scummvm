@@ -19,6 +19,8 @@
  *
  */
 
+#include "common/serializer.h"
+
 #include "x3d/collision.h"
 #include "x3d/scene.h"
 
@@ -61,6 +63,17 @@ void Collision::refresh() {
 	for (Object &obj : _objects)
 		if (((const Scene::Model *)obj.model)->animated)
 			fill(obj);
+}
+
+void Collision::syncState(Common::Serializer &s) {
+	uint32 n = _objects.size();
+	s.syncAsUint32LE(n);
+	for (uint32 i = 0; i < n; i++) {
+		byte enabled = i < _objects.size() ? _objects[i].enabled : 1;
+		s.syncAsByte(enabled);
+		if (s.isLoading() && i < _objects.size())
+			_objects[i].enabled = enabled;
+	}
 }
 
 void Collision::setEnabled(const Common::String &name, bool enabled, bool subtree) {

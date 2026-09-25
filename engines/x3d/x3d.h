@@ -49,8 +49,18 @@ public:
 	~X3DEngine() override;
 
 	bool hasFeature(EngineFeature f) const override {
-		return f == kSupportsReturnToLauncher;
+		return f == kSupportsReturnToLauncher || f == kSupportsLoadingDuringRuntime ||
+		       f == kSupportsSavingDuringRuntime;
 	}
+
+	// Saves (docs/engine-spec/save.md): the scene's state as the original stores it, in
+	// ScummVM's save files; a load switches to the saved scene and restores it there
+	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
+	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
+	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave = false) override;
+	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
+	// A game over (u01.md caught, u02.md): the load screen, else the Option menu
+	void gameOver();
 
 	// Script primitives for unit code (movement.md, "Scripted camera moves"; u01.md).
 	// They run frames until done, like the original's blocking loops: animation, sound
@@ -79,7 +89,8 @@ public:
 	void afterOptionMenu(const Common::String &command);
 	const Common::String &menuText() const { return _menuText; }
 
-	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold, pos, act
+	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold, pos, act,
+	// save <slot>, load <slot>
 	Common::String command(const Common::String &line);
 
 	static constexpr float kKeep = 100.0f;
@@ -131,8 +142,10 @@ private:
 	uint32 _last = 0, _pending = 0, _logicMs = 0, _lastClick = 0, _frames = 0, _fpsStart = 0;
 	Common::Array<int> _devClicks;
 	Common::StringArray _devCommands; // "ms:command", from dev_commands
-	uint32 _sceneStart = 0;
-	Common::String _nextScene;
+	uint32 _sceneStart = 0, _devStart = 0;
+	bool _devParsed = false;
+	Common::String _nextScene, _sceneName;
+	Common::Array<byte> _pendingLoad; // a save's scene state, restored by playScene
 	Common::StringArray _unitActions;
 	Camera _camera; // the last one drawn, for frames over a frozen scene
 	Common::String _menuText; // the text edit of the last menu

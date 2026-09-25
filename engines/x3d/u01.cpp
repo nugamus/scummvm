@@ -20,6 +20,7 @@
  */
 
 #include "common/config-manager.h"
+#include "common/serializer.h"
 #include "common/system.h"
 #include "common/textconsole.h"
 
@@ -436,11 +437,19 @@ void U01::caught() {
 	_vm->moveTo(2000, nullptr, 0.1631f, 2.19f, 35);
 	_vm->fadeToBlack(2000);
 	sound->stopAll();
-	// ponytail: the original opens the load-game frame (OptionLoad); without the 2D UI
-	// the unit restarts
-	warning("Caught: the load-game screen is not implemented, restarting U01");
 	_vm->suspend(false);
-	_vm->gotoScene("U01.X3D");
+	_vm->gameOver();
+}
+
+void U01::syncState(Common::Serializer &s) {
+	s.syncAsByte(_train2Loaded);
+	s.syncAsByte(_onTrain);
+	s.syncAsByte(_firstMaire);
+	s.syncAsByte(_gauge);
+	uint32 elapsed = g_system->getMillis() - _gaugeStart;
+	s.syncAsUint32LE(elapsed);
+	if (s.isLoading())
+		_gaugeStart = g_system->getMillis() - elapsed;
 }
 
 void U01::draw() {

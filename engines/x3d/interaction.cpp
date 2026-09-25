@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/serializer.h"
 #include "common/debug.h"
 #include "common/file.h"
 #include "common/formats/winexe_pe.h"
@@ -380,6 +381,32 @@ Common::Path Interaction::soundPath(const Common::String &name) const {
 Common::String Interaction::hotspotName(const Action &a) const {
 	const int h = findHotspot(a.hotspot);
 	return h >= 0 ? _hotspots[h].name : a.hotspot;
+}
+
+void Interaction::syncState(Common::Serializer &s) {
+	// ponytail: the original does not restore an action's private run counter, so after a
+	// load a multi-run action counts from 0 again (save.md); this restores the count
+	Common::String held = _heldItem;
+	s.syncString(held);
+	uint32 n = _hotspots.size();
+	s.syncAsUint32LE(n);
+	for (uint32 i = 0; i < n; i++) {
+		uint32 cursor = i < _hotspots.size() ? _hotspots[i].cursor : 0;
+		s.syncAsUint32LE(cursor);
+		if (s.isLoading() && i < _hotspots.size())
+			_hotspots[i].cursor = cursor;
+	}
+	n = _actions.size();
+	s.syncAsUint32LE(n);
+	for (uint32 i = 0; i < n; i++) {
+		Action dummy;
+		Action &a = i < _actions.size() ? _actions[i] : dummy;
+		s.syncAsSint32LE(a.runs);
+		s.syncAsByte(a.exhausted);
+		s.syncString(a.condition);
+	}
+	if (s.isLoading())
+		holdItem(held);
 }
 
 void Interaction::take(const Common::String &hotspot) {

@@ -33,6 +33,10 @@ namespace Graphics {
 struct Surface;
 }
 
+namespace Common {
+class Serializer;
+}
+
 namespace X3D {
 
 class Inventory;
@@ -81,6 +85,10 @@ public:
 	Common::StringArray hotspotNames() const;
 
 	bool actionsEnabled = true;
+
+	// Saved state (save.md CURSOR, ACTIONS, OBJECTS): the held item, run counts,
+	// exhaustion and conditions, hotspot cursors
+	void syncState(Common::Serializer &s);
 
 private:
 	struct Hotspot {

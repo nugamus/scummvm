@@ -572,13 +572,9 @@ void Scene::loadClip(const Common::String &name, const Common::String &path, flo
 
 void Scene::setClip(const Common::String &name, const Common::String &path, const Common::String &subAnimation) {
 	AnimNode *n = findNode(name);
-	Common::File f;
-	A3DFile *file = new A3DFile();
-	if (!n || !f.open(Common::Path(_dir + path)) || !file->load(f) || file->animations.empty()) {
-		warning("Unable to load clip %s%s on %s", _dir.c_str(), path.c_str(), name.c_str());
-		delete file;
+	const A3DFile *file = n ? clipFile(path) : nullptr;
+	if (!file)
 		return;
-	}
 	uint animation = 0;
 	int object = -1;
 	if (!subAnimation.empty()) {
@@ -590,14 +586,12 @@ void Scene::setClip(const Common::String &name, const Common::String &path, cons
 				object = o;
 		if (animation == file->animations.size() || object < 0) {
 			warning("Clip %s has no sub-animation %s", path.c_str(), subAnimation.c_str());
-			delete file;
 			return;
 		}
 	}
-	// ponytail: every call loads the file again; cache by path if clips get reloaded often
-	_animationFiles.push_back(file);
 	n->clip = Playback();
 	n->clip.file = file;
+	n->clip.path = path;
 	n->clip.animation = animation;
 	n->clip.object = object;
 	n->clip.fps = n->base.fps;
@@ -639,18 +633,30 @@ void Scene::setAnimationState(const Common::String &objectName, float frame, boo
 	n->base.loop = loop;
 }
 
-void Scene::playClip(const Common::String &objectName, const Common::String &path) {
-	AnimNode *n = findNode(objectName);
+const A3DFile *Scene::clipFile(const Common::String &path) {
+	if (_clipFiles.contains(path))
+		return _clipFiles[path];
 	Common::File f;
 	A3DFile *file = new A3DFile();
-	if (!n || !f.open(Common::Path(_dir + path)) || !file->load(f) || file->animations.empty()) {
-		warning("Unable to play %s%s on %s", _dir.c_str(), path.c_str(), objectName.c_str());
+	if (!f.open(Common::Path(_dir + path)) || !file->load(f) || file->animations.empty()) {
+		warning("Unable to load %s%s", _dir.c_str(), path.c_str());
 		delete file;
-		return;
+		file = nullptr;
+	} else {
+		_animationFiles.push_back(file);
 	}
-	_animationFiles.push_back(file);
+	_clipFiles[path] = file;
+	return file;
+}
+
+void Scene::playClip(const Common::String &objectName, const Common::String &path) {
+	AnimNode *n = findNode(objectName);
+	const A3DFile *file = n ? clipFile(path) : nullptr;
+	if (!file)
+		return;
 	n->clip = n->base;
 	n->clip.file = file;
+	n->clip.path = path;
 	n->clip.animation = 0;
 	n->clip.frame = file->animations[0].firstFrame;
 	n->clip.running = true;
@@ -757,6 +763,73 @@ void Scene::Playback::advance(float dt) {
 		frame = stopAt;
 		running = false;
 		stopAt = -1;
+	}
+}
+
+void Scene::syncPlayback(Common::Serializer &s, Playback &p) {
+	s.syncAsUint32LE(p.animation);
+	s.syncAsFloatLE(p.fps);
+	s.syncAsFloatLE(p.frame);
+	s.syncAsByte(p.loop);
+	s.syncAsByte(p.running);
+	s.syncAsByte(p.backward);
+	s.syncAsByte(p.pingPong);
+	s.syncAsFloatLE(p.stopAt);
+	s.syncAsFloatLE(p.first);
+	s.syncAsFloatLE(p.last);
+	s.syncAsSint32LE(p.object);
+}
+
+void Scene::syncState(Common::Serializer &s) {
+	s.syncBytes(ambient, 3);
+
+	// Every object's hidden and pickable flags (the original saves only the hotspots'
+	// visibility and re-runs the unit's load hook for the rest; the superset is simpler)
+	uint32 models = _models.size();
+	s.syncAsUint32LE(models);
+	for (uint32 i = 0; i < models; i++) {
+		uint32 n = i < _models.size() ? _models[i]->hiddenObjects.size() : 0;
+		s.syncAsUint32LE(n);
+		for (uint32 o = 0; o < n; o++) {
+			byte hidden = 0, unpickable = 0;
+			if (s.isSaving()) {
+				hidden = _models[i]->hiddenObjects[o];
+				unpickable = _models[i]->unpickable[o];
+			}
+			s.syncAsByte(hidden);
+			s.syncAsByte(unpickable);
+			if (s.isLoading() && i < _models.size() && o < _models[i]->hiddenObjects.size()) {
+				_models[i]->hiddenObjects[o] = hidden;
+				_models[i]->unpickable[o] = unpickable;
+			}
+		}
+	}
+
+	// Animation nodes in creation order; talk's mouth nodes come after the scene's and are
+	// created again by the unit's start, so a load skips the ones that do not exist yet
+	uint32 nodes = _nodes.size();
+	s.syncAsUint32LE(nodes);
+	for (uint32 i = 0; i < nodes; i++) {
+		AnimNode dummy;
+		AnimNode &n = i < _nodes.size() ? _nodes[i] : dummy;
+		byte enabled = n.enabled, clipActive = n.clipActive;
+		s.syncAsByte(enabled);
+		s.syncAsByte(clipActive);
+		syncPlayback(s, n.base);
+		Common::String path = n.clip.path;
+		s.syncString(path);
+		if (s.isLoading()) {
+			n.enabled = enabled;
+			n.clipActive = clipActive && !path.empty();
+			if (!path.empty()) {
+				n.clip = n.base;
+				n.clip.file = clipFile(path);
+				n.clip.path = path;
+				if (!n.clip.file)
+					n.clipActive = false;
+			}
+		}
+		syncPlayback(s, n.clip);
 	}
 }
 

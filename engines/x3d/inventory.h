@@ -30,6 +30,10 @@ namespace Graphics {
 struct Surface;
 }
 
+namespace Common {
+class Serializer;
+}
+
 namespace X3D {
 
 class Interaction;
@@ -40,8 +44,13 @@ class Renderer;
 // menus need one
 class Inventory {
 public:
-	explicit Inventory(Interaction &interaction);
+	Inventory();
 	~Inventory();
+
+	// The bar lives for the whole game; each scene's hotspots and cursor attach to it
+	void attach(Interaction *interaction);
+	void clear() { _items.clear(); _offset = 0; } // a new game
+	void syncState(Common::Serializer &s); // save.md PORTEF
 
 	void toggle();              // Space
 	void show() { slide(true); }
@@ -61,7 +70,7 @@ private:
 	void slide(bool up);
 	Graphics::Surface *image(const Common::String &name);
 
-	Interaction &_interaction;
+	Interaction *_interaction = nullptr;
 	Common::StringArray _items;
 	int _offset = 0;             // scroll, in slots (<= 0)
 	int _y = 480, _step = 0, _ticks = 0;

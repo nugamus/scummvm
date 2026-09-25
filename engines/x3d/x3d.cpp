@@ -20,6 +20,8 @@
  */
 
 #include "common/config-manager.h"
+#include "common/memstream.h"
+#include "common/serializer.h"
 #include "common/debug.h"
 #include "common/events.h"
 #include "common/file.h"
@@ -59,6 +61,7 @@ X3DEngine::X3DEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(
 }
 
 X3DEngine::~X3DEngine() {
+	delete _inventory;
 	delete _sound;
 	delete _renderer;
 }
@@ -70,6 +73,7 @@ Common::Error X3DEngine::run() {
 	// and shows more to the sides. 2D images stay 640x480, centred.
 	_renderer = Renderer::create(ConfMan.hasKey("widescreen") && ConfMan.getBool("widescreen") ? 854 : 640, 480);
 	_sound = new Sound(_mixer);
+	_inventory = new Inventory();
 	setDebugger(new Console(this));
 
 	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
@@ -94,7 +98,62 @@ Common::Error X3DEngine::run() {
 	return Common::kNoError;
 }
 
+static const uint32 kSaveVersion = 1;
+
+bool X3DEngine::canSaveGameStateCurrently(Common::U32String *msg) {
+	return _scene && _unit && _unit->gameStarted() && !_suspended;
+}
+
+bool X3DEngine::canLoadGameStateCurrently(Common::U32String *msg) {
+	return true;
+}
+
+Common::Error X3DEngine::saveGameStream(Common::WriteStream *stream, bool isAutosave) {
+	if (!_scene)
+		return Common::kUnknownError;
+	stream->writeUint32BE(MKTAG('X', '3', 'D', 'S'));
+	Common::Serializer s(nullptr, stream);
+	uint32 version = kSaveVersion;
+	s.syncAsUint32LE(version);
+	s.syncString(_sceneName);
+	s.syncAsByte(_practice);
+	_scene->syncState(s);
+	_interaction->syncState(s);
+	_collision->syncState(s);
+	_player.syncState(s);
+	_inventory->syncState(s);
+	if (_unit)
+		_unit->syncState(s);
+	return Common::kNoError;
+}
+
+Common::Error X3DEngine::loadGameStream(Common::SeekableReadStream *stream) {
+	if (stream->readUint32BE() != MKTAG('X', '3', 'D', 'S'))
+		return Common::kReadingFailed;
+	Common::Serializer s(stream, nullptr);
+	uint32 version = 0;
+	s.syncAsUint32LE(version);
+	if (version != kSaveVersion)
+		return Common::kReadingFailed;
+	Common::String scene;
+	s.syncString(scene);
+	s.syncAsByte(_practice);
+	_pendingLoad.resize(stream->size() - stream->pos());
+	stream->read(_pendingLoad.data(), _pendingLoad.size());
+	gotoScene(scene);
+	return Common::kNoError;
+}
+
+void X3DEngine::gameOver() {
+	// ponytail: ScummVM's load dialog stands in for the OptionLoad frame (save.md)
+	_sound->stopAll();
+	if (!loadGameDialog())
+		afterOptionMenu(optionMenu());
+}
+
 void X3DEngine::playScene(const Common::String &sceneName) {
+	_sceneName = sceneName;
+
 	Scene scene(_renderer);
 	if (!scene.load(sceneName))
 		error("Unable to load scene %s", sceneName.c_str());
@@ -110,9 +169,8 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	Interaction interaction(scene, *_sound, talk);
 	_interaction = &interaction;
 	// The bar is opened, empty, when the player is chosen (ui.md, Boot to U01)
-	Inventory inventory(interaction);
-	_inventory = &inventory;
-	interaction.inventory = &inventory;
+	_inventory->attach(&interaction);
+	interaction.inventory = _inventory;
 
 	U00 unit00(this, _practice);
 	U01 unit01(this);
@@ -139,10 +197,14 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_pending = _logicMs = _lastClick = _frames = 0;
 
 	// Development shortcut: dev_click=x,y,ms[;x,y,ms...] clicks at game pixel (x, y) ms
-	// after the scene starts, for testing without focus (SDL takes click positions from
-	// the real cursor)
-	_devClicks.clear();
-	if (ConfMan.hasKey("dev_click")) {
+	// after the first scene starts, for testing without focus (SDL takes click positions
+	// from the real cursor). Parsed once: the schedule runs on across scene changes.
+	const bool parseDev = !_devParsed;
+	if (parseDev) {
+		_devParsed = true;
+		_devStart = _sceneStart;
+	}
+	if (parseDev && ConfMan.hasKey("dev_click")) {
 		const Common::String clicks = ConfMan.get("dev_click");
 		const char *c = clicks.c_str();
 		int x, y, ms, n;
@@ -157,9 +219,8 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	}
 
 	// Development shortcut: dev_commands=ms:command[;ms:command...] runs console commands
-	// at those times after the scene starts (console.h)
-	_devCommands.clear();
-	if (ConfMan.hasKey("dev_commands")) {
+	// at those times after the first scene starts (console.h)
+	if (parseDev && ConfMan.hasKey("dev_commands")) {
 		const Common::String commands = ConfMan.get("dev_commands");
 		Common::String c;
 		for (const char *p = commands.c_str(); ; p++) {
@@ -178,7 +239,22 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 
 	// Development shortcut: start_camera=x,y,z,yaw,pitch places the camera anywhere and
 	// skips the unit's scripted start
-	if (ConfMan.hasKey("start_camera")) {
+	if (!_pendingLoad.empty()) {
+		// A load: the unit's load hook has run; restore the saved state, then the unit's
+		// start without its entry (save.md, Loading)
+		Common::MemoryReadStream stream(_pendingLoad.data(), _pendingLoad.size());
+		Common::Serializer s(&stream, nullptr);
+		scene.syncState(s);
+		interaction.syncState(s);
+		collision.syncState(s);
+		_player.syncState(s);
+		_inventory->syncState(s);
+		if (_unit)
+			_unit->syncState(s);
+		_pendingLoad.clear();
+		if (_unit)
+			_unit->start(false, false);
+	} else if (ConfMan.hasKey("start_camera")) {
 		sscanf(ConfMan.get("start_camera").c_str(), "%f,%f,%f,%f,%f", &_player.eye.x(),
 		       &_player.eye.y(), &_player.eye.z(), &_player.yaw, &_player.pitch);
 		if (_unit)
@@ -197,7 +273,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_collision = nullptr;
 	_interaction = nullptr;
 	_talk = nullptr;
-	_inventory = nullptr;
+	_inventory->attach(nullptr);
 	_unit = nullptr;
 }
 
@@ -219,7 +295,7 @@ void X3DEngine::logicStep(bool input) {
 }
 
 void X3DEngine::frame(bool input) {
-	if (!_devClicks.empty() && _system->getMillis() - _sceneStart >= (uint32)_devClicks[2]) {
+	if (!_devClicks.empty() && _system->getMillis() - _devStart >= (uint32)_devClicks[2]) {
 		_mouse = Common::Point(_devClicks[0], _devClicks[1]);
 		_clickNow = true;
 		for (int i = 0; i < 3; i++)
@@ -227,7 +303,7 @@ void X3DEngine::frame(bool input) {
 	}
 
 	// Due commands, up to the first click (one click per frame)
-	while (input && !_clickNow && !_devCommands.empty() && _system->getMillis() - _sceneStart >= (uint32)atoi(_devCommands[0].c_str())) {
+	while (input && !_clickNow && !_devCommands.empty() && _system->getMillis() - _devStart >= (uint32)atoi(_devCommands[0].c_str())) {
 		const Common::String c = _devCommands.remove_at(0);
 		debug(1, "dev command %s: %s", c.c_str(), command(c.substr(c.findFirstOf(':') + 1)).c_str());
 	}
@@ -370,7 +446,7 @@ void X3DEngine::frame(bool input) {
 		} else {
 			const Common::String c = runMenu("Save");
 			if (c == "SaveOui")
-				warning("Saving is not implemented");
+				saveGameDialog(); // ponytail: ScummVM's dialog stands in for OptionSave
 			else if (c == "SaveNon")
 				afterOptionMenu(optionMenu());
 		}
@@ -518,6 +594,8 @@ Common::String X3DEngine::optionMenu() {
 			return "";
 		if (c == "OptionNouvelleP" || c == "OptionEntrenement")
 			return c;
+		if (c == "OptionLoad" && loadGameDialog())
+			return c; // the load has chosen the next scene
 		if (c == "OptionQuitter") {
 			if (runMenu("OptionQuitter") == "QuitterOK") {
 				quitGame();
@@ -538,9 +616,11 @@ void X3DEngine::afterOptionMenu(const Common::String &command) {
 			delete game;
 		}
 		_practice = false;
+		_inventory->clear();
 		gotoScene(scene);
 	} else if (command == "OptionEntrenement") {
 		_practice = true;
+		_inventory->clear();
 		gotoScene("U00.X3D");
 	}
 }
@@ -599,6 +679,10 @@ Common::String X3DEngine::command(const Common::String &line) {
 		_clickNow = true;
 		return Common::String::format("click %d,%d", _mouse.x, _mouse.y);
 	}
+	if (c == "save" && a.size() >= 2)
+		return saveGameState(atoi(a[1].c_str()), "console").getCode() == Common::kNoError ? "saved" : "save failed";
+	if (c == "load" && a.size() >= 2)
+		return loadGameState(atoi(a[1].c_str())).getCode() == Common::kNoError ? "loading" : "load failed";
 	if (c == "act" && a.size() >= 2) {
 		_interaction->runAction(atoi(a[1].c_str()), _unitActions); // Mnn, bypassing the click
 		return "ok";
