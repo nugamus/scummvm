@@ -77,6 +77,7 @@ public:
 		Common::Array<Common::Array<float> > worldVertices; // per object; empty for weld objects
 		Common::Array<Common::Array<Lod> > lods;            // per object, by threshold
 		Common::Array<bool> hiddenObjects;
+		Common::Array<float> bounds; // per object: world bounding sphere x, y, z, radius (< 0: nothing drawn)
 	};
 
 	// X3d_Object_Hide by object name, in every loaded file
@@ -89,12 +90,17 @@ private:
 	Model *loadModel(const Common::String &path);
 	void attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold);
 	void drawObject(const Model &m, uint object);
+	bool inView(const float *sphere) const;
 	TGLuint texture(const Common::String &mapName);
 
 	Common::String _dir;  // asset directory, e.g. "U01/"
 	byte _ambient[3] = { 255, 255, 255 };
 	Common::Array<Model *> _models;
 	Common::Array<Model *> _lodModels; // only drawn through their base objects
+
+	// The view of the frame being drawn, for culling: eye, axes, half-extents per unit depth
+	float _eye[3], _right[3], _up[3], _forward[3], _halfWidth, _halfHeight;
+	TGLuint _boundTexture;
 	Common::HashMap<Common::String, TGLuint, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _textures;
 };
 
