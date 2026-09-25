@@ -67,9 +67,10 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 	materials.resize(s.readUint32LE());
 	for (O3DMaterial &m : materials) {
 		m.name = readName(s);
-		s.readUint32LE(); // flags
+		m.renderClass = s.readUint32LE();
 		s.read(m.colors, sizeof(m.colors));
-		s.skip(5 * 4); // unk
+		s.skip(4 * 4); // shininess, strength, transparency, draw mode
+		m.wrap = s.readUint32LE() != 0;
 		if (s.readUint32LE()) {
 			m.textureMap = readName(s);
 			s.readUint32LE();
@@ -102,7 +103,8 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 		}
 		o.vertices.resize(count * 3);
 		readFloats(s, o.vertices.data(), count * 3);
-		s.skip(count * 3 * 4); // normals
+		o.normals.resize(count * 3);
+		readFloats(s, o.normals.data(), count * 3);
 
 		o.faces.resize(s.readUint32LE());
 		for (O3DFace &f : o.faces) {

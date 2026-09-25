@@ -88,13 +88,32 @@ public:
 		_texture = texture;
 	}
 
-	void setColor(byte r, byte g, byte b) override {
-		glColor3ub(r, g, b);
+	void setClamp(bool clamp) override {
+		const int mode = clamp ? GL_CLAMP_TO_EDGE : GL_REPEAT;
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, mode);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, mode);
 	}
 
-	void drawFan(const float *xyz, const float *uv, uint count) override {
+	void setAdditive(bool additive) override {
+		if (additive) {
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_ONE, GL_ONE);
+			glDepthMask(GL_FALSE);
+			glDepthFunc(GL_LEQUAL);
+		} else {
+			glDisable(GL_BLEND);
+			glDepthMask(GL_TRUE);
+			glDepthFunc(GL_LESS);
+		}
+	}
+
+	void drawFan(const float *xyz, const float *uv, const byte *rgb, uint count) override {
 		glBegin(GL_TRIANGLE_FAN);
 		for (uint i = 0; i < count; i++) {
+			if (rgb)
+				glColor3ub(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
+			else
+				glColor3ub(255, 255, 255);
 			if (uv)
 				glTexCoord2f(uv[i * 2], uv[i * 2 + 1]);
 			glVertex3f(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]);

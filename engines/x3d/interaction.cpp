@@ -364,8 +364,8 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 			if (target >= 0)
 				_hotspots[target].cursor = atoi(arg.c_str());
 			break;
-		case 9:
-			_scene.hideObject(targetName, atoi(arg.c_str()) == 0);
+		case 9: // 0 shows, anything else hides (E-0088)
+			_scene.hideObject(targetName, atoi(arg.c_str()) != 0);
 			break;
 		case 10:
 			unitActions.push_back(arg);

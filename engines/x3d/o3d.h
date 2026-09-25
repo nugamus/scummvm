@@ -36,7 +36,9 @@ namespace X3D {
 
 struct O3DMaterial {
 	Common::String name;
+	uint32 renderClass = 2; // 0 unlit, 2 RGB lit (lighting.md)
 	byte colors[4][3];
+	bool wrap = true;       // tiling: false clamps texture coordinates
 	Common::String textureMap; // empty when the material has no map
 };
 
@@ -51,6 +53,7 @@ struct O3DObject {
 	Common::String name;
 	int parent = -1; // index into O3DFile::objects
 	Common::Array<float> vertices; // x, y, z per vertex, object-local
+	Common::Array<float> normals;  // x, y, z per vertex, object-local
 	Common::Array<O3DFace> faces;
 	// Live transform: loaded from the file, rewritten by animations (animation.md)
 	float pivot[3], localPosition[3], localScale[3];

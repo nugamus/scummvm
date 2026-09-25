@@ -85,6 +85,12 @@ public:
 		Common::Array<Common::Array<float> > worldVertices; // per object; empty for weld objects
 		Common::Array<Common::Array<Lod> > lods;            // per object, by threshold
 		Common::Array<bool> hiddenObjects;
+		Common::Array<Common::Array<float> > worldNormals; // like worldVertices
+		bool lit = false; // reached by the scene's lights (light= after it in the script)
+		// Lit colours per vertex array, 6 bytes per vertex (D rgb, S rgb), and the frame
+		// they were computed for
+		mutable Common::Array<Common::Array<byte> > colors;
+		mutable Common::Array<uint32> colorFrame;
 		Common::Array<float> bounds; // per object: world bounding sphere x, y, z, radius (< 0: nothing drawn)
 	};
 
@@ -151,6 +157,18 @@ private:
 	void pose(Model &m); // world vertices and bounds from the live transforms
 	void attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold);
 	void drawObject(const Model &m, uint object);
+	const Common::Array<byte> &lighting(const Model &m, uint owner) const;
+	void loadLights(const Common::String &path);
+
+	// A .L3D omni light (lighting.md; spot lights have no corpus sample)
+	struct Light {
+		float position[3];
+		byte color[3];
+		float inner, outer, multiplier;
+		bool hidden, attenuate;
+	};
+	Common::Array<Light> _lights;
+	uint32 _frame = 0;
 	bool inView(const float *sphere) const;
 	uint32 texture(const Common::String &mapName);
 
