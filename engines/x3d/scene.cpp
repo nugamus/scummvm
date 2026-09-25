@@ -25,6 +25,7 @@
 #include "graphics/surface.h"
 
 #include "x3d/dmf.h"
+#include "x3d/renderer.h"
 #include "x3d/scene.h"
 
 namespace X3D {
@@ -60,7 +61,7 @@ Scene::~Scene() {
 		delete f;
 	for (auto &t : _textures)
 		if (t._value)
-			tglDeleteTextures(1, &t._value);
+			_renderer->deleteTexture(t._value);
 }
 
 bool Scene::load(const Common::String &scriptName) {
@@ -434,7 +435,7 @@ void Scene::attachLod(Model *base, uint baseObject, const Model *lod, uint lodOb
 	lods.insert_at(at, Lod{ lod, lodObject, threshold });
 }
 
-TGLuint Scene::texture(const Common::String &mapName) {
+uint32 Scene::texture(const Common::String &mapName) {
 	if (_textures.contains(mapName))
 		return _textures[mapName];
 
@@ -444,17 +445,13 @@ TGLuint Scene::texture(const Common::String &mapName) {
 	if (dot != Common::String::npos)
 		name.erase(dot);
 
-	TGLuint id = 0;
+	uint32 id = 0;
 	Common::File f;
 	Graphics::Surface *surface = nullptr;
 	if (f.open(Common::Path(_dir + "Maps/" + name + ".dmf")))
 		surface = loadDMF(f);
 	if (surface) {
-		tglGenTextures(1, &id);
-		tglBindTexture(TGL_TEXTURE_2D, id);
-		tglTexParameteri(TGL_TEXTURE_2D, TGL_TEXTURE_MIN_FILTER, TGL_LINEAR);
-		tglTexParameteri(TGL_TEXTURE_2D, TGL_TEXTURE_MAG_FILTER, TGL_LINEAR);
-		tglTexImage2D(TGL_TEXTURE_2D, 0, TGL_RGBA, surface->w, surface->h, 0, TGL_RGBA, TGL_UNSIGNED_BYTE, surface->getPixels());
+		id = _renderer->createTexture(*surface);
 		surface->free();
 		delete surface;
 	} else {
@@ -500,13 +497,7 @@ void Scene::draw(const Camera &cam, int width, int height) {
 	for (int k = 0; k < 3; k++)
 		view[12 + k] = -(p[0] * view[k] + p[1] * view[4 + k] + p[2] * view[8 + k]);
 
-	tglViewport(0, 0, width, height);
-	tglClearColor(0, 0, 0, 1);
-	tglClear(TGL_COLOR_BUFFER_BIT | TGL_DEPTH_BUFFER_BIT);
-	tglMatrixMode(TGL_PROJECTION);
-	tglLoadMatrixf(projection);
-	tglMatrixMode(TGL_MODELVIEW);
-	tglLoadMatrixf(view);
+	_renderer->begin3D(projection, view);
 
 	for (int k = 0; k < 3; k++) {
 		_eye[k] = p[k];
@@ -516,7 +507,6 @@ void Scene::draw(const Camera &cam, int width, int height) {
 	}
 	_halfWidth = 1 / sx;
 	_halfHeight = 1 / sy;
-	_boundTexture = ~0u;
 
 	// E-0058: camera type 2 draws with the view rotation of yaw pi/2 and the camera's
 	// pitch, keeping the object's origin where the true view puts it. In world terms an
@@ -530,11 +520,6 @@ void Scene::draw(const Camera &cam, int width, int height) {
 				_facing[i * 3 + j] = fixedRight[i] * right0[j] + fixedUp[i] * up0[j] + fixedForward[i] * forward[j];
 	}
 
-	tglEnable(TGL_DEPTH_TEST);
-	tglDisable(TGL_CULL_FACE);
-	tglDisable(TGL_LIGHTING);
-	tglEnable(TGL_ALPHA_TEST);
-	tglAlphaFunc(TGL_GREATER, 0.5f);
 
 	for (const Model *m : _models) {
 		if (m->hidden)
@@ -592,34 +577,30 @@ void Scene::drawObject(const Model &m, uint object) {
 
 	for (const O3DFace &face : objects[object].faces) {
 		const O3DMaterial &mat = m.file.materials[face.material];
-		const TGLuint tex = mat.textureMap.empty() ? 0 : texture(mat.textureMap);
+		const uint32 tex = mat.textureMap.empty() ? 0 : texture(mat.textureMap);
 		// Lighting is not specified (Q-0019): texture x ambient, or the second colour
-		if (tex != _boundTexture) {
-			if (tex) {
-				tglEnable(TGL_TEXTURE_2D);
-				tglBindTexture(TGL_TEXTURE_2D, tex);
-			} else {
-				tglDisable(TGL_TEXTURE_2D);
-			}
-			_boundTexture = tex;
-		}
-		if (tex) {
-			tglColor3ub(_ambient[0], _ambient[1], _ambient[2]);
-		} else {
-			tglColor3ub(mat.colors[1][0] * _ambient[0] / 255, mat.colors[1][1] * _ambient[1] / 255,
-			            mat.colors[1][2] * _ambient[2] / 255);
-		}
+		_renderer->setTexture(tex);
+		if (tex)
+			_renderer->setColor(_ambient[0], _ambient[1], _ambient[2]);
+		else
+			_renderer->setColor(mat.colors[1][0] * _ambient[0] / 255, mat.colors[1][1] * _ambient[1] / 255,
+			                    mat.colors[1][2] * _ambient[2] / 255);
 
-		tglBegin(TGL_TRIANGLE_FAN);
-		for (uint k = 0; k < face.indices.size(); k++) {
+		float xyz[3 * 64], uv[2 * 64];
+		uint count = 0;
+		for (uint k = 0; k < face.indices.size() && count < 64; k++) {
 			const uint32 index = face.indices[k] * 3;
 			if (index + 2 >= vertices->size())
 				break;
-			if (!face.uvs.empty())
-				tglTexCoord2f(face.uvs[k * 2], face.uvs[k * 2 + 1]);
-			tglVertex3f((*vertices)[index], (*vertices)[index + 1], (*vertices)[index + 2]);
+			for (int c = 0; c < 3; c++)
+				xyz[count * 3 + c] = (*vertices)[index + c];
+			if (!face.uvs.empty()) {
+				uv[count * 2] = face.uvs[k * 2];
+				uv[count * 2 + 1] = face.uvs[k * 2 + 1];
+			}
+			count++;
 		}
-		tglEnd();
+		_renderer->drawFan(xyz, face.uvs.empty() ? nullptr : uv, count);
 	}
 }
 

@@ -31,8 +31,6 @@
 
 #include "engines/util.h"
 
-#include "graphics/screen.h"
-#include "graphics/tinygl/tinygl.h"
 
 #include "image/bmp.h"
 
@@ -41,6 +39,7 @@
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
 #include "x3d/player.h"
+#include "x3d/renderer.h"
 #include "x3d/scene.h"
 #include "x3d/x3d.h"
 
@@ -51,15 +50,13 @@ X3DEngine::X3DEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(
 }
 
 X3DEngine::~X3DEngine() {
-	delete _screen;
+	delete _renderer;
 }
 
 Common::Error X3DEngine::run() {
 	// All original paths are relative to Data/, which the detector (kADFlagMatchFullPaths)
 	// has already added to SearchMan
-	const Graphics::PixelFormat format = g_system->getSupportedFormats().front();
-	initGraphics(640, 480, &format);
-	_screen = new Graphics::Screen();
+	_renderer = Renderer::create(640, 480);
 
 	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
 	// sequence and the scene's entry video
@@ -84,15 +81,12 @@ Common::Error X3DEngine::run() {
 		delete game;
 	}
 
-	// U01 draws ~5,000 immediate-mode faces a frame, more than the default 5 MB of draw calls
-	TinyGL::createContext(_screen->w, _screen->h, _screen->format, 256, false, false, 64 * 1024 * 1024);
 	playScene(sceneName);
-	TinyGL::destroyContext();
 	return Common::kNoError;
 }
 
 void X3DEngine::playScene(const Common::String &sceneName) {
-	Scene scene;
+	Scene scene(_renderer);
 	if (!scene.load(sceneName))
 		error("Unable to load scene %s", sceneName.c_str());
 	Interaction interaction(this, scene);
@@ -217,7 +211,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 			const Scene::Model *model;
 			uint object;
 			float depth;
-			if (scene.pick(camera, _screen->w, _screen->h, mouse.x, mouse.y, model, object, depth) &&
+			if (scene.pick(camera, _renderer->width(), _renderer->height(), mouse.x, mouse.y, model, object, depth) &&
 			    depth <= 4 * scene.scale) {
 				Common::StringArray names;
 				for (int o = object; o >= 0; o = model->file.objects[o].parent)
@@ -245,12 +239,8 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 		}
 		interaction.hover(hotspot, now);
 
-		scene.draw(camera, _screen->w, _screen->h);
-		TinyGL::presentBuffer();
-		Graphics::Surface frame;
-		TinyGL::getSurfaceRef(frame);
-		_system->copyRectToScreen(frame.getPixels(), frame.pitch, 0, 0, frame.w, frame.h);
-		_system->updateScreen();
+		scene.draw(camera, _renderer->width(), _renderer->height());
+		_renderer->present();
 		_system->delayMillis(1);
 
 		frames++;
@@ -268,8 +258,9 @@ void X3DEngine::showBitmap(const Common::Path &path) {
 	if (!file.open(path) || !bmp.loadStream(file))
 		error("Unable to load %s", path.toString().c_str());
 
-	_screen->simpleBlitFrom(*bmp.getSurface());
-	_screen->update();
+	_renderer->clear();
+	_renderer->drawImage(*bmp.getSurface(), 0, 0, false);
+	_renderer->present();
 }
 
 void X3DEngine::wait(uint32 ms) {
@@ -326,8 +317,9 @@ void X3DEngine::playVideo(const Common::String &name) {
 		if (video.needsUpdate()) {
 			const Graphics::Surface *frame = video.decodeNextFrame();
 			if (frame) {
-				_screen->simpleBlitFrom(*frame);
-				_screen->update();
+				_renderer->clear();
+				_renderer->drawImage(*frame, 0, 0, false);
+				_renderer->present();
 			}
 		}
 		_system->delayMillis(5);
