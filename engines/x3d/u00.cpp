@@ -103,8 +103,12 @@ void U00::start(bool newGame, bool video) {
 	// Monet's first line, then the players screen over the paused scene (ui.md)
 	_vm->runFor(0);
 	say("sb01", false);
+	X3DEngine::MenuList list;
+	list.names = _vm->players();
+	for (uint i = 0; i < list.names.size(); i++)
+		list.rows.push_back(Common::String::format("%d - %s", i + 1, list.names[i].c_str()));
 	for (;;) {
-		const Common::String c = _vm->runMenu("OptionUser");
+		const Common::String c = _vm->runMenu("OptionUser", &list);
 		if (_vm->shouldQuit() || c == "escape") {
 			_vm->quitGame();
 			return;
@@ -112,7 +116,12 @@ void U00::start(bool newGame, bool video) {
 		if ((c == "SelectUser" || c == "enter") && !_vm->menuText().empty())
 			break;
 	}
-	// ponytail: every player is new (profiles are not implemented), so the tutorial runs
+	// A known player goes to the Option menu at once; a new one gets the tutorial
+	if (!_vm->selectPlayer(_vm->menuText())) {
+		_vm->afterOptionMenu(_vm->optionMenu());
+		_started = true;
+		return;
+	}
 }
 
 void U00::say(const char *line, bool cut) {
