@@ -145,6 +145,8 @@ public:
 	byte ambient[3] = { 255, 255, 255 };
 
 	const Common::String &dir() const { return _dir; } // asset directory, e.g. "U01/"
+	// The unit's own data: SCENE.BIN, INFOOBJ/INFOACT, voices ("U00/" while assets are U04's)
+	const Common::String &dataDir() const { return _dataDir; }
 
 	// Files loaded by object= lines (not their LODs), in script order
 	const Common::Array<Model *> &models() const { return _models; }
@@ -204,6 +206,7 @@ private:
 	uint32 texture(const Common::String &mapName);
 
 	Common::String _dir;  // asset directory, e.g. "U01/"
+	Common::String _dataDir;
 	Common::Array<Model *> _models;
 	Common::Array<Model *> _lodModels; // only drawn through their base objects
 	Common::Array<A3DFile *> _animationFiles;

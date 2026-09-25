@@ -17,6 +17,7 @@ MODULE_OBJS = \
 	scene.o \
 	sound.o \
 	talk.o \
+	u00.o \
 	u01.o \
 	x3d.o
 

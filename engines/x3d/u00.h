@@ -19,55 +19,44 @@
  *
  */
 
-#ifndef X3D_U01_H
-#define X3D_U01_H
-
-#include "common/random.h"
+#ifndef X3D_U00_H
+#define X3D_U00_H
 
 #include "x3d/unit.h"
-#include "common/str.h"
-
-#include "math/vector3d.h"
 
 namespace X3D {
 
 class X3DEngine;
 
-// U01, the station: its unit code (docs/engine-spec/u01.md)
-class U01 : public Unit {
+// U00, the garden with Monet: players screen and tutorial (docs/engine-spec/u00.md)
+class U00 : public Unit {
 public:
-	explicit U01(X3DEngine *vm);
+	U00(X3DEngine *vm, bool practice) : _vm(vm), _practice(practice) {}
 
 	void afterLoad() override;
-	// The scripted entry, after the prologue when video is set; newGame false: state only
 	void start(bool newGame, bool video) override;
-	bool input(float dt) override; // the train
+	bool input(float dt) override;
 	bool handle(const Common::String &action) override;
-	void afterFrame() override;    // the escape timer
-	void draw() override;          // the escape timer's gauge
+	void afterFrame() override;
+	bool gameStarted() const override { return false; }
 
 private:
-	void closeDoor();
-	void openDoor();
-	void call();
-	void climb();
-	void throwSwitch();
-	void ride(float dt);
-	bool onTrain(const Common::String &ground);
-	void caught();
-	void leave();
-	void fadeToBlack(uint32 ms);
-	void waitVoice();
-	Math::Vector3d objectUnder(const Common::String &parent, const Common::String &name);
-	Math::Vector3d at(const char *object);
+	void say(const char *line, bool cut);
+	void remark(const char *line);
+	void startGauge(int state);
+	void stopGauge() { _state = 0; _gaugeStart = 0; }
+	bool fired() const;
+	void waitClip();
+	bool onStone(const Common::String &ground);
 
 	X3DEngine *_vm;
-	Common::RandomSource _random;
-	bool _switchThrown = false, _train2Loaded = false, _onTrain = false, _firstMaire = true;
-	bool _gauge = false;
-	uint32 _gaugeStart = 0;
+	bool _practice;
+	bool _started = false, _onStone = false, _moved = false, _turned = false;
+	bool _glassesTaken = false, _nearMonet = false, _spaceSeen = false;
+	int _state = 0;          // the hidden gauge's state (u00.md, Unit state)
+	uint32 _gaugeStart = 0;  // 0: stopped
 };
 
 } // End of namespace X3D
 
-#endif // X3D_U01_H
+#endif // X3D_U00_H

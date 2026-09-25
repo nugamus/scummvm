@@ -33,13 +33,14 @@ class Collision;
 // Keys read by the keyboard camera, held state (docs/engine-spec/movement.md, Keys)
 struct Keys {
 	bool up = false, down = false, left = false, right = false;
-	bool pageUp = false, pageDown = false, ctrl = false;
+	bool pageUp = false, pageDown = false, ctrl = false, shift = false, space = false;
 };
 
 // The first-person camera: movement, turning, collision and falls
 class Player {
 public:
 	void init(float scale); // camera defaults from the scene scale s
+	void setSphere(float radius, float offset) { _radius = radius; sphereOffset = offset; }
 
 	// One logic step of dt seconds. Returns true when a fall ends with the landing sound.
 	bool tick(float dt, const Keys &keys, const Collision &collision);

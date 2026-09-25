@@ -41,7 +41,7 @@ class Renderer;
 class Scene;
 class Sound;
 class Talk;
-class U01;
+class Unit;
 
 class X3DEngine : public Engine {
 public:
@@ -70,8 +70,11 @@ public:
 	// Shows a frame until a command is chosen (ui.md); returns the command, "escape", or
 	// "enter". The scene, if any, stays frozen underneath.
 	Common::String runMenu(const Common::String &name);
-	// The Option menu (ui.md): true for New game, false to quit
-	bool optionMenu();
+	// The Option menu (ui.md): its chosen command (OptionNouvelleP, OptionEntrenement), or
+	// empty when quitting; afterOptionMenu goes where it leads
+	Common::String optionMenu();
+	void afterOptionMenu(const Common::String &command);
+	const Common::String &menuText() const { return _menuText; }
 
 	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold
 	Common::String command(const Common::String &line);
@@ -114,7 +117,8 @@ private:
 	Interaction *_interaction = nullptr;
 	Inventory *_inventory = nullptr;
 	Talk *_talk = nullptr;
-	U01 *_u01 = nullptr;
+	Unit *_unit = nullptr;
+	bool _practice = false; // Practice was chosen (u00.md): U00 without the players screen
 	Player _player, _previous;
 	Keys _keys;
 	bool _enterHeld = false, _suspended = false;

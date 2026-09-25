@@ -32,14 +32,14 @@ Talk::Talk(Scene &scene, Sound &sound, const Common::String &unitDir)
 	: _scene(scene), _sound(sound), _unitDir(unitDir), _random("x3d_talk") {
 }
 
-void Talk::addTalker(const Common::String &character, const Common::String &face) {
+void Talk::addTalker(const Common::String &character, const Common::String &face, const Common::String &clipDir) {
 	static const char *const clips[] = { nullptr, "Yeux", "Ch", "Ch_yeux", "B", "E", "F", "O", "A" };
 	Talker t;
 	t.character = character;
 	t.face = face;
 	int lowest = -1;
 	for (int i = 1; i <= 8; i++) {
-		t.slots[i] = _scene.addFaceClip(face, "Anim/" + character + "/" + clips[i] + ".A3D");
+		t.slots[i] = _scene.addFaceClip(face, (clipDir.empty() ? "Anim/" + character + "/" : clipDir) + clips[i] + ".A3D");
 		if (lowest < 0)
 			lowest = t.slots[i];
 	}
