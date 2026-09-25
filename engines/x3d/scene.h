@@ -48,6 +48,7 @@ struct Camera {
 	float yaw = 0;           // a, radians
 	float pitch = M_PI / 2;  // e, radians from straight down
 	float fov = 90;          // horizontal, degrees
+	float roll = 0;          // degrees, about the view direction
 };
 
 class Scene {
