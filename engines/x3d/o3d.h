@@ -51,6 +51,7 @@ struct O3DFace {
 
 struct O3DObject {
 	Common::String name;
+	int cameraType = 0; // 1 $XYZ$, 2 $Z$, 3 $XZ$ in the file's name (E-0045), set by the scene
 	int parent = -1; // index into O3DFile::objects
 	Common::Array<float> vertices; // x, y, z per vertex, object-local
 	Common::Array<float> normals;  // x, y, z per vertex, object-local

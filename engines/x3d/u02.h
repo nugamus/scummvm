@@ -46,6 +46,7 @@ public:
 
 private:
 	void say(const char *character, const char *line);
+	void show(const char *object);
 	void effect(const char *name, const Math::Vector3d &position);
 	Math::Vector3d hotspotPosition(const char *hotspot);
 	void resetCalls();

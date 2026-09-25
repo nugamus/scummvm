@@ -236,6 +236,9 @@ private:
 	// Camera-facing ($Z$) objects: world offset -> world, rotating it as if the camera
 	// had yaw pi/2 (row vectors, 3x3)
 	float _facing[9];
+	// The object's camera-type-2 faces turned toward the camera about its origin, in a copy
+	// of the owner's world vertices (E-0270)
+	void faceCamera(const Model &m, uint object, Common::Array<float> &vertices) const;
 	Renderer *_renderer;
 	Common::HashMap<Common::String, uint32, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _textures;
 };

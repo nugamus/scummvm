@@ -125,8 +125,12 @@ void Interaction::load(const Common::String &unitDir) {
 			const bool paused = s->readUint32LE() != 0;
 			const float fps = s->readUint32LE();
 			const bool loop = s->readUint32LE() != 0;
-			if (!visible)
+			if (!visible) {
+				// Hidden at load means out of collision too, the object only (E-0272)
 				_scene.hideObject(h.name);
+				if (collision)
+					collision->setEnabled(h.name, false);
+			}
 			_scene.setAnimationState(h.name, frame, paused, fps, loop);
 			_hotspots.push_back(h);
 		}
@@ -411,7 +415,7 @@ void Interaction::take(const Common::String &hotspot) {
 		_hotspots[target].cursor = 0;
 	_scene.hideObject(name);
 	if (collision)
-		collision->setEnabled(name, false, true);
+		collision->setEnabled(name, false); // the object's own flag (E-0272)
 	holdItem(name.substr(1, 6)); // six characters after the '*' (E-0204)
 	if (inventory)
 		inventory->show();
@@ -458,7 +462,7 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 		case 9: // 0 shows, anything else hides (E-0088)
 			_scene.hideObject(targetName, atoi(arg.c_str()) != 0);
 			if (collision)
-				collision->setEnabled(targetName, atoi(arg.c_str()) == 0, true);
+				collision->setEnabled(targetName, atoi(arg.c_str()) == 0);
 			break;
 		case 10:
 			unitActions.push_back(arg);
