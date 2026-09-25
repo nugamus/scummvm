@@ -43,7 +43,7 @@ static Graphics::Surface *bitmap(const Common::String &name) {
 
 Frame::~Frame() {
 	for (View &v : _views) {
-		for (Graphics::Surface *s : { v.bitmap, v.hover }) {
+		for (Graphics::Surface *s : { v.bitmap, v.hover, v.knob }) {
 			if (s) {
 				s->free();
 				delete s;
@@ -75,7 +75,8 @@ bool Frame::load(const Common::String &name) {
 		if (v.tag == "TIB#" || v.tag == "POL#") {
 			v.bitmapDx = f.readSint32LE();
 			v.bitmapDy = f.readSint32LE();
-			v.bitmap = bitmap(f.readString(0, 32));
+			v.bitmapName = f.readString(0, 32);
+			v.bitmap = bitmap(v.bitmapName);
 			f.skip(v.tag == "POL#" ? 12 : 4);
 			if (v.bitmap && !v.w)
 				v.w = v.bitmap->w + v.bitmapDx;
@@ -84,7 +85,11 @@ bool Frame::load(const Common::String &name) {
 		} else if (v.tag == "RCS#" || v.tag == "AOL#" || v.tag == "VAS#" || v.tag == "cSU#") {
 			f.skip(108); // the scroll bar's bitmaps (Q-0061)
 			v.list = v.tag != "RCS#";
-		} else if (v.tag == "loV#" || v.tag == "BoV#" || v.tag == "AoV#" || v.tag == "nCC#" || v.tag == "nIC#") {
+		} else if (v.tag == "loV#" || v.tag == "BoV#" || v.tag == "AoV#") {
+			v.slider = true;
+			v.margin = f.readSint32LE();
+			v.knob = bitmap(f.readString(0, 32));
+		} else if (v.tag == "nCC#" || v.tag == "nIC#") {
 			f.skip(36);
 		} else if (v.tag == "dEU#" || v.tag == "dES#" || v.tag == "idE#") {
 			v.edit = true;
@@ -182,6 +187,73 @@ void Frame::backspace() {
 	}
 }
 
+int Frame::indexOf(int id) const {
+	for (uint i = 0; i < _views.size(); i++)
+		if (_views[i].id == id)
+			return i;
+	return -1;
+}
+
+void Frame::setBitmap(int id, const Common::String &name) {
+	const int i = indexOf(id);
+	if (i < 0)
+		return;
+	View &v = _views[i];
+	if (v.bitmap) {
+		v.bitmap->free();
+		delete v.bitmap;
+	}
+	v.bitmapName = name;
+	v.bitmap = bitmap(name);
+}
+
+void Frame::setVisible(int id, bool visible) {
+	const int i = indexOf(id);
+	if (i >= 0)
+		_views[i].visible = visible;
+}
+
+int Frame::sliderMax(int id) const {
+	const int i = indexOf(id);
+	return i >= 0 ? _views[i].w - 2 * _views[i].margin : 0;
+}
+
+int Frame::sliderValue(int id) const {
+	const int i = indexOf(id);
+	return i >= 0 ? _views[i].value : 0;
+}
+
+void Frame::setSliderValue(int id, int value) {
+	const int i = indexOf(id);
+	if (i >= 0)
+		_views[i].value = CLIP(value, 0, sliderMax(id));
+}
+
+bool Frame::press(const Common::Point &p) {
+	// A margin steps by 5, the knob starts a drag, the rest of the track does nothing
+	for (uint i = 0; i < _views.size(); i++) {
+		View &v = _views[i];
+		if (!v.slider || !v.visible || !Common::Rect(v.x, v.y, v.x + v.w, v.y + v.h).contains(p))
+			continue;
+		const int max = v.w - 2 * v.margin;
+		if (p.x < v.x + v.margin)
+			v.value = MAX(0, v.value - 5);
+		else if (p.x >= v.x + v.w - v.margin)
+			v.value = MIN(max, v.value + 5);
+		else if (ABS(p.x - (v.x + v.margin + v.value)) <= 4)
+			_dragging = i;
+		return true;
+	}
+	return false;
+}
+
+void Frame::drag(const Common::Point &p) {
+	if (_dragging < 0)
+		return;
+	View &v = _views[_dragging];
+	v.value = CLIP(p.x - v.margin - v.x, 0, v.w - 2 * v.margin);
+}
+
 void Frame::setText(const Common::String &text, bool placeholder) {
 	const int e = editView();
 	if (e >= 0) {
@@ -228,6 +300,8 @@ void Frame::draw(Renderer &r, int xOffset, int hovered) {
 			r.drawImage(*v.bitmap, xOffset + v.x + v.bitmapDx, v.y + v.bitmapDy, false);
 		if ((int)i == hovered && v.hover)
 			r.drawImage(*v.hover, xOffset + v.x + v.hoverDx, v.y + v.hoverDy, false);
+		if (v.slider && v.knob)
+			r.drawImage(*v.knob, xOffset + v.x + v.margin + v.value - 4, v.y, false);
 		if (v.edit) {
 			// The original draws edits with GDI Arial 12 pt (ui.md, Text): a sans-serif here
 			if (v.text.empty() && !v.placeholder && v.tag == "dEU#") {

@@ -41,6 +41,7 @@ namespace X3D {
 class Collision;
 class Interaction;
 class Inventory;
+class Frame;
 class Renderer;
 class Scene;
 class Sound;
@@ -102,6 +103,16 @@ public:
 	// The OptionSave and OptionLoad screens over ScummVM's save slots (save.md); load:
 	// true when a game was loaded
 	void saveMenu();
+	// A frame already loaded, until a command; timeout (ms) returns "timeout", a key on a
+	// frame without an edit "key"
+	Common::String runFrame(Frame &frame, MenuList *list = nullptr, uint32 timeout = 0);
+	void showPainting(const Common::String &name); // TableauJeu
+	void credits();
+	void settings();
+	void gallery();
+	bool paintingScreens(uint index, uint count);
+	void magnifier(const Common::String &painting);
+	int playerUnit() const; // the unit of the player's last save (ui.md Gallery)
 	bool loadMenu();
 	// Players (ui.md SelectUser): true when the name is new, which is then added
 	bool selectPlayer(const Common::String &name);
@@ -113,7 +124,7 @@ public:
 	const Common::String &menuText() const { return _menuText; }
 
 	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold, pos, act,
-	// save <slot>, load <slot>, savemenu, loadmenu
+	// save <slot>, load <slot>, savemenu, loadmenu, page <credits|settings|gallery|loupe p|painting>
 	Common::String command(const Common::String &line);
 
 	static constexpr float kKeep = 100.0f;
@@ -175,6 +186,9 @@ private:
 	Common::String _menuText; // the text edit of the last menu
 	bool _escapeNow = false;
 	bool _walk = false; // runFor with walking input
+	int _menuView = -1;  // the view index of the last frame click
+	int _musicVolume = 85; // group 1 in play (Settings)
+	Common::String _playerName;
 };
 
 } // End of namespace X3D

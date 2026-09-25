@@ -59,6 +59,22 @@ public:
 	int listRowAt(const Common::Point &p) const; // -1 outside the rows
 	void selectRow(int row) { _selected = row; }
 
+	// Views by their file id
+	int indexOf(int id) const;
+	void setBitmap(int id, const Common::String &name); // 2dbit/<name>.bmp, "" for none
+	void setVisible(int id, bool visible);
+	const Common::String &bitmapName(int view) const { return _views[view].bitmapName; }
+	int idAt(int view) const { return view >= 0 ? _views[view].id : -1; }
+	bool hasEdit() const { return editView() >= 0; }
+
+	// Sliders (loV#, AoV#, BoV#; ui.md Settings): position 0..max
+	int sliderValue(int id) const;
+	int sliderMax(int id) const;
+	void setSliderValue(int id, int value);
+	bool press(const Common::Point &p); // true when a slider took it
+	void drag(const Common::Point &p);
+	void release() { _dragging = -1; }
+
 	// Draws the views, the hover highlight of the view under the mouse and edit text
 	void draw(Renderer &r, int xOffset, int hovered);
 
@@ -78,7 +94,12 @@ private:
 		uint maxLength = 30;
 		bool placeholder = false; // the text is the default one, replaced when typing
 		bool list = false;
+		Common::String bitmapName;
+		bool slider = false;
+		int margin = 0, value = 0;
+		Graphics::Surface *knob = nullptr;
 	};
+	int _dragging = -1;
 
 	int listView() const;
 	Common::Array<Common::String> _rows;

@@ -160,6 +160,8 @@ public:
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
 		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_CULL_FACE); // the flipped 2D view winds the quad backward
+		glDisable(GL_BLEND);
 		glEnable(GL_ALPHA_TEST);
 		glAlphaFunc(GL_GREATER, 0.5f);
 		glEnable(GL_TEXTURE_2D);
