@@ -97,6 +97,10 @@ Common::Error X3DEngine::run() {
 			camera.yaw = 1.31f;
 			camera.pitch = 1.5707960f;
 		}
+		// Development shortcut: start_camera=x,y,z,yaw,pitch places the camera anywhere
+		if (ConfMan.hasKey("start_camera"))
+			sscanf(ConfMan.get("start_camera").c_str(), "%f,%f,%f,%f,%f", &camera.position[0],
+			       &camera.position[1], &camera.position[2], &camera.yaw, &camera.pitch);
 
 		// Game logic ticks will run here at a fixed rate once there is logic (movement, scripts);
 		// rendering stays once per loop iteration
