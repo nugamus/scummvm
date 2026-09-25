@@ -35,7 +35,7 @@ const ADGameDescription gameDescriptions[] = {
 		Common::EN_ANY,
 		Common::kPlatformWindows,
 		ADGF_UNSTABLE | ADGF_CD,
-		GUIO1(GUIO_NOMIDI)
+		GUIO2(GUIO_NOMIDI, GAMEOPTION_WIDESCREEN)
 	},
 
 	AD_TABLE_END_MARKER
