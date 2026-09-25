@@ -243,8 +243,16 @@ bool X3DEngine::selectPlayer(const Common::String &name) {
 	return true;
 }
 
+void X3DEngine::storeHeldItem() {
+	if (_interaction && !_interaction->heldItem().empty()) {
+		_inventory->add(_interaction->heldItem() + "P");
+		_interaction->holdItem("");
+	}
+}
+
 void X3DEngine::gameOver() {
 	_sound->stopAll();
+	storeHeldItem(); // the caught path stores it (E-0210)
 	if (!loadMenu())
 		afterOptionMenu(optionMenu());
 }
@@ -367,11 +375,8 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	while (!shouldQuit() && _nextScene.empty())
 		frame(true);
 
-	// A held item goes back to the bar before the unit changes (E-0251)
-	if (!_interaction->heldItem().empty()) {
-		_inventory->add(_interaction->heldItem() + "P");
-		_interaction->holdItem("");
-	}
+	// A held item goes back to the bar before the unit changes (E-0251, E-0210)
+	storeHeldItem();
 	_clickedHotspot.clear();
 
 	_sound->stopAll();
@@ -454,6 +459,7 @@ void X3DEngine::frame(bool input) {
 		case Common::KEYCODE_LSHIFT:
 		case Common::KEYCODE_RSHIFT: _keys.shift = down; break;
 		case Common::KEYCODE_ESCAPE:
+		case Common::KEYCODE_F5: // the same in play (ui.md, Escape)
 			if (down && input && !_suspended)
 				_escapeNow = true;
 			break;
@@ -542,11 +548,10 @@ void X3DEngine::frame(bool input) {
 	// Escape in a game: "Do you want to save?" over the frozen scene (ui.md, Escape)
 	if (_escapeNow) {
 		_escapeNow = false;
-		const Common::String held = _interaction->heldItem();
-		if (!held.empty()) {
-			_inventory->add(held + "P");
-			_interaction->holdItem("");
-		}
+		// In a game a held item goes back to the bar first; in U00 it stays on the
+		// cursor (E-0210)
+		if (!_unit || _unit->gameStarted())
+			storeHeldItem();
 		if (_unit && !_unit->gameStarted()) {
 			// No game yet (U00): the Option menu at once, the ambient stopped (ui.md, Escape)
 			_sound->stopGroup(Sound::kAmbient);
@@ -747,12 +752,15 @@ void X3DEngine::afterOptionMenu(const Common::String &command) {
 			scene = game->readString(0, 30);
 			delete game;
 		}
+		// A new game drops a held item and empties the bar (E-0212)
 		_practice = false;
+		if (_interaction)
+			_interaction->holdItem("");
 		_inventory->clear();
 		gotoScene(scene);
 	} else if (command == "OptionEntrenement") {
+		// Practice keeps the bar (E-0212); a held item is stored by the scene switch
 		_practice = true;
-		_inventory->clear();
 		gotoScene("U00.X3D");
 	}
 }
