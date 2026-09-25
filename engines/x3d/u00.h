@@ -22,6 +22,8 @@
 #ifndef X3D_U00_H
 #define X3D_U00_H
 
+#include "math/vector3d.h"
+
 #include "x3d/unit.h"
 
 namespace X3D {
@@ -55,6 +57,7 @@ private:
 	bool _glassesTaken = false, _nearMonet = false, _spaceSeen = false;
 	int _state = 0;          // the hidden gauge's state (u00.md, Unit state)
 	uint32 _gaugeStart = 0;  // 0: stopped
+	Math::Vector3d _monet, _boat; // hotspot positions at creation
 };
 
 } // End of namespace X3D

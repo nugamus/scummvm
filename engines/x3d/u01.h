@@ -43,6 +43,7 @@ public:
 	void start(bool newGame, bool video) override;
 	bool input(float dt) override; // the train
 	bool handle(const Common::String &action) override;
+	void afterClick(const Common::String &hotspot) override; // the climb's repeat
 	void afterFrame() override;    // the escape timer
 	void draw() override;          // the escape timer's gauge
 	void syncState(Common::Serializer &s) override; // TRAIN_CHANGED and the gauge

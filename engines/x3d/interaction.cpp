@@ -32,6 +32,7 @@
 
 #include "image/bmp.h"
 
+#include "x3d/collision.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
 #include "x3d/renderer.h"
@@ -264,17 +265,11 @@ void Interaction::setCondition(uint32 id, const Common::String &condition) {
 }
 
 int Interaction::runs(uint32 id) const {
-	for (const Action &a : _actions)
-		if (a.id == id)
-			return a.runs;
-	return 0;
+	return id < kIds ? _runs[id] : 0;
 }
 
 bool Interaction::exhausted(uint32 id) const {
-	for (const Action &a : _actions)
-		if (a.id == id)
-			return a.exhausted;
-	return false;
+	return id < kIds && _exhausted[id];
 }
 
 Common::StringArray Interaction::hotspotNames() const {
@@ -329,10 +324,7 @@ bool Interaction::evaluate(const Common::String &condition) const {
 			uint32 id = 0;
 			while (i < c.size() && Common::isDigit(c[i]))
 				id = id * 10 + (c[i++] - '0');
-			for (const Action &a : in._actions)
-				if (a.id == id)
-					return a.exhausted;
-			return false;
+			return in.exhausted(id);
 		}
 		bool expr() {
 			bool v = term();
@@ -354,7 +346,7 @@ bool Interaction::evaluate(const Common::String &condition) const {
 }
 
 bool Interaction::runnable(const Action &a, uint32 trigger) const {
-	return a.trigger == trigger && !a.exhausted && evaluate(a.condition) &&
+	return a.trigger == trigger && !exhausted(a.id) && evaluate(a.condition) &&
 	       (trigger != 7 || a.item.equalsIgnoreCase(_heldItem));
 }
 
@@ -396,14 +388,17 @@ void Interaction::syncState(Common::Serializer &s) {
 		if (s.isLoading() && i < _hotspots.size())
 			_hotspots[i].cursor = cursor;
 	}
+	for (uint i = 0; i < kIds; i++) {
+		s.syncAsSint32LE(_runs[i]);
+		s.syncAsByte(_exhausted[i]);
+	}
 	n = _actions.size();
 	s.syncAsUint32LE(n);
 	for (uint32 i = 0; i < n; i++) {
-		Action dummy;
-		Action &a = i < _actions.size() ? _actions[i] : dummy;
-		s.syncAsSint32LE(a.runs);
-		s.syncAsByte(a.exhausted);
-		s.syncString(a.condition);
+		Common::String condition = i < _actions.size() ? _actions[i].condition : "";
+		s.syncString(condition);
+		if (s.isLoading() && i < _actions.size())
+			_actions[i].condition = condition;
 	}
 	if (s.isLoading())
 		holdItem(held);
@@ -415,6 +410,8 @@ void Interaction::take(const Common::String &hotspot) {
 	if (target >= 0)
 		_hotspots[target].cursor = 0;
 	_scene.hideObject(name);
+	if (collision)
+		collision->setEnabled(name, false, true);
 	holdItem(name.substr(1, 6)); // six characters after the '*' (E-0204)
 	if (inventory)
 		inventory->show();
@@ -460,6 +457,8 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 			break;
 		case 9: // 0 shows, anything else hides (E-0088)
 			_scene.hideObject(targetName, atoi(arg.c_str()) != 0);
+			if (collision)
+				collision->setEnabled(targetName, atoi(arg.c_str()) == 0, true);
 			break;
 		case 10:
 			unitActions.push_back(arg);
@@ -475,9 +474,9 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 			_sound.detach(Sound::kVoiceEmitter);
 			_sound.play(soundPath(arg), Sound::kVoice, 100, false);
 			break;
-		case 14:
+		case 14: // only exhausted and the condition are checked, not trigger or item
 			for (Action &b : _actions)
-				if (b.name.equalsIgnoreCase(arg) && runnable(b, b.trigger)) {
+				if (b.name.equalsIgnoreCase(arg) && !exhausted(b.id) && evaluate(b.condition)) {
 					run(b, unitActions);
 					break;
 				}
@@ -493,9 +492,11 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 			break;
 		}
 	}
-	a.runs++;
-	if (a.maxRuns < 100 && a.runs >= a.maxRuns)
-		a.exhausted = true;
+	if (a.id < kIds) {
+		_runs[a.id]++;
+		if (a.maxRuns < 100 && _runs[a.id] >= a.maxRuns)
+			_exhausted[a.id] = true;
+	}
 }
 
 } // End of namespace X3D

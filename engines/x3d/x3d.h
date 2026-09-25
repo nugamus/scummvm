@@ -147,6 +147,7 @@ private:
 	Common::String _nextScene, _sceneName;
 	Common::Array<byte> _pendingLoad; // a save's scene state, restored by playScene
 	Common::StringArray _unitActions;
+	Common::String _clickedHotspot; // the hotspot of this frame's click, for Unit::afterClick
 	Camera _camera; // the last one drawn, for frames over a frozen scene
 	Common::String _menuText; // the text edit of the last menu
 	bool _escapeNow = false;
