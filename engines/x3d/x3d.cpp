@@ -188,6 +188,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	Collision collision;
 	collision.build(scene);
 	_collision = &collision;
+	interaction.collision = &collision;
 
 	_keys = Keys();
 	_enterHeld = _suspended = _hoverNow = _clickNow = false;
@@ -267,6 +268,13 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 
 	while (!shouldQuit() && _nextScene.empty())
 		frame(true);
+
+	// A held item goes back to the bar before the unit changes (E-0251)
+	if (!_interaction->heldItem().empty()) {
+		_inventory->add(_interaction->heldItem() + "P");
+		_interaction->holdItem("");
+	}
+	_clickedHotspot.clear();
 
 	_sound->stopAll();
 	_scene = nullptr;
@@ -412,6 +420,8 @@ void X3DEngine::frame(bool input) {
 		_lastClick = now;
 		_clickNow = false;
 		_interaction->click(_hotspot, _unitActions);
+		if (_hotspot >= 0)
+			_clickedHotspot = _interaction->hotspotName(_hotspot);
 	}
 	if (interactive && !overBar)
 		_interaction->hover(_hotspot, now);
@@ -460,6 +470,13 @@ void X3DEngine::frame(bool input) {
 			const Common::String action = _unitActions.remove_at(0);
 			if (!_unit || !_unit->handle(action))
 				warning("Unit action %s is not implemented", action.c_str());
+		}
+		// The click handler's check after the queue (u01.md, E-0250)
+		if (!_clickedHotspot.empty()) {
+			const Common::String hotspot = _clickedHotspot;
+			_clickedHotspot.clear();
+			if (_unit)
+				_unit->afterClick(hotspot);
 		}
 		if (_unit)
 			_unit->afterFrame();
@@ -663,7 +680,7 @@ Common::String X3DEngine::command(const Common::String &line) {
 			_mouse = Common::Point(atoi(a[1].c_str()), atoi(a[2].c_str()));
 		} else if (a.size() == 2) {
 			// The object's centre on screen, with the render projection
-			const Math::Vector3d d = _scene->objectCenter(a[1]) - _player.eye;
+			const Math::Vector3d d = _scene->surfacePoint(a[1], _player.eye) - _player.eye;
 			const float yaw = _player.yaw, pitch = _player.pitch;
 			const Math::Vector3d right(-sinf(yaw), -cosf(yaw), 0);
 			const Math::Vector3d up(cosf(pitch) * cosf(yaw), -cosf(pitch) * sinf(yaw), sinf(pitch));

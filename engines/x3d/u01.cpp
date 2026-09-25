@@ -247,9 +247,13 @@ bool U01::handle(const Common::String &action) {
 	} else {
 		return false; // Light255 and EcouterConversation have no handler
 	}
-	// ponytail: the repeat of MonterSurToit when hovering *U01_09 below z = 100 after M20
-	// (u01.md) is not done
 	return true;
+}
+
+void U01::afterClick(const Common::String &hotspot) {
+	// A click on the booth *U01_09 from below once the ladder is up climbs again (E-0250)
+	if (_vm->interaction()->exhausted(20) && hotspot.equalsIgnoreCase("*U01_09") && _vm->player().eye.z() < 100)
+		climb();
 }
 
 void U01::call() {
@@ -265,6 +269,8 @@ void U01::call() {
 		_vm->moveTo(1500, p1, 2.84318f, 1.0708f);
 		waitVoice();
 		_vm->moveTo(1000, p2, 0.6431f, X3DEngine::kKeep);
+		// CloseDoor at the eye first (E-0085)
+		_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(_vm->scene()->dir() + "Sound/CloseDoor.wav"), _vm->player().eye, false);
 		closeDoor();
 		_gauge = true;
 		_gaugeStart = g_system->getMillis();

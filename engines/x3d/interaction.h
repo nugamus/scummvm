@@ -39,6 +39,7 @@ class Serializer;
 
 namespace X3D {
 
+class Collision;
 class Inventory;
 class Scene;
 class Sound;
@@ -72,6 +73,7 @@ public:
 	void holdItem(const Common::String &item);
 	void showCursor(uint kind);
 	Inventory *inventory = nullptr; // take and use-up steps show and hide it
+	Collision *collision = nullptr; // take and op 9 switch objects out of it (E-0252, E-0088)
 
 	// Unit code access to actions by id (Mnn)
 	void runAction(uint32 id, Common::StringArray &unitActions); // steps, then count the run
@@ -83,6 +85,7 @@ public:
 	void useUp(const Common::String &hotspot);
 	const Common::String &hotspotObject(const Common::String &hotspot) const; // "U01_07" -> "*U01_07"
 	Common::StringArray hotspotNames() const;
+	const Common::String &hotspotName(int index) const { return _hotspots[index].name; }
 
 	bool actionsEnabled = true;
 
@@ -103,9 +106,13 @@ private:
 		uint32 trigger, hotspotType, targetType;
 		Common::Array<uint32> ops;
 		Common::StringArray args;
-		int runs = 0;
-		bool exhausted = false;
 	};
+
+	// Run counts and exhausted flags belong to the action id, not the record (E-0250):
+	// two records with one id share them
+	static const uint kIds = 256;
+	int _runs[kIds] = {};
+	bool _exhausted[kIds] = {};
 
 	int findHotspot(const Common::String &name) const; // "U01_04" or "*U01_04"
 	bool runnable(const Action &a, uint32 trigger) const;

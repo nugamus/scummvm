@@ -36,9 +36,49 @@ using Math::Vector3d;
 static const float kStart[3] = { 81.1334f, 265.81f, 15.0f };
 static const float kStartYaw = 4.67f, kStartPitch = 1.47f;
 
+// U04's name fix-ups, shared by U00 (u00.md Start step 0, E-0230)
+static const char *const kNoCollision[] = {
+	"Box368", "Box366", "Box373", "Box430", "Box431", "Box435", "Box436", "Box437", "Box682",
+	"Box686", "Box687", "Box690", "Box691", "Box708", "Box198", "Box199", "Box429", "Box619",
+	"Box620", "Box212", "Box214", "Box218", "Box713", "Box822"
+};
+
+static void fixU04Names(Scene *scene) {
+	static const char *const renames[][2] = {
+		{ "*U04_37", "*U04_44" }, { "*U04_37", "*U04_63" }, { "*U04_05t", "*U04_05" },
+		{ "*pot confi", "*U04_53" }, { "*U04_27", "*U04_61" }, { "*U04_28", "*U04_62" },
+		{ "*U04_16t", "*U04_16" }, { "$$$DUMMY.*dummycann", "*U04_29" }, { "Cylinder38", "*U04_51" },
+		{ "Box1448", "*U04_51" }, { "Box1449", "*U04_51" }, { "Box1450", "*U04_51" },
+		{ "Box1447", "*U04_51" }, { "* face ech", "*U04_52" }
+	};
+	for (const auto &r : renames)
+		scene->renameObject(r[0], r[1]);
+	scene->hideObject("*U04_52");
+
+	Scene::Model *m;
+	uint o;
+	if (scene->findObject("*U04_03", m, o)) {
+		const Common::Array<O3DObject> &objects = m->file.objects;
+		for (uint i = o + 1; i < objects.size(); i++)
+			if (objects[i].parent == (int)o && objects[i].name.contains("PALETTE")) {
+				m->file.objects[i].name = "*U04_50";
+				break;
+			}
+	}
+	// ponytail: *U04_26's animation binding is U04's; the object is absent in U00
+	for (int i = 0; scene->findObject("Box36", m, o); i++) {
+		m->file.objects[o].name = Common::String::format("Box36_%d", i);
+		m->unpickable[o] = true;
+	}
+	if (scene->findObject("Box1162", m, o))
+		m->unpickable[o] = true;
+}
+
 void U00::afterLoad() {
-	// u00.md, Start 1-2: the glasses Monet will wear, the glasses to take, U04 extras
+	// u00.md, Start 0-2: U04's fix-ups, the glasses Monet will wear, the glasses to take,
+	// U04 extras
 	Scene *scene = _vm->scene();
+	fixU04Names(scene);
 	scene->renameObject("*Lunettes0", "*U04_81");
 	scene->hideObject("*U04_81");
 	scene->renameObject("*Lunettes0", "*U04_80");
@@ -50,6 +90,11 @@ void U00::start(bool newGame, bool video) {
 	Player &player = _vm->player();
 	_vm->sound()->play(Common::Path("U04/Sound/s3_01.wav"), Sound::kAmbient, 85, true);
 	player.setSphere(3.0f, 1.0f);
+	for (const char *name : kNoCollision)
+		_vm->collision()->setEnabled(name, false);
+	// Distances use the hotspots' positions from when they were created (E-0231)
+	_monet = _vm->scene()->objectPosition("*U04_03");
+	_boat = _vm->scene()->objectPosition("*U04_32");
 	_vm->talk()->addTalker("U04_03", "$$$DUMMY.*visage", "Anim/U04_03_Lunettes/");
 	_vm->setView(kStart, kStartYaw, kStartPitch);
 	if (_practice)
@@ -107,14 +152,8 @@ bool U00::fired() const {
 }
 
 bool U00::onStone(const Common::String &ground) {
-	Scene::Model *m;
-	uint o;
-	if (ground.empty() || !_vm->scene()->findObject(ground, m, o))
-		return false;
-	for (int a = o; a >= 0; a = m->file.objects[a].parent)
-		if (m->file.objects[a].name.equalsIgnoreCase("*U04_32"))
-			return true;
-	return false;
+	// The ground object's own name, no parents (E-0231)
+	return ground.equalsIgnoreCase("*U04_32");
 }
 
 void U00::afterFrame() {
@@ -214,14 +253,14 @@ bool U00::input(float dt) {
 			stopGauge();
 	}
 
+	// The ground object changes only in the walking step (E-0231)
 	if (player.tick(dt, keys, *_vm->collision()))
 		_vm->sound()->emit(Sound::kEffectsEmitter, "SAUT.WAV", player.eye, false);
-	player.probeGround(*_vm->collision());
 
 	if (!_onStone && onStone(player.groundObject)) {
 		// Step onto the stone: parked on it, looking at *U04_43
 		_onStone = true;
-		player.eye = _vm->scene()->objectPosition("*U04_32") + Vector3d(0, 0, 10);
+		player.eye = _boat + Vector3d(0, 0, 10);
 		player.canMove = false;
 		player.collide = false;
 		_vm->lookAt(0, _vm->scene()->objectPosition("*U04_43"));
@@ -229,8 +268,8 @@ bool U00::input(float dt) {
 			startGauge(2);
 	}
 	if (_glassesTaken && !_spaceSeen && _state != 8 &&
-	    (player.eye - _vm->scene()->objectPosition("*U04_03")).getMagnitude() < 2 * _vm->scene()->scale) {
-		_vm->lookAt(1000, _vm->scene()->objectPosition("*U04_03"));
+	    (player.eye - _monet).getMagnitude() < 2 * _vm->scene()->scale) {
+		_vm->lookAt(1000, _monet);
 		_nearMonet = true;
 		say("sb10", false);
 		startGauge(8);
@@ -260,7 +299,7 @@ bool U00::handle(const Common::String &action) {
 	_spaceSeen = true;
 	stopGauge();
 	scene->playClip("*U04_03", "Anim/U04_03_Lunettes/prend.A3D");
-	_vm->moveTo(1000, kStart, X3DEngine::kKeep, X3DEngine::kKeep, 90);
+	_vm->moveTo(1000, kStart, kStartYaw, kStartPitch, 90);
 	waitClip();
 	scene->hideObject("*U04_81", false);
 	scene->playClip("*U04_03", "Anim/U04_03_Lunettes/MET.A3D");
