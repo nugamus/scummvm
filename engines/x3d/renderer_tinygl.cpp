@@ -73,6 +73,7 @@ public:
 		tglMatrixMode(TGL_MODELVIEW);
 		tglLoadMatrixf(view);
 		tglEnable(TGL_DEPTH_TEST);
+		tglDepthFunc(TGL_LEQUAL);
 		// D3D's default culling: xd3d never sets D3DRENDERSTATE_CULLMODE (E-0205)
 		tglEnable(TGL_CULL_FACE);
 		tglCullFace(TGL_BACK);
@@ -101,26 +102,34 @@ public:
 		tglTexParameteri(TGL_TEXTURE_2D, TGL_TEXTURE_WRAP_T, mode);
 	}
 
-	void setAdditive(bool additive) override {
-		if (additive) {
-			tglEnable(TGL_BLEND);
-			tglBlendFunc(TGL_ONE, TGL_ONE);
-			tglDepthMask(TGL_FALSE);
-			tglDepthFunc(TGL_LEQUAL);
-		} else {
+	void setBlend(Blend blend, bool keyed) override {
+		if (blend == kOpaque) {
 			tglDisable(TGL_BLEND);
 			tglDepthMask(TGL_TRUE);
-			tglDepthFunc(TGL_LESS);
+		} else {
+			tglEnable(TGL_BLEND);
+			if (blend == kAlpha)
+				tglBlendFunc(TGL_SRC_ALPHA, TGL_ONE_MINUS_SRC_ALPHA);
+			else
+				tglBlendFunc(TGL_ONE, TGL_ONE);
+			tglDepthMask(TGL_FALSE);
+		}
+		// Keyed texels have alpha 0; blended faces carry their vertex alpha
+		if (keyed) {
+			tglEnable(TGL_ALPHA_TEST);
+			tglAlphaFunc(TGL_GREATER, blend == kOpaque ? 0.5f : 0.0f);
+		} else {
+			tglDisable(TGL_ALPHA_TEST);
 		}
 	}
 
-	void drawFan(const float *xyz, const float *uv, const byte *rgb, uint count) override {
+	void drawFan(const float *xyz, const float *uv, const byte *rgb, uint count, byte alpha) override {
 		tglBegin(TGL_TRIANGLE_FAN);
 		for (uint i = 0; i < count; i++) {
 			if (rgb)
-				tglColor3ub(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
+				tglColor4ub(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2], alpha);
 			else
-				tglColor3ub(255, 255, 255);
+				tglColor4ub(255, 255, 255, alpha);
 			if (uv)
 				tglTexCoord2f(uv[i * 2], uv[i * 2 + 1]);
 			tglVertex3f(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]);

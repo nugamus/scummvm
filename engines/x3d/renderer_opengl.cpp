@@ -62,12 +62,17 @@ public:
 	void begin3D(const float projection[16], const float view[16]) override {
 		glViewport(0, 0, _width, _height);
 		glClearColor(0, 0, 0, 1);
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		// The frame's alpha stays 1: texel and vertex alpha only select and blend
+		// (ScummVM composites the 3D frame by its alpha)
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
 		glMatrixMode(GL_PROJECTION);
 		glLoadMatrixf(projection);
 		glMatrixMode(GL_MODELVIEW);
 		glLoadMatrixf(view);
 		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_LEQUAL);
 		glDepthMask(GL_TRUE);
 		// D3D's default culling: xd3d never sets D3DRENDERSTATE_CULLMODE (E-0205)
 		glEnable(GL_CULL_FACE);
@@ -98,26 +103,34 @@ public:
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, mode);
 	}
 
-	void setAdditive(bool additive) override {
-		if (additive) {
-			glEnable(GL_BLEND);
-			glBlendFunc(GL_ONE, GL_ONE);
-			glDepthMask(GL_FALSE);
-			glDepthFunc(GL_LEQUAL);
-		} else {
+	void setBlend(Blend blend, bool keyed) override {
+		if (blend == kOpaque) {
 			glDisable(GL_BLEND);
 			glDepthMask(GL_TRUE);
-			glDepthFunc(GL_LESS);
+		} else {
+			glEnable(GL_BLEND);
+			if (blend == kAlpha)
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			else
+				glBlendFunc(GL_ONE, GL_ONE);
+			glDepthMask(GL_FALSE);
+		}
+		// Keyed texels have alpha 0; blended faces carry their vertex alpha
+		if (keyed) {
+			glEnable(GL_ALPHA_TEST);
+			glAlphaFunc(GL_GREATER, blend == kOpaque ? 0.5f : 0.0f);
+		} else {
+			glDisable(GL_ALPHA_TEST);
 		}
 	}
 
-	void drawFan(const float *xyz, const float *uv, const byte *rgb, uint count) override {
+	void drawFan(const float *xyz, const float *uv, const byte *rgb, uint count, byte alpha) override {
 		glBegin(GL_TRIANGLE_FAN);
 		for (uint i = 0; i < count; i++) {
 			if (rgb)
-				glColor3ub(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
+				glColor4ub(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2], alpha);
 			else
-				glColor3ub(255, 255, 255);
+				glColor4ub(255, 255, 255, alpha);
 			if (uv)
 				glTexCoord2f(uv[i * 2], uv[i * 2 + 1]);
 			glVertex3f(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]);

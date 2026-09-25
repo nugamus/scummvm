@@ -215,6 +215,21 @@ private:
 	void pose(Model &m); // world vertices and bounds from the live transforms
 	void attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold);
 	void drawObject(const Model &m, uint object);
+
+	// Translucent and additive faces, drawn after everything else, farthest first
+	// (scene.md, Drawing order and blending)
+	struct Deferred {
+		float xyz[3 * 64], uv[2 * 64];
+		byte rgb[3 * 64], spec[3 * 64];
+		uint count;
+		bool hasUV, lit, anySpecular, clamp, keyed, additive;
+		uint32 tex;
+		byte alpha;
+		int key;
+		uint order;
+	};
+	Common::Array<Deferred> _deferred;
+	void drawFace(const Deferred &f);
 	const Common::Array<byte> &lighting(const Model &m, uint owner) const;
 	void loadLights(const Common::String &path);
 

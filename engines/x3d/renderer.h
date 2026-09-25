@@ -53,10 +53,14 @@ public:
 	virtual void begin3D(const float projection[16], const float view[16]) = 0;
 	virtual void setTexture(uint32 texture) = 0; // 0: untextured
 	virtual void setClamp(bool clamp) = 0; // texture coordinates clamped or wrapped
-	// Adds the following fans onto the frame (depth tested, not written), or back to normal
-	virtual void setAdditive(bool additive) = 0;
-	// count vertices: xyz, uv (may be null) and rgb (0..255, may be null: white) each
-	virtual void drawFan(const float *xyz, const float *uv, const byte *rgb, uint count) = 0;
+	// How the following fans reach the frame (scene.md, Drawing order and blending):
+	// opaque (depth written), alpha-blended by the vertex alpha or added (depth tested,
+	// not written). keyed: texels with texture alpha 0 (the colour key) are cut out.
+	enum Blend { kOpaque, kAlpha, kAdditive };
+	virtual void setBlend(Blend blend, bool keyed) = 0;
+	// count vertices: xyz, uv (may be null) and rgb (0..255, may be null: white) each;
+	// alpha for every vertex
+	virtual void drawFan(const float *xyz, const float *uv, const byte *rgb, uint count, byte alpha = 255) = 0;
 
 	// A 2D image over the frame at (x, y), drawn at present(); white (255, 255, 255) is
 	// transparent when keyed

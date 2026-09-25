@@ -39,6 +39,8 @@ struct O3DMaterial {
 	uint32 renderClass = 2; // 0 unlit, 2 RGB lit (lighting.md)
 	byte colors[4][3];
 	bool wrap = true;       // tiling: false clamps texture coordinates
+	uint32 transparency = 0; // percent (+0x4c, E-0480)
+	uint32 mode = 0;         // draw mode (+0x50): 1 and 3 colour-keyed, 2 additive (E-0481)
 	Common::String textureMap; // empty when the material has no map
 };
 
