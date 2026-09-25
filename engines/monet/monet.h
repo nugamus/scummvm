@@ -19,87 +19,42 @@
  *
  */
 
-#ifndef MONET_H
-#define MONET_H
+#ifndef MONET_MONET_H
+#define MONET_MONET_H
 
 #include "common/scummsys.h"
-#include "common/system.h"
-#include "common/error.h"
-#include "common/fs.h"
-#include "common/hash-str.h"
-#include "common/random.h"
-#include "common/serializer.h"
-#include "common/util.h"
+#include "common/str.h"
 #include "engines/engine.h"
-#include "engines/savestate.h"
-#include "graphics/screen.h"
 
 #include "monet/detection.h"
 
+namespace Graphics {
+class Screen;
+}
+
 namespace Monet {
 
-struct MonetGameDescription;
-
 class MonetEngine : public Engine {
-private:
-	const ADGameDescription *_gameDescription;
-	Common::RandomSource _randomSource;
-protected:
-	// Engine APIs
-	Common::Error run() override;
-public:
-	Graphics::Screen *_screen = nullptr;
 public:
 	MonetEngine(OSystem *syst, const ADGameDescription *gameDesc);
 	~MonetEngine() override;
 
-	uint32 getFeatures() const;
-
-	/**
-	 * Returns the game Id
-	 */
-	Common::String getGameId() const;
-
-	/**
-	 * Gets a random number
-	 */
-	uint32 getRandomNumber(uint maxNum) {
-		return _randomSource.getRandomNumber(maxNum);
-	}
-
 	bool hasFeature(EngineFeature f) const override {
-		return
-		    (f == kSupportsLoadingDuringRuntime) ||
-		    (f == kSupportsSavingDuringRuntime) ||
-		    (f == kSupportsReturnToLauncher);
-	};
-
-	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override {
-		return true;
-	}
-	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override {
-		return true;
+		return f == kSupportsReturnToLauncher;
 	}
 
-	/**
-	 * Uses a serializer to allow implementing savegame
-	 * loading and saving using a single method
-	 */
-	Common::Error syncGame(Common::Serializer &s);
+protected:
+	Common::Error run() override;
 
-	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave = false) override {
-		Common::Serializer s(nullptr, stream);
-		return syncGame(s);
-	}
-	Common::Error loadGameStream(Common::SeekableReadStream *stream) override {
-		Common::Serializer s(stream, nullptr);
-		return syncGame(s);
-	}
+private:
+	void showBitmap(const Common::Path &path);
+	void wait(uint32 ms);
+	void playVideo(const Common::String &name);
+
+	const ADGameDescription *_gameDescription;
+	Graphics::Screen *_screen = nullptr;
 };
-
-extern MonetEngine *g_engine;
-#define SHOULD_QUIT ::Monet::g_engine->shouldQuit()
 
 } // End of namespace Monet
 
-#endif // MONET_H
+#endif // MONET_MONET_H

@@ -27,18 +27,13 @@
 namespace Monet {
 
 enum MonetDebugChannels {
-	kDebugGraphics = 1,
-	kDebugPath,
-	kDebugScan,
-	kDebugFilePath,
-	kDebugScript,
+	kDebugLoad = 1,
+	kDebugGraphics,
 };
 
 extern const PlainGameDescriptor monetGames[];
 
 extern const ADGameDescription gameDescriptions[];
-
-#define GAMEOPTION_ORIGINAL_SAVELOAD GUIO_GAMEOPTIONS1
 
 } // End of namespace Monet
 
@@ -58,7 +53,7 @@ public:
 	}
 
 	const char *getOriginalCopyright() const override {
-		return "Monet (C)";
+		return "Monet: The Mystery of the Orangerie Museum (C) 2000 index+ / Media Factory";
 	}
 
 	const DebugChannelDef *getDebugChannels() const override {

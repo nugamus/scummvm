@@ -19,47 +19,17 @@
  *
  */
 
-#include "common/translation.h"
-
 #include "monet/metaengine.h"
 #include "monet/detection.h"
 #include "monet/monet.h"
-
-namespace Monet {
-
-static const ADExtraGuiOptionsMap optionsList[] = {
-	{
-		GAMEOPTION_ORIGINAL_SAVELOAD,
-		{
-			_s("Use original save/load screens"),
-			_s("Use the original save/load screens instead of the ScummVM ones"),
-			"original_menus",
-			false,
-			0,
-			0
-		}
-	},
-	AD_EXTRA_GUI_OPTIONS_TERMINATOR
-};
-
-} // End of namespace Monet
 
 const char *MonetMetaEngine::getName() const {
 	return "monet";
 }
 
-const ADExtraGuiOptionsMap *MonetMetaEngine::getAdvancedExtraGuiOptions() const {
-	return Monet::optionsList;
-}
-
 Common::Error MonetMetaEngine::createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const {
 	*engine = new Monet::MonetEngine(syst, desc);
 	return Common::kNoError;
-}
-
-bool MonetMetaEngine::hasFeature(MetaEngineFeature f) const {
-	return checkExtendedSaves(f) ||
-		(f == kSupportsLoadingDuringStartup);
 }
 
 #if PLUGIN_ENABLED_DYNAMIC(MONET)
