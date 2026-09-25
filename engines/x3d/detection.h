@@ -35,6 +35,8 @@ extern const PlainGameDescriptor monetGames[];
 
 extern const ADGameDescription gameDescriptions[];
 
+#define GAMEOPTION_WIDESCREEN GUIO_GAMEOPTIONS1
+
 } // End of namespace X3D
 
 class X3DMetaEngineDetection : public AdvancedMetaEngineDetection<ADGameDescription> {

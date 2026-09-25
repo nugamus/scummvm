@@ -19,9 +19,30 @@
  *
  */
 
+#include "common/translation.h"
+
 #include "x3d/metaengine.h"
 #include "x3d/detection.h"
 #include "x3d/x3d.h"
+
+static const ADExtraGuiOptionsMap optionsList[] = {
+	{
+		GAMEOPTION_WIDESCREEN,
+		{
+			_s("Widescreen"),
+			_s("Show more of the scene to the sides on a wide display"),
+			"widescreen",
+			false,
+			0,
+			0
+		}
+	},
+	AD_EXTRA_GUI_OPTIONS_TERMINATOR
+};
+
+const ADExtraGuiOptionsMap *X3DMetaEngine::getAdvancedExtraGuiOptions() const {
+	return optionsList;
+}
 
 const char *X3DMetaEngine::getName() const {
 	return "x3d";

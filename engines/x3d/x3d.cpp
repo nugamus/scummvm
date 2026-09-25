@@ -56,7 +56,9 @@ X3DEngine::~X3DEngine() {
 Common::Error X3DEngine::run() {
 	// All original paths are relative to Data/, which the detector (kADFlagMatchFullPaths)
 	// has already added to SearchMan
-	_renderer = Renderer::create(640, 480);
+	// The original frames every mode as 4:3 (E-0040); widescreen keeps its height and view
+	// and shows more to the sides. 2D images stay 640x480, centred.
+	_renderer = Renderer::create(ConfMan.hasKey("widescreen") && ConfMan.getBool("widescreen") ? 854 : 640, 480);
 
 	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
 	// sequence and the scene's entry video
@@ -259,7 +261,7 @@ void X3DEngine::showBitmap(const Common::Path &path) {
 		error("Unable to load %s", path.toString().c_str());
 
 	_renderer->clear();
-	_renderer->drawImage(*bmp.getSurface(), 0, 0, false);
+	_renderer->drawImage(*bmp.getSurface(), (_renderer->width() - 640) / 2, 0, false);
 	_renderer->present();
 }
 
@@ -318,7 +320,7 @@ void X3DEngine::playVideo(const Common::String &name) {
 			const Graphics::Surface *frame = video.decodeNextFrame();
 			if (frame) {
 				_renderer->clear();
-				_renderer->drawImage(*frame, 0, 0, false);
+				_renderer->drawImage(*frame, (_renderer->width() - 640) / 2, 0, false);
 				_renderer->present();
 			}
 		}
