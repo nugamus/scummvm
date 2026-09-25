@@ -78,6 +78,7 @@ public:
 	// Unit code access to actions by id (Mnn)
 	void runAction(uint32 id, Common::StringArray &unitActions); // steps, then count the run
 	void setCondition(uint32 id, const Common::String &condition);
+	void exhaust(uint32 id); // count := max runs, exhausted, no step run (u05.md)
 	int runs(uint32 id) const;
 	bool exhausted(uint32 id) const;
 	// Steps 2 and 3 run by unit code: take a hotspot's object, use up the held item on one

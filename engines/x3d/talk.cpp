@@ -39,7 +39,7 @@ void Talk::addTalker(const Common::String &character, const Common::String &face
 	t.face = face;
 	int lowest = -1;
 	for (int i = 1; i <= 8; i++) {
-		t.slots[i] = _scene.addFaceClip(face, (clipDir.empty() ? "Anim/" + character + "/" : clipDir) + clips[i] + ".A3D");
+		t.slots[i] = _scene.addFaceClip(face, (clipDir.empty() ? "Anim/" + character + "/" : clipDir) + clips[i] + ".A3D", character);
 		if (lowest < 0)
 			lowest = t.slots[i];
 	}
