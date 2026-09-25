@@ -240,7 +240,7 @@ void Scene::bindAnimation(const Common::String &path, float fps) {
 	// the root drives the object of the same name under the file's first object
 	const A3DAnimation &root = file->animations[0];
 	if (root.name.contains('*')) {
-		_nodes.push_back(AnimNode{ file, 0, m, 0, fps, (float)root.firstFrame });
+		addNode(file, 0, m, 0, fps);
 		return;
 	}
 	for (uint c = 1; c < file->animations.size(); c++) {
@@ -249,11 +249,22 @@ void Scene::bindAnimation(const Common::String &path, float fps) {
 		// Depth first under the first object: file order, since parents come first
 		for (uint o = 1; o < m->file.objects.size(); o++) {
 			if (m->file.objects[o].name.equalsIgnoreCase(file->animations[c].name)) {
-				_nodes.push_back(AnimNode{ file, c, m, o, fps, (float)file->animations[c].firstFrame });
+				addNode(file, c, m, o, fps);
 				break;
 			}
 		}
 	}
+}
+
+void Scene::addNode(const A3DFile *file, uint animation, Model *m, uint object, float fps) {
+	AnimNode n;
+	n.model = m;
+	n.object = object;
+	n.base.file = file;
+	n.base.animation = animation;
+	n.base.fps = fps;
+	n.base.frame = file->animations[animation].firstFrame;
+	_nodes.push_back(n);
 }
 
 void Scene::animate(const A3DFile &file, uint animation, Model &m, uint object, float frame) {
@@ -274,19 +285,16 @@ void Scene::animate(const A3DFile &file, uint animation, Model &m, uint object, 
 
 void Scene::update(float dt) {
 	for (AnimNode &n : _nodes) {
-		const A3DAnimation &a = n.file->animations[n.animation];
-		if (n.running) {
-			n.frame += dt * n.fps;
-			if (!n.loop) {
-				if (n.frame >= a.lastFrame) {
-					n.frame = a.lastFrame;
-					n.running = false;
-				}
-			} else if (n.frame > a.lastFrame) {
-				n.frame = fmod(n.frame, (float)a.lastFrame) + a.firstFrame;
-			}
+		// A rewound clip hands back to the node's own animation at frame 1 (E-0057)
+		if (n.clipActive && n.clip.backward && !n.clip.running) {
+			n.clipActive = false;
+			const A3DAnimation &a = n.base.file->animations[n.base.animation];
+			n.base.frame = CLIP(1.0f, (float)a.firstFrame, (float)a.lastFrame);
+			n.base.running = true;
 		}
-		animate(*n.file, n.animation, *n.model, n.object, n.frame);
+		Playback &p = n.clipActive ? n.clip : n.base;
+		p.advance(dt);
+		animate(*p.file, p.animation, *n.model, n.object, p.frame);
 	}
 
 	// ponytail: re-poses every animated file each step; track dirty objects if it shows up in profiles
@@ -319,11 +327,90 @@ bool Scene::inView(const float *sphere) const {
 	       depth > -r;
 }
 
-void Scene::hideObject(const Common::String &name) {
+void Scene::hideObject(const Common::String &name, bool hidden) {
 	for (Model *m : _models)
 		for (uint i = 0; i < m->file.objects.size(); i++)
 			if (m->file.objects[i].name.equalsIgnoreCase(name))
-				m->hiddenObjects[i] = true;
+				m->hiddenObjects[i] = hidden;
+}
+
+Scene::AnimNode *Scene::findNode(const Common::String &objectName) {
+	for (AnimNode &n : _nodes)
+		if (n.model->file.objects[n.object].name.equalsIgnoreCase(objectName))
+			return &n;
+	return nullptr;
+}
+
+void Scene::startAnimation(const Common::String &objectName) {
+	if (AnimNode *n = findNode(objectName))
+		n->base.running = true;
+}
+
+void Scene::setAnimationState(const Common::String &objectName, float frame, bool paused, float fps, bool loop) {
+	AnimNode *n = findNode(objectName);
+	if (!n)
+		return;
+	const A3DAnimation &a = n->base.file->animations[n->base.animation];
+	n->base.frame = CLIP(frame, (float)a.firstFrame, (float)a.lastFrame);
+	if (paused)
+		n->base.running = false;
+	n->base.fps = fps;
+	n->base.loop = loop;
+}
+
+void Scene::playClip(const Common::String &objectName, const Common::String &path) {
+	AnimNode *n = findNode(objectName);
+	Common::File f;
+	A3DFile *file = new A3DFile();
+	if (!n || !f.open(Common::Path(_dir + path)) || !file->load(f) || file->animations.empty()) {
+		warning("Unable to play %s%s on %s", _dir.c_str(), path.c_str(), objectName.c_str());
+		delete file;
+		return;
+	}
+	_animationFiles.push_back(file);
+	n->clip = n->base;
+	n->clip.file = file;
+	n->clip.animation = 0;
+	n->clip.frame = file->animations[0].firstFrame;
+	n->clip.running = true;
+	n->clip.loop = false;
+	n->clipActive = true;
+}
+
+void Scene::rewindClip(const Common::String &objectName) {
+	AnimNode *n = findNode(objectName);
+	if (!n || !n->clipActive)
+		return;
+	n->clip.backward = true;
+	n->clip.running = true;
+	n->clip.stopAt = 1;
+}
+
+bool Scene::clipPlaying(const Common::String &objectName) {
+	AnimNode *n = findNode(objectName);
+	return n && n->clipActive && n->clip.running;
+}
+
+void Scene::Playback::advance(float dt) {
+	if (!running)
+		return;
+	const A3DAnimation &a = file->animations[animation];
+	const float first = a.firstFrame, last = a.lastFrame;
+	frame += (backward ? -dt : dt) * fps;
+	if (!loop) {
+		frame = CLIP(frame, first, last);
+		if (backward ? frame <= first : frame >= last)
+			running = false;
+	} else if (frame > last) {
+		frame = fmod(frame, last) + first;
+	} else if (frame < first) {
+		frame = last - (first - frame);
+	}
+	if (stopAt >= 0 && fabs(frame - stopAt) <= 2 * dt * fps) {
+		frame = stopAt;
+		running = false;
+		stopAt = -1;
+	}
 }
 
 void Scene::attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold) {
@@ -534,6 +621,112 @@ void Scene::drawObject(const Model &m, uint object) {
 		}
 		tglEnd();
 	}
+}
+
+bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
+                 const Model *&model, uint &object, float &depth) {
+	// The render projection and camera axes (no roll: picking ignores the head bob)
+	const float ky = (4.0f / 3.0f) / tan(cam.fov * M_PI / 360.0), kx = ky * height / width;
+	const float cx = width / 2.0f, cy = height / 2.0f;
+	const float a = cam.yaw, e = cam.pitch;
+	const float right[3] = { -sinf(a), -cosf(a), 0 };
+	const float up[3] = { cosf(e) * cosf(a), -cosf(e) * sinf(a), sinf(e) };
+	const float forward[3] = { sinf(e) * cosf(a), -sinf(e) * sinf(a), -cosf(e) };
+
+	depth = 1e6f;
+	model = nullptr;
+	for (const Model *m : _models) {
+		if (m->hidden)
+			continue;
+		const Common::Array<O3DObject> &objects = m->file.objects;
+		for (uint i = 0; i < objects.size(); i++) {
+			// Welded objects are tested with their top object, whose vertices they share
+			if (m->hiddenObjects[i] || objects[i].vertices.empty())
+				continue;
+
+			// The drawn level of detail supplies the faces
+			const Model *drawn = m;
+			uint top = i;
+			float s2 = 0;
+			for (int k = 0; k < 3; k++)
+				s2 += (objects[i].world[12 + k] - cam.position[k]) * (objects[i].world[12 + k] - cam.position[k]);
+			for (const Lod &lod : m->lods[i])
+				if (lod.threshold <= s2) {
+					drawn = lod.model;
+					top = lod.object;
+				}
+			const Common::Array<O3DObject> &dobjects = drawn->file.objects;
+			const Common::Array<float> &v = drawn->worldVertices[top];
+
+			// Camera-space vertices, then projected
+			Common::Array<float> cam3(v.size()), screen(v.size() / 3 * 2);
+			for (uint j = 0; j < v.size(); j += 3) {
+				float d[3];
+				for (int k = 0; k < 3; k++)
+					d[k] = v[j + k] - cam.position[k];
+				const float X = d[0] * right[0] + d[1] * right[1] + d[2] * right[2];
+				const float Y = d[0] * up[0] + d[1] * up[1] + d[2] * up[2];
+				const float Z = d[0] * forward[0] + d[1] * forward[1] + d[2] * forward[2];
+				cam3[j] = X;
+				cam3[j + 1] = Y;
+				cam3[j + 2] = Z;
+				if (Z > 0) {
+					screen[j / 3 * 2] = cx + cx * X * kx / Z;
+					screen[j / 3 * 2 + 1] = cy - cy * Y * ky / Z;
+				}
+			}
+
+			for (uint o = top; o < dobjects.size(); o++) {
+				// The top's own faces and those of every welded object below it
+				int owner = o;
+				while (owner >= 0 && dobjects[owner].vertices.empty())
+					owner = dobjects[owner].parent;
+				if (owner != (int)top || (o != top && !dobjects[o].welded))
+					continue;
+				for (const O3DFace &f : dobjects[o].faces) {
+					const uint n = f.indices.size();
+					if (n < 3)
+						continue;
+					bool usable = true;
+					for (uint32 index : f.indices)
+						usable &= index * 3 + 2 < cam3.size() && cam3[index * 3 + 2] > 0.1f;
+					// ponytail: faces crossing the near plane are skipped, not clipped
+					if (!usable)
+						continue;
+					const float *v0 = &cam3[f.indices[0] * 3], *v1 = &cam3[f.indices[1] * 3], *v2 = &cam3[f.indices[2] * 3];
+					const float e1[3] = { v0[0] - v1[0], v0[1] - v1[1], v0[2] - v1[2] };
+					const float e2[3] = { v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2] };
+					float nrm[3] = { e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] };
+					if (nrm[0] * v0[0] + nrm[1] * v0[1] + nrm[2] * v0[2] >= -0.01f)
+						continue; // back face
+
+					bool inside = true;
+					for (uint k = 0; k < n && inside; k++) {
+						const float *si = &screen[f.indices[k] * 2], *sj = &screen[f.indices[(k + 1) % n] * 2];
+						inside = (y - si[1]) * (sj[0] - si[0]) + (x - si[0]) * (si[1] - sj[1]) <= 0;
+					}
+					if (!inside)
+						continue;
+
+					// Depth where the view ray through the pixel meets the face's plane
+					const float len = sqrtf(nrm[0] * nrm[0] + nrm[1] * nrm[1] + nrm[2] * nrm[2]);
+					const float r[3] = { (x - cx) / cx / kx, (cy - y) / cy / ky, 1 };
+					const float mr = (nrm[0] * r[0] + nrm[1] * r[1] + nrm[2] * r[2]) / len;
+					if (mr == 0)
+						continue;
+					const float d = (nrm[0] * v0[0] + nrm[1] * v0[1] + nrm[2] * v0[2]) / len / mr;
+					if (d > 0 && d < depth) {
+						// The face's own object: a welded card in a hand is its own hotspot
+						// (E-0076). Through a LOD, the base object.
+						depth = d;
+						model = m;
+						object = drawn == m ? o : i;
+					}
+				}
+			}
+		}
+	}
+	return model != nullptr;
 }
 
 } // End of namespace X3D

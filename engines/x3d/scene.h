@@ -85,27 +85,52 @@ public:
 	};
 
 	// X3d_Object_Hide by object name, in every loaded file
-	void hideObject(const Common::String &name);
+	void hideObject(const Common::String &name, bool hidden = true);
+
+	// Animation nodes by object name (animation.md, E-0056/E-0057; interaction.md)
+	void startAnimation(const Common::String &objectName);
+	void setAnimationState(const Common::String &objectName, float frame, bool paused, float fps, bool loop);
+	// Plays a whole .A3D once on the node's object in its clip slot, holding the last pose
+	void playClip(const Common::String &objectName, const Common::String &path);
+	// Plays the clip backward to frame 1, then returns to the node's own animation at frame 1
+	void rewindClip(const Common::String &objectName);
+	bool clipPlaying(const Common::String &objectName);
+
+	const Common::String &dir() const { return _dir; } // asset directory, e.g. "U01/"
 
 	// Files loaded by object= lines (not their LODs), in script order
 	const Common::Array<Model *> &models() const { return _models; }
 
+	// The object under output pixel (x, y) and the camera-space depth of the hit
+	// (docs/engine-spec/interaction.md, Picking). Returns false when nothing is hit.
+	bool pick(const Camera &cam, int width, int height, float x, float y,
+	          const Model *&model, uint &object, float &depth);
+
 private:
-	// A playing animation bound to an object (animation.md, Binding and Per-frame playback)
+	// An animation being played (animation.md, Per-frame playback)
+	struct Playback {
+		const A3DFile *file = nullptr;
+		uint animation = 0;
+		float fps = 30, frame = 0;
+		bool loop = true, running = true, backward = false;
+		float stopAt = -1; // stop target, < 0 for none
+
+		void advance(float dt);
+	};
+
+	// An object's playback, plus a scripted clip that replaces it while active (slot 1)
 	struct AnimNode {
-		const A3DFile *file;
-		uint animation;
 		Model *model;
 		uint object;
-		float fps, frame;
-		bool loop, running;
-
-		AnimNode(const A3DFile *f, uint a, Model *m, uint o, float rate, float start)
-			: file(f), animation(a), model(m), object(o), fps(rate), frame(start), loop(true), running(true) {}
+		Playback base, clip;
+		bool clipActive = false;
 	};
+
+	AnimNode *findNode(const Common::String &objectName);
 
 	Model *loadModel(const Common::String &path);
 	void bindAnimation(const Common::String &path, float fps);
+	void addNode(const A3DFile *file, uint animation, Model *m, uint object, float fps);
 	void animate(const A3DFile &file, uint animation, Model &m, uint object, float frame);
 	void pose(Model &m); // world vertices and bounds from the live transforms
 	void attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold);
