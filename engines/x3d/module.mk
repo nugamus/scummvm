@@ -14,6 +14,7 @@ MODULE_OBJS = \
 	scene.o \
 	sound.o \
 	talk.o \
+	u01.o \
 	x3d.o
 
 # This module can be built as a plugin

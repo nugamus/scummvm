@@ -34,6 +34,7 @@ Sound::Sound(Audio::Mixer *mixer) : _mixer(mixer) {
 		g = 100;
 	_emitters[kVoiceEmitter].group = kVoice;
 	_emitters[kEffectsEmitter].group = kEffects;
+	_emitters[kPhoneEmitter].group = 4;
 }
 
 Sound::~Sound() {
@@ -113,6 +114,7 @@ void Sound::setGroupVolume(int group, int g) {
 void Sound::setScale(float scale) {
 	_emitters[kVoiceEmitter].range = 50 * scale;
 	_emitters[kEffectsEmitter].range = 60 * scale;
+	_emitters[kPhoneEmitter].range = 50 * scale;
 }
 
 bool Sound::emit(Emitter e, const Common::Path &path, const Math::Vector3d &position, bool loop) {
@@ -128,6 +130,13 @@ bool Sound::emit(Emitter e, const Common::Path &path, const Math::Vector3d &posi
 	if (em.owns)
 		em.handle = _playing.back().handle;
 	return true;
+}
+
+void Sound::stopEmitter(Emitter e) {
+	if (_emitters[e].owns)
+		_mixer->stopHandle(_emitters[e].handle);
+	_emitters[e].owns = false;
+	prune();
 }
 
 void Sound::detach(Emitter e) {

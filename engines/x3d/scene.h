@@ -85,6 +85,8 @@ public:
 		Common::Array<Common::Array<float> > worldVertices; // per object; empty for weld objects
 		Common::Array<Common::Array<Lod> > lods;            // per object, by threshold
 		Common::Array<bool> hiddenObjects;
+		Common::Array<bool> unpickable;
+		bool animated = false;
 		Common::Array<Common::Array<float> > worldNormals; // like worldVertices
 		bool lit = false; // reached by the scene's lights (light= after it in the script)
 		// Lit colours per vertex array, 6 bytes per vertex (D rgb, S rgb), and the frame
@@ -116,6 +118,28 @@ public:
 
 	// An object's world origin, by name
 	Math::Vector3d objectPosition(const Common::String &name) const;
+	// An object by name in X3D's lookup order (newest file first), or false
+	bool findObject(const Common::String &name, Model *&model, uint &object) const;
+	void renameObject(const Common::String &from, const Common::String &to);
+	void renameNode(const Common::String &from, const Common::String &to);
+	void setPickable(const Common::String &namePrefix, bool pickable);
+
+	// Scripted control of an animation node (u01.md "Run node to f")
+	bool hasNode(const Common::String &name) { return findNode(name) != nullptr; }
+	void runNodeTo(const Common::String &name, float target, bool backward);
+	void pauseNode(const Common::String &name);
+	void setNodeFrame(const Common::String &name, float frame);
+	void setNodeFps(const Common::String &name, float fps);
+	void setNodeLoop(const Common::String &name, bool loop);
+	void setNodeRange(const Common::String &name, float first, float last);
+	void stepNode(const Common::String &name, float dt); // advances even when paused
+	float nodeFrame(const Common::String &name);
+	float nodeLastFrame(const Common::String &name);
+	bool nodeRunning(const Common::String &name);
+	// Replaces the node's animation with a whole .A3D in its clip slot, paused
+	void loadClip(const Common::String &name, const Common::String &path, float fps, float frame);
+
+	byte ambient[3] = { 255, 255, 255 };
 
 	const Common::String &dir() const { return _dir; } // asset directory, e.g. "U01/"
 
@@ -135,12 +159,14 @@ private:
 		float fps = 30, frame = 0;
 		bool loop = true, running = true, backward = false;
 		float stopAt = -1; // stop target, < 0 for none
+		float first = -1, last = -1; // range override, < 0: the animation's
 
 		void advance(float dt);
 	};
 
 	// An object's playback, plus a scripted clip that replaces it while active (slot 1)
 	struct AnimNode {
+		Common::String name; // the object's name unless the unit renames it
 		Model *model;
 		uint object;
 		Playback base, clip;
@@ -149,6 +175,7 @@ private:
 	};
 
 	AnimNode *findNode(const Common::String &objectName);
+	Playback &active(AnimNode &n);
 
 	Model *loadModel(const Common::String &path);
 	void bindAnimation(const Common::String &path, float fps);
@@ -173,7 +200,6 @@ private:
 	uint32 texture(const Common::String &mapName);
 
 	Common::String _dir;  // asset directory, e.g. "U01/"
-	byte _ambient[3] = { 255, 255, 255 };
 	Common::Array<Model *> _models;
 	Common::Array<Model *> _lodModels; // only drawn through their base objects
 	Common::Array<A3DFile *> _animationFiles;

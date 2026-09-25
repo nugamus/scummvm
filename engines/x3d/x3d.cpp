@@ -31,6 +31,7 @@
 
 #include "engines/util.h"
 
+#include "graphics/cursorman.h"
 
 #include "image/bmp.h"
 
@@ -40,9 +41,10 @@
 #include "x3d/interaction.h"
 #include "x3d/player.h"
 #include "x3d/renderer.h"
+#include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
-#include "x3d/scene.h"
+#include "x3d/u01.h"
 #include "x3d/x3d.h"
 
 namespace X3D {
@@ -72,13 +74,11 @@ Common::Error X3DEngine::run() {
 		wait(3000);
 		showBitmap("2dbit/Intro2.bmp");
 		wait(2000);
-
-		// The original shows the U00 menu scene and its OptionUser frame here. Until that is
-		// specified, a new game goes straight to U01, whose normal entry plays the prologue.
-		playVideo("Prologue");
 	}
 
-	// A new game starts at the scene named in App.bin #GAME# (E-0037)
+	// A new game starts at the scene named in App.bin #GAME# (E-0037). The original shows
+	// the U00 menu scene and its OptionUser frame first; until that is specified, a new
+	// game goes straight there.
 	Common::String sceneName = "U01.X3D";
 	if (ConfMan.hasKey("start_scene")) {
 		sceneName = ConfMan.get("start_scene");
@@ -87,7 +87,11 @@ Common::Error X3DEngine::run() {
 		delete game;
 	}
 
-	playScene(sceneName);
+	while (!shouldQuit() && !sceneName.empty()) {
+		_nextScene.clear();
+		playScene(sceneName);
+		sceneName = _nextScene;
+	}
 	return Common::kNoError;
 }
 
@@ -95,194 +99,295 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	Scene scene(_renderer);
 	if (!scene.load(sceneName))
 		error("Unable to load scene %s", sceneName.c_str());
-	// Sound (sound.md): mode 0 group volumes, the scene's emitters, talkers
+	_scene = &scene;
+
+	// Sound (sound.md): mode 0 group volumes, the scene's emitters
 	_sound->setGroupVolume(Sound::kAmbient, 85);
 	_sound->setGroupVolume(4, 80);
 	_sound->setGroupVolume(5, 80);
 	_sound->setScale(scene.scale);
 	Talk talk(scene, *_sound, scene.dir());
+	_talk = &talk;
 	Interaction interaction(scene, *_sound, talk);
+	_interaction = &interaction;
+
+	const bool u01 = sceneName.hasPrefixIgnoreCase("U01");
+	U01 unit01(this);
+	_u01 = u01 ? &unit01 : nullptr;
+	if (_u01)
+		_u01->afterLoad();
 	interaction.load(scene.dir());
 
-	// U01 as its scripted entry leaves it (movement.md, U01 hand-over): the mayor holds out
-	// the card (GiveCard) and the player can only click until TakeCard. The entry itself
-	// is not implemented yet.
-	// ponytail: only U01's values; other units need their Uxx_Start state
-	Player player;
-	player.init(scene.scale);
-	player.fov = scene.camera.fov;
-	Common::StringArray noCollision;
-	const bool u01 = sceneName.hasPrefixIgnoreCase("U01");
-	bool takingCard = false;
-	if (u01) {
-		player.eye.set(-466.36f, -452.495f, 30.48f);
-		player.yaw = 4.7f;
-		player.sphereOffset = 37.0f;
-		player.canMove = player.canTurn = false;
-		noCollision.push_back("Box203");
-		scene.hideObject("Box203");
-		scene.hideObject("Cylinder07");
-		scene.playClip("*U01_02", "Anim/U01_02/Action03.A3D");
-		talk.addTalker("U01_01", "$$$DUMMY.*01SParle");
-		talk.addTalker("U01_02", "$$$DUMMY.*02SParle");
-		// The unit's ambient loop, started after the prologue
-		_sound->play(Common::Path(scene.dir() + "Sound/U01.WAV"), Sound::kAmbient, 85, true);
-	}
-	// Development shortcut: start_camera=x,y,z,yaw,pitch places the camera anywhere
-	if (ConfMan.hasKey("start_camera")) {
-		sscanf(ConfMan.get("start_camera").c_str(), "%f,%f,%f,%f,%f", &player.eye.x(),
-		       &player.eye.y(), &player.eye.z(), &player.yaw, &player.pitch);
-		player.canMove = player.canTurn = true;
-	}
-
+	_player = Player();
+	_player.init(scene.scale);
+	_player.fov = scene.camera.fov;
 	Collision collision;
-	collision.build(scene, noCollision);
+	collision.build(scene);
+	_collision = &collision;
 
-	// Logic runs in fixed steps; rendering runs every loop iteration and interpolates
-	// the camera between the last two steps (movement.md, Engine model)
-	const uint32 stepMs = 1000 / kStepsPerSecond;
-	Keys keys;
-	Player previous = player;
-	Camera camera;
-	int hotspot = -1;
-	Common::Point mouse(320, 240);
-	bool hoverNow = false, clickNow = false;
-	uint32 last = _system->getMillis(), pending = 0, frames = 0, fpsStart = last, lastClick = 0, logicMs = 0;
+	_keys = Keys();
+	_enterHeld = _suspended = _hoverNow = _clickNow = false;
+	_hotspot = -1;
+	_unitActions.clear();
+	_last = _fpsStart = _sceneStart = _system->getMillis();
+	_pending = _logicMs = _lastClick = _frames = 0;
+
 	// Development shortcut: dev_click=x,y,ms[;x,y,ms...] clicks at game pixel (x, y) ms
 	// after the scene starts, for testing without focus (SDL takes click positions from
 	// the real cursor)
-	Common::Array<int> devClicks;
+	_devClicks.clear();
 	if (ConfMan.hasKey("dev_click")) {
-		const char *c = ConfMan.get("dev_click").c_str();
+		const Common::String clicks = ConfMan.get("dev_click");
+		const char *c = clicks.c_str();
 		int x, y, ms, n;
 		while (sscanf(c, "%d,%d,%d%n", &x, &y, &ms, &n) == 3) {
-			devClicks.push_back(x);
-			devClicks.push_back(y);
-			devClicks.push_back(ms);
+			_devClicks.push_back(x);
+			_devClicks.push_back(y);
+			_devClicks.push_back(ms);
 			c += n;
 			if (*c == ';')
 				c++;
 		}
 	}
-	const uint32 sceneStart = last;
-	while (!shouldQuit()) {
-		if (!devClicks.empty() && _system->getMillis() - sceneStart >= (uint32)devClicks[2]) {
-			mouse = Common::Point(devClicks[0], devClicks[1]);
-			clickNow = true;
-			devClicks.remove_at(0);
-			devClicks.remove_at(0);
-			devClicks.remove_at(0);
+
+	// Development shortcut: start_camera=x,y,z,yaw,pitch places the camera anywhere and
+	// skips the unit's scripted start
+	if (ConfMan.hasKey("start_camera")) {
+		sscanf(ConfMan.get("start_camera").c_str(), "%f,%f,%f,%f,%f", &_player.eye.x(),
+		       &_player.eye.y(), &_player.eye.z(), &_player.yaw, &_player.pitch);
+		if (_u01)
+			_u01->start(false);
+	} else if (_u01) {
+		// start_scene skips the prologue as well as the boot sequence
+		_u01->start(true, !ConfMan.hasKey("start_scene"));
+	}
+	_previous = _player;
+
+	while (!shouldQuit() && _nextScene.empty())
+		frame(true);
+
+	_sound->stopAll();
+	_scene = nullptr;
+	_collision = nullptr;
+	_interaction = nullptr;
+	_talk = nullptr;
+	_u01 = nullptr;
+}
+
+void X3DEngine::logicStep(bool input) {
+	const uint32 stepMs = 1000 / kStepsPerSecond;
+	_previous = _player;
+	if (input && !_suspended) {
+		const bool handled = _u01 && _u01->input(stepMs / 1000.0f);
+		if (!handled && _player.tick(stepMs / 1000.0f, _keys, *_collision))
+			_sound->emit(Sound::kEffectsEmitter, "SAUT.WAV", _player.eye, false);
+	}
+	_logicMs += stepMs;
+	_talk->tick(_logicMs);
+	_scene->update(stepMs / 1000.0f);
+	_collision->refresh();
+	_sound->updateVolumes(_player.eye);
+	_interaction->eye = _player.eye;
+}
+
+void X3DEngine::frame(bool input) {
+	if (!_devClicks.empty() && _system->getMillis() - _sceneStart >= (uint32)_devClicks[2]) {
+		_mouse = Common::Point(_devClicks[0], _devClicks[1]);
+		_clickNow = true;
+		for (int i = 0; i < 3; i++)
+			_devClicks.remove_at(0);
+	}
+
+	Common::Event e;
+	while (_system->getEventManager()->pollEvent(e)) {
+		if (e.type == Common::EVENT_MOUSEMOVE) {
+			_mouse = e.mouse;
+			_hoverNow = true;
+			continue;
 		}
-		Common::Event e;
-		while (_system->getEventManager()->pollEvent(e)) {
-			if (e.type == Common::EVENT_MOUSEMOVE) {
-				mouse = e.mouse;
-				hoverNow = true;
-				continue;
-			}
-			if (e.type == Common::EVENT_LBUTTONDOWN) {
-				debug(1, "click %d,%d", e.mouse.x, e.mouse.y);
-				mouse = e.mouse;
-				clickNow = true;
-				continue;
-			}
-			if (e.type != Common::EVENT_KEYDOWN && e.type != Common::EVENT_KEYUP)
-				continue;
-			const bool down = e.type == Common::EVENT_KEYDOWN;
-			if (!down) {
-				debug(1, "camera %g,%g,%g,%g,%g", player.eye.x(), player.eye.y(), player.eye.z(), player.yaw, player.pitch);
-				hoverNow = true; // the original re-hovers on every key release
-			}
-			switch (e.kbd.keycode) {
-			case Common::KEYCODE_UP: keys.up = down; break;
-			case Common::KEYCODE_DOWN: keys.down = down; break;
-			case Common::KEYCODE_LEFT: keys.left = down; break;
-			case Common::KEYCODE_RIGHT: keys.right = down; break;
-			case Common::KEYCODE_PAGEUP: keys.pageUp = down; break;
-			case Common::KEYCODE_PAGEDOWN: keys.pageDown = down; break;
-			case Common::KEYCODE_LCTRL:
-			case Common::KEYCODE_RCTRL: keys.ctrl = down; break;
-			default: break;
-			}
+		if (e.type == Common::EVENT_LBUTTONDOWN) {
+			debug(1, "click %d,%d", e.mouse.x, e.mouse.y);
+			_mouse = e.mouse;
+			_clickNow = true;
+			continue;
 		}
-
-		const uint32 now = _system->getMillis();
-		pending += now - last;
-		last = now;
-		while (pending >= stepMs) {
-			pending -= stepMs;
-			previous = player;
-			if (player.tick(stepMs / 1000.0f, keys, collision))
-				_sound->emit(Sound::kEffectsEmitter, "SAUT.WAV", player.eye, false);
-			logicMs += stepMs;
-			talk.tick(logicMs);
-			scene.update(stepMs / 1000.0f);
-			_sound->updateVolumes(player.eye);
-			interaction.eye = player.eye;
-
-			// TakeCard waits for the card animation, then allows walking (E-0050, E-0057)
-			if (takingCard && !scene.clipPlaying("*U01_02")) {
-				takingCard = false;
-				player.canMove = player.canTurn = true;
-			}
+		if (e.type != Common::EVENT_KEYDOWN && e.type != Common::EVENT_KEYUP)
+			continue;
+		const bool down = e.type == Common::EVENT_KEYDOWN;
+		if (!down) {
+			debug(1, "camera %g,%g,%g,%g,%g", _player.eye.x(), _player.eye.y(), _player.eye.z(), _player.yaw, _player.pitch);
+			_hoverNow = true; // the original re-hovers on every key release
 		}
-
-		const float alpha = (float)pending / stepMs;
-		for (int k = 0; k < 3; k++)
-			camera.position[k] = previous.eye.getData()[k] + (player.eye.getData()[k] - previous.eye.getData()[k]) * alpha;
-		camera.yaw = previous.yaw + (player.yaw - previous.yaw) * alpha;
-		camera.pitch = previous.pitch + (player.pitch - previous.pitch) * alpha;
-		camera.fov = player.fov;
-		camera.roll = player.roll;
-
-		// Hover and click (interaction.md): clicks closer together than one frame + 10 ms
-		// are ignored; nothing counts beyond 4 scene units of depth
-		if (clickNow && now - lastClick < 1000 / kStepsPerSecond + 10)
-			clickNow = false;
-		if (hoverNow || clickNow) {
-			hotspot = -1;
-			const Scene::Model *model;
-			uint object;
-			float depth;
-			if (scene.pick(camera, _renderer->width(), _renderer->height(), mouse.x, mouse.y, model, object, depth) &&
-			    depth <= 4 * scene.scale) {
-				Common::StringArray names;
-				for (int o = object; o >= 0; o = model->file.objects[o].parent)
-					names.push_back(model->file.objects[o].name);
-				hotspot = interaction.hotspotFor(names);
-				debug(2, "pick %s at depth %g: hotspot %d", names[0].c_str(), depth, hotspot);
-			}
-			hoverNow = false;
-		}
-		if (clickNow) {
-			lastClick = now;
-			clickNow = false;
-			Common::StringArray unitActions;
-			interaction.click(hotspot, unitActions);
-			for (const Common::String &action : unitActions) {
-				// U01's unit code (interaction.md, Click -> action)
-				if (u01 && action.equalsIgnoreCase("TakeCard")) {
-					scene.rewindClip("*U01_02");
-					takingCard = true;
-					interaction.setCursorKind("*U01_02", 3);
-				} else {
-					warning("Unit action %s is not implemented", action.c_str());
-				}
-			}
-		}
-		interaction.hover(hotspot, now);
-
-		scene.draw(camera, _renderer->width(), _renderer->height());
-		_renderer->present();
-		_system->delayMillis(1);
-
-		frames++;
-		if (now - fpsStart >= 5000) {
-			debug(2, "%u frames per second", frames * 1000 / (now - fpsStart));
-			frames = 0;
-			fpsStart = now;
+		switch (e.kbd.keycode) {
+		case Common::KEYCODE_UP: _keys.up = down; break;
+		case Common::KEYCODE_DOWN: _keys.down = down; break;
+		case Common::KEYCODE_LEFT: _keys.left = down; break;
+		case Common::KEYCODE_RIGHT: _keys.right = down; break;
+		case Common::KEYCODE_PAGEUP: _keys.pageUp = down; break;
+		case Common::KEYCODE_PAGEDOWN: _keys.pageDown = down; break;
+		case Common::KEYCODE_LCTRL:
+		case Common::KEYCODE_RCTRL: _keys.ctrl = down; break;
+		case Common::KEYCODE_RETURN:
+		case Common::KEYCODE_KP_ENTER: _enterHeld = down; break;
+		default: break;
 		}
 	}
+
+	// Logic runs in fixed steps; rendering interpolates the camera between the last two
+	// (movement.md, Engine model)
+	const uint32 stepMs = 1000 / kStepsPerSecond;
+	const uint32 now = _system->getMillis();
+	_pending += now - _last;
+	_last = now;
+	while (_pending >= stepMs && !shouldQuit()) {
+		_pending -= stepMs;
+		logicStep(input);
+	}
+
+	Camera camera;
+	const float alpha = (float)_pending / stepMs;
+	for (int k = 0; k < 3; k++)
+		camera.position[k] = _previous.eye.getData()[k] + (_player.eye.getData()[k] - _previous.eye.getData()[k]) * alpha;
+	camera.yaw = _previous.yaw + (_player.yaw - _previous.yaw) * alpha;
+	camera.pitch = _previous.pitch + (_player.pitch - _previous.pitch) * alpha;
+	camera.fov = _player.fov;
+	camera.roll = _player.roll;
+
+	// Hover and click (interaction.md): clicks closer together than one frame + 10 ms are
+	// ignored; nothing counts beyond 4 scene units of depth
+	const bool interactive = input && !_suspended;
+	if (_clickNow && (!interactive || now - _lastClick < 1000 / kStepsPerSecond + 10))
+		_clickNow = false;
+	if (interactive && (_hoverNow || _clickNow)) {
+		_hotspot = -1;
+		const Scene::Model *model;
+		uint object;
+		float depth;
+		if (_scene->pick(camera, _renderer->width(), _renderer->height(), _mouse.x, _mouse.y, model, object, depth) &&
+		    depth <= 4 * _scene->scale) {
+			Common::StringArray names;
+			for (int o = object; o >= 0; o = model->file.objects[o].parent)
+				names.push_back(model->file.objects[o].name);
+			_hotspot = _interaction->hotspotFor(names);
+			debug(2, "pick %s at depth %g: hotspot %d", names[0].c_str(), depth, _hotspot);
+		}
+		_hoverNow = false;
+	}
+	if (_clickNow) {
+		_lastClick = now;
+		_clickNow = false;
+		_interaction->click(_hotspot, _unitActions);
+	}
+	if (interactive)
+		_interaction->hover(_hotspot, now);
+
+	_scene->draw(camera, _renderer->width(), _renderer->height());
+	if (_u01)
+		_u01->draw();
+	_renderer->present();
+	_system->delayMillis(1);
+
+	_frames++;
+	if (now - _fpsStart >= 5000) {
+		debug(2, "%u frames per second", _frames * 1000 / (now - _fpsStart));
+		_frames = 0;
+		_fpsStart = now;
+	}
+
+	// The unit's code: queued click actions, then its per-frame checks. Both may run
+	// blocking sequences (nested frames).
+	if (input) {
+		while (!_unitActions.empty() && !shouldQuit()) {
+			const Common::String action = _unitActions.remove_at(0);
+			if (!_u01 || !_u01->handle(action))
+				warning("Unit action %s is not implemented", action.c_str());
+		}
+		if (_u01)
+			_u01->afterFrame();
+	}
+}
+
+void X3DEngine::runFor(uint32 ms) {
+	const uint32 end = _logicMs + ms;
+	do
+		frame(false);
+	while (_logicMs < end && !shouldQuit() && _nextScene.empty());
+}
+
+// Reduces an angle to [0, 2pi)
+static float wrapAngle(float a) {
+	a = fmod(a, 2 * (float)M_PI);
+	return a < 0 ? a + 2 * (float)M_PI : a;
+}
+
+void X3DEngine::moveTo(uint32 ms, const float *position, float yaw, float pitch, float fov) {
+	// N steps of 1/N of the difference each, then the targets; angles the short way
+	// round, 100.0 keeps (movement.md, E-0050)
+	const uint n = MAX<uint>(1, ms * kStepsPerSecond / 1000);
+	Math::Vector3d target = position ? Math::Vector3d(position[0], position[1], position[2]) : _player.eye;
+	float dYaw = 0, dPitch = 0;
+	if (yaw != kKeep) {
+		_player.yaw = wrapAngle(_player.yaw);
+		dYaw = wrapAngle(yaw) - _player.yaw;
+		if (dYaw > M_PI)
+			dYaw -= 2 * M_PI;
+		else if (dYaw < -M_PI)
+			dYaw += 2 * M_PI;
+	}
+	if (pitch != kKeep) {
+		_player.pitch = wrapAngle(_player.pitch);
+		dPitch = wrapAngle(pitch) - _player.pitch;
+		if (dPitch > M_PI)
+			dPitch -= 2 * M_PI;
+		else if (dPitch < -M_PI)
+			dPitch += 2 * M_PI;
+	}
+	const float dFov = fov != kKeep ? fov - _player.fov : 0;
+	const Math::Vector3d dEye = (target - _player.eye) * (1.0f / n);
+	const float endYaw = _player.yaw + dYaw, endPitch = _player.pitch + dPitch, endFov = _player.fov + dFov;
+	for (uint i = 0; i < n && !shouldQuit(); i++) {
+		_player.eye += dEye;
+		_player.yaw += dYaw / n;
+		_player.pitch += dPitch / n;
+		_player.fov += dFov / n;
+		const uint32 t = _logicMs;
+		while (_logicMs == t && !shouldQuit())
+			frame(false);
+	}
+	_player.eye = target;
+	_player.yaw = endYaw;
+	_player.pitch = endPitch;
+	_player.fov = endFov;
+}
+
+void X3DEngine::lookAt(uint32 ms, const Math::Vector3d &target) {
+	// The yaw and pitch whose view direction points at the target (E-0040)
+	const Math::Vector3d d = target - _player.eye;
+	const float len = d.getMagnitude();
+	if (len == 0)
+		return;
+	const float yaw = atan2f(-d.y(), d.x());
+	const float pitch = acosf(CLIP(-d.z() / len, -1.0f, 1.0f));
+	if (ms == 0) {
+		_player.yaw = wrapAngle(yaw);
+		_player.pitch = pitch;
+		runFor(0);
+	} else {
+		moveTo(ms, nullptr, yaw, pitch);
+	}
+}
+
+void X3DEngine::setView(const float *position, float yaw, float pitch) {
+	if (position)
+		_player.eye.set(position[0], position[1], position[2]);
+	_player.yaw = yaw;
+	_player.pitch = pitch;
+	_previous = _player;
+}
+
+void X3DEngine::suspend(bool suspended) {
+	_suspended = suspended;
+	CursorMan.showMouse(!suspended);
 }
 
 void X3DEngine::showBitmap(const Common::Path &path) {

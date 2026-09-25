@@ -42,7 +42,7 @@ Vector3d Player::slide(const Vector3d &from, const Vector3d &velocity, const Col
 
 bool Player::ground(const Collision &collision) {
 	float t;
-	if (!collision.cast(eye, eye - Vector3d(0, 0, 10000), t))
+	if (!collision.cast(eye, eye - Vector3d(0, 0, 10000), t, &groundObject))
 		return false;
 	const float g = eye.z() - 10000 * t;
 	if (eye.z() - g <= 1.3f * _eyeHeight) {
@@ -114,11 +114,21 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 	}
 
 	if (velocity.getMagnitude() > 0) {
+		if (!collide) {
+			eye += velocity;
+			return false;
+		}
 		eye = slide(eye, velocity, collision);
 		if (ground(collision))
 			_fallVelocity = velocity;
 	}
 	return false;
+}
+
+void Player::probeGround(const Collision &collision) {
+	float t;
+	groundObject.clear();
+	collision.cast(eye, eye - Vector3d(0, 0, 10000), t, &groundObject);
 }
 
 } // End of namespace X3D
