@@ -20,26 +20,26 @@
  */
 
 #include "base/plugins.h"
-#include "common/config-manager.h"
-#include "common/file.h"
-#include "common/md5.h"
-#include "common/str-array.h"
-#include "common/translation.h"
-#include "common/util.h"
 #include "monet/detection.h"
 #include "monet/detection_tables.h"
 
 const DebugChannelDef MonetMetaEngineDetection::debugFlagList[] = {
+	{ Monet::kDebugLoad, "Load", "File loading" },
 	{ Monet::kDebugGraphics, "Graphics", "Graphics debug level" },
-	{ Monet::kDebugPath, "Path", "Pathfinding debug level" },
-	{ Monet::kDebugFilePath, "FilePath", "File path debug level" },
-	{ Monet::kDebugScan, "Scan", "Scan for unrecognised games" },
-	{ Monet::kDebugScript, "Script", "Enable debug script dump" },
 	DEBUG_CHANNEL_END
+};
+
+static const char *const directoryGlobs[] = {
+	"data",
+	"2dbit",
+	nullptr
 };
 
 MonetMetaEngineDetection::MonetMetaEngineDetection() : AdvancedMetaEngineDetection(
 	Monet::gameDescriptions, Monet::monetGames) {
+	_flags = kADFlagMatchFullPaths;
+	_maxScanDepth = 3;
+	_directoryGlobs = directoryGlobs;
 }
 
 REGISTER_PLUGIN_STATIC(MONET_DETECTION, PLUGIN_TYPE_ENGINE_DETECTION, MonetMetaEngineDetection);

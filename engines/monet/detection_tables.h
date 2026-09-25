@@ -22,7 +22,7 @@
 namespace Monet {
 
 const PlainGameDescriptor monetGames[] = {
-	{ "monet", "Monet" },
+	{ "monet", "Monet: The Mystery of the Orangerie Museum" },
 	{ 0, 0 }
 };
 
@@ -30,11 +30,12 @@ const ADGameDescription gameDescriptions[] = {
 	{
 		"monet",
 		nullptr,
-		AD_ENTRY1s("file1.bin", "00000000000000000000000000000000", 11111),
+		AD_ENTRY2s("Data/App.bin", "0963102a249b8d930cc02a13aad2fd0c", 440,
+				   "Data/2dbit/Intro1.bmp", "11104526a28e99fb42b1c8c4538e777b", 921656),
 		Common::EN_ANY,
-		Common::kPlatformDOS,
-		ADGF_UNSTABLE,
-		GUIO1(GUIO_NONE)
+		Common::kPlatformWindows,
+		ADGF_UNSTABLE | ADGF_CD,
+		GUIO1(GUIO_NOMIDI)
 	},
 
 	AD_TABLE_END_MARKER

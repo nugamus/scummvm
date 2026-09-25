@@ -1,3 +1,3 @@
 begin_section("Monet");
-	add_person("Name 1", "Handle 1", "");
+	add_person("Jonas Dahl", "Nugamus", "");
 end_section();

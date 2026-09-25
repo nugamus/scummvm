@@ -29,15 +29,6 @@ public:
 	const char *getName() const override;
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override;
-
-	/**
-	 * Determine whether the engine supports the specified MetaEngine feature.
-	 *
-	 * Used by e.g. the launcher to determine whether to enable the Load button.
-	 */
-	bool hasFeature(MetaEngineFeature f) const override;
-
-	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override;
 };
 
 #endif // MONET_METAENGINE_H

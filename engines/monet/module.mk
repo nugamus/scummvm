@@ -1,9 +1,8 @@
 MODULE := engines/monet
 
 MODULE_OBJS = \
-	monet.o \
-	console.o \
-	metaengine.o
+	metaengine.o \
+	monet.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_MONET), DYNAMIC_PLUGIN)
