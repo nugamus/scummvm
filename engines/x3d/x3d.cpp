@@ -180,7 +180,6 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	        sceneName.hasPrefixIgnoreCase("U02") ? (Unit *)&unit02 : nullptr;
 	if (_unit)
 		_unit->afterLoad();
-	interaction.load(scene.dataDir());
 
 	_player = Player();
 	_player.init(scene.scale);
@@ -189,6 +188,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	collision.build(scene);
 	_collision = &collision;
 	interaction.collision = &collision;
+	interaction.load(scene.dataDir()); // after the collision: hidden hotspots leave it
 
 	_keys = Keys();
 	_enterHeld = _suspended = _hoverNow = _clickNow = false;

@@ -151,6 +151,17 @@ bool Scene::load(const Common::String &scriptName) {
 		}
 	}
 
+	// Camera types from the names, then names with one cut to start at their '*'
+	// ("$Z$*U02_10" -> "*U02_10"); animation nodes keep the full names (E-0271)
+	for (Common::Array<Model *> *list : { &_models, &_lodModels })
+		for (Model *m : *list)
+			for (O3DObject &o : m->file.objects) {
+				o.cameraType = o.name.contains("$XYZ$") ? 1 : o.name.contains("$Z$") ? 2 : o.name.contains("$XZ$") ? 3 : 0;
+				const size_t star = o.name.findFirstOf('*');
+				if (o.cameraType && star != Common::String::npos)
+					o.name = o.name.substr(star);
+			}
+
 	return !_models.empty();
 }
 
@@ -622,7 +633,16 @@ void Scene::startAnimation(const Common::String &objectName) {
 }
 
 void Scene::setAnimationState(const Common::String &objectName, float frame, bool paused, float fps, bool loop) {
+	// INFOOBJ finds its node by "equal or contains" (E-0271): *U02_10 is node $Z$*U02_10
 	AnimNode *n = findNode(objectName);
+	Common::String lower = objectName;
+	lower.toLowercase();
+	for (uint i = 0; i < _nodes.size() && !n; i++) {
+		Common::String name = _nodes[i].name;
+		name.toLowercase();
+		if (name.contains(lower))
+			n = &_nodes[i];
+	}
 	if (!n)
 		return;
 	const A3DAnimation &a = n->base.file->animations[n->base.animation];
@@ -1001,6 +1021,25 @@ void Scene::draw(const Camera &cam, int width, int height) {
 	}
 }
 
+void Scene::faceCamera(const Model &m, uint object, Common::Array<float> &v) const {
+	// Welded or not, the object's own vertices turn about its own origin (E-0270)
+	const float *w = m.file.objects[object].world;
+	Common::Array<bool> done(v.size() / 3, false);
+	for (const O3DFace &face : m.file.objects[object].faces)
+		for (uint32 index : face.indices) {
+			if (index * 3 + 2 >= v.size() || done[index])
+				continue;
+			done[index] = true;
+			float d[3], out[3];
+			for (int k = 0; k < 3; k++)
+				d[k] = v[index * 3 + k] - w[12 + k];
+			for (int k = 0; k < 3; k++)
+				out[k] = w[12 + k] + d[0] * _facing[k] + d[1] * _facing[3 + k] + d[2] * _facing[6 + k];
+			for (int k = 0; k < 3; k++)
+				v[index * 3 + k] = out[k];
+		}
+}
+
 void Scene::drawObject(const Model &m, uint object) {
 	// Weld objects index the vertices of the nearest ancestor that has some (Q-0020)
 	const Common::Array<O3DObject> &objects = m.file.objects;
@@ -1014,17 +1053,9 @@ void Scene::drawObject(const Model &m, uint object) {
 	// ponytail: only camera type 2 ($Z$, the only one in U01); types 1 and 3 fix the yaw at
 	// -pi/2 instead (E-0045, E-0058)
 	Common::Array<float> facing;
-	const O3DObject &o = objects[object];
-	if (o.name.contains("$Z$") && owner == (int)object) {
-		const float *w = o.world;
-		facing.resize(o.vertices.size());
-		for (uint v = 0; v < o.vertices.size(); v += 3) {
-			float d[3];
-			for (int k = 0; k < 3; k++)
-				d[k] = o.vertices[v] * w[k] + o.vertices[v + 1] * w[4 + k] + o.vertices[v + 2] * w[8 + k];
-			for (int k = 0; k < 3; k++)
-				facing[v + k] = w[12 + k] + d[0] * _facing[k] + d[1] * _facing[3 + k] + d[2] * _facing[6 + k];
-		}
+	if (objects[object].cameraType == 2) {
+		facing = *vertices;
+		faceCamera(m, object, facing);
 		vertices = &facing;
 	}
 
@@ -1108,7 +1139,24 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 					top = lod.object;
 				}
 			const Common::Array<O3DObject> &dobjects = drawn->file.objects;
-			const Common::Array<float> &v = drawn->worldVertices[top];
+			// Camera-facing objects are picked as drawn (E-0270)
+			Common::Array<float> facing;
+			const Common::Array<float> *vp = &drawn->worldVertices[top];
+			for (uint o = top; o < dobjects.size(); o++) {
+				if (dobjects[o].cameraType != 2)
+					continue;
+				int owner = o;
+				while (owner >= 0 && dobjects[owner].vertices.empty())
+					owner = dobjects[owner].parent;
+				if (owner != (int)top || (o != top && !dobjects[o].welded))
+					continue;
+				if (vp != &facing) {
+					facing = *vp;
+					vp = &facing;
+				}
+				faceCamera(*drawn, o, facing);
+			}
+			const Common::Array<float> &v = *vp;
 
 			// Camera-space vertices, then projected
 			Common::Array<float> cam3(v.size()), screen(v.size() / 3 * 2);

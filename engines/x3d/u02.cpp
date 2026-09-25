@@ -44,7 +44,8 @@ static const char *const kMagpie = "*U02_05";
 static const char *const kClerk = "*U02_04";
 static const char *const kSeller = "*U02_03";
 static const char *const kInspector = "*U02_02";
-static const char *const kBell = "$Z$*U02_10";
+static const char *const kBell = "$Z$*U02_10";     // the whistle cord's node
+static const char *const kBellObject = "*U02_10";  // its object after the name cut (E-0271)
 
 // The gauge warning is said once per process (u02.md, Unit state)
 static bool warned = false;
@@ -79,6 +80,12 @@ void U02::start(bool newGame, bool video) {
 		_vm->inventory()->add("U02_01P");
 	// The autosave, named after Message.txt line 1003 (E-0160)
 	_vm->saveGameState(_vm->getAutosaveSlot(), "Automatic save", true);
+}
+
+// A hotspot's show: visible and back in collision (E-0272)
+void U02::show(const char *object) {
+	_vm->scene()->hideObject(object, false);
+	_vm->collision()->setEnabled(object, true);
 }
 
 void U02::say(const char *character, const char *line) {
@@ -173,7 +180,7 @@ bool U02::handle(const Common::String &action) {
 		if (!_vm->player().groundObject.equalsIgnoreCase("plncher01"))
 			interaction->take("*U02_07");
 	} else if (action.equalsIgnoreCase("PoserPlanche")) {
-		scene->hideObject("*U02_07a", false);
+		show("*U02_07a");
 		interaction->useUp("*U02_13");
 		interaction->setCursorKind("*U02_13", 0);
 		interaction->setCursorKind("*U02_07a", 0);
@@ -330,7 +337,7 @@ void U02::feedMagpie() {
 	_vm->suspend(true);
 	interaction->useUp(kMagpie);
 
-	scene->hideObject("*U02_06a", false);
+	show("*U02_06a");
 	scene->runNodeTo("*U02_06a", -1, false);
 	_vm->runFor(300);
 
@@ -343,7 +350,7 @@ void U02::feedMagpie() {
 	_vm->lookAt(500, scene->objectPosition(kMagpie));
 	_vm->runFor(500);
 
-	scene->hideObject("*U02_09a", false);
+	show("*U02_09a");
 	scene->setNodeLoop("*U02_09a", false);
 	scene->runNodeTo("*U02_09a", -1, false);
 
@@ -368,9 +375,9 @@ void U02::feedMagpie() {
 	resetCalls();
 	_vm->suspend(false);
 	// ponytail: the original keeps walking input on during these waits
+	const Vector3d voice = player.eye - Vector3d(0, 0, 5 * scene->scale); // before the wait
 	_vm->runFor(2000);
-	_vm->sound()->emit(Sound::kVoiceEmitter, Common::Path(scene->dir() + "Sound/d1_24.wav"),
-	                   player.eye - Vector3d(0, 0, 5 * scene->scale), false);
+	_vm->sound()->emit(Sound::kVoiceEmitter, Common::Path(scene->dir() + "Sound/d1_24.wav"), voice, false);
 	_gauge = true;
 	_gaugeStart = _vm->logicMs();
 	waitGroup(Sound::kEffects);
@@ -393,13 +400,12 @@ void U02::ringBell() {
 	Player &player = _vm->player();
 	Sound *sound = _vm->sound();
 	_vm->suspend(true);
-	scene->setNodeLoop(kBell, false);
 	scene->runNodeTo(kBell, -1, false);
 	_vm->interaction()->setCursorKind(kClerk, 5);
 
 	const float eye[3] = { player.eye.x(), player.eye.y(), player.eye.z() };
 	const float yaw = player.yaw, pitch = player.pitch, fov = player.fov;
-	_vm->lookAt(500, scene->objectPosition(kBell));
+	_vm->lookAt(500, scene->objectPosition(kBellObject));
 	sound->stopEmitter(Sound::kPhoneEmitter);
 	effect("SIREN", player.eye);
 	_vm->moveTo(2000, nullptr, kKeep, kKeep, 60);
@@ -445,7 +451,7 @@ void U02::buyTicket() {
 	while (scene->nodeFrame(kClerk) < 100 && scene->clipPlaying(kClerk) && !_vm->shouldQuit())
 		_vm->runFor(0);
 	effect("s1_20", _vm->player().eye);
-	scene->hideObject("*U02_11", false);
+	show("*U02_11");
 	_vm->suspend(false);
 }
 
@@ -539,12 +545,12 @@ void U02::fall() {
 	_vm->suspend(true);
 	effect("s1_19", player.eye);
 
-	// The light down to 90 in about a second
+	// The light down in about a second: a float step, truncated after each (E-0275)
 	const int n = X3DEngine::kStepsPerSecond;
-	const int start[3] = { scene->ambient[0], scene->ambient[1], scene->ambient[2] };
+	const float step[3] = { (scene->ambient[0] - 90) / (float)n, (scene->ambient[1] - 90) / (float)n, (scene->ambient[2] - 90) / (float)n };
 	for (int i = 0; i < n && !_vm->shouldQuit(); i++) {
 		for (int k = 0; k < 3; k++)
-			scene->ambient[k] = CLIP(scene->ambient[k] - (start[k] - 90) / n, 0, 255);
+			scene->ambient[k] = (byte)CLIP((int)(scene->ambient[k] - step[k]), 0, 255);
 		_vm->runFor(10);
 	}
 
