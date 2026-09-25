@@ -60,18 +60,31 @@ public:
 	Camera camera; // #CAMERA# values; position and angles are set by the unit
 
 private:
+	struct Model;
+
+	// A lower-detail stand-in for a base object (docs/engine-spec/scene.md, Levels of detail)
+	struct Lod {
+		const Model *model;
+		uint object;
+		float threshold; // squared distance
+	};
+
 	struct Model {
 		O3DFile file;
 		bool hidden = false;
 		Common::Array<Common::Array<float> > worldVertices; // per object; empty for weld objects
+		Common::Array<Common::Array<Lod> > lods;            // per object, by threshold
 	};
 
-	void loadObject(const Common::String &path, bool hidden);
+	Model *loadModel(const Common::String &path);
+	void attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold);
+	void drawObject(const Model &m, uint object);
 	TGLuint texture(const Common::String &mapName);
 
 	Common::String _dir;  // asset directory, e.g. "U01/"
 	byte _ambient[3] = { 255, 255, 255 };
 	Common::Array<Model *> _models;
+	Common::Array<Model *> _lodModels; // only drawn through their base objects
 	Common::HashMap<Common::String, TGLuint, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _textures;
 };
 

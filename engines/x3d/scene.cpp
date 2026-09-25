@@ -54,6 +54,8 @@ Common::SeekableReadStream *openBinChunk(const Common::Path &file, const char *n
 Scene::~Scene() {
 	for (Model *m : _models)
 		delete m;
+	for (Model *m : _lodModels)
+		delete m;
 	for (auto &t : _textures)
 		if (t._value)
 			tglDeleteTextures(1, &t._value);
@@ -106,37 +108,52 @@ bool Scene::load(const Common::String &scriptName) {
 		}
 		i += strlen(keywords[keyword]);
 
-		// A quoted field; its first value ends at a quote, CR or comma
-		Common::String field;
+		// A quoted field; its first value ends at a quote, CR or comma, then ",value"
+		Common::String field, value;
 		if (i < text.size() && text[i] == '"')
 			i++;
 		while (i < text.size() && text[i] != '"' && text[i] != '\r' && text[i] != ',')
 			field += text[i++];
+		if (i < text.size() && text[i] == ',')
+			while (++i < text.size() && text[i] != '"' && text[i] != '\r')
+				value += text[i];
 		while (i < text.size() && text[i] != '\n')
 			i++;
 		field.replace('\\', '/');
 
-		// Only objects matter for the static view: LODs, animations, lights (Q-0019) and
-		// cameras are not used yet
-		if (keyword == 1)
-			loadObject(field, field.hasPrefixIgnoreCase("static/col"));
+		// Animations, lights (Q-0019) and cameras are not used yet
+		if (keyword == 1) {
+			Model *m = loadModel(field);
+			if (m) {
+				m->hidden = field.hasPrefixIgnoreCase("static/col");
+				_models.push_back(m);
+			}
+		} else if (keyword == 5 && !_models.empty()) {
+			Model *lod = loadModel(field);
+			if (lod) {
+				const float d = MAX(0.0, atof(value.c_str()));
+				_lodModels.push_back(lod);
+				if (!_models.back()->file.objects.empty() && !lod->file.objects.empty())
+					attachLod(_models.back(), 0, lod, 0, d * d);
+			}
+		}
 	}
 
 	return !_models.empty();
 }
 
-void Scene::loadObject(const Common::String &path, bool hidden) {
+Scene::Model *Scene::loadModel(const Common::String &path) {
 	Common::File f;
 	Model *m = new Model();
 	if (!f.open(Common::Path(_dir + path)) || !m->file.load(f)) {
 		warning("Unable to load %s%s", _dir.c_str(), path.c_str());
 		delete m;
-		return;
+		return nullptr;
 	}
-	m->hidden = hidden;
 
 	// Static view: bake each object's world transform into its vertices
 	m->worldVertices.resize(m->file.objects.size());
+	m->lods.resize(m->file.objects.size());
 	for (uint i = 0; i < m->file.objects.size(); i++) {
 		const O3DObject &o = m->file.objects[i];
 		const float *w = o.world;
@@ -148,7 +165,28 @@ void Scene::loadObject(const Common::String &path, bool hidden) {
 				out[v + k] = x * w[k] + y * w[4 + k] + z * w[8 + k] + w[12 + k];
 		}
 	}
-	_models.push_back(m);
+	return m;
+}
+
+void Scene::attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold) {
+	// Pair the i-th children of both objects, in file order, then attach this pair
+	const Common::Array<O3DObject> &bo = base->file.objects, &lo = lod->file.objects;
+	uint j = 0;
+	for (uint i = 0; i < bo.size(); i++) {
+		if (bo[i].parent != (int)baseObject)
+			continue;
+		while (j < lo.size() && lo[j].parent != (int)lodObject)
+			j++;
+		if (j == lo.size())
+			break;
+		attachLod(base, i, lod, j++, threshold);
+	}
+
+	Common::Array<Lod> &lods = base->lods[baseObject];
+	uint at = 0;
+	while (at < lods.size() && lods[at].threshold < threshold)
+		at++;
+	lods.insert_at(at, Lod{ lod, lodObject, threshold });
 }
 
 TGLuint Scene::texture(const Common::String &mapName) {
@@ -225,45 +263,62 @@ void Scene::draw(const Camera &cam, int width, int height) {
 	tglEnable(TGL_ALPHA_TEST);
 	tglAlphaFunc(TGL_GREATER, 0.5f);
 
-	for (Model *m : _models) {
+	for (const Model *m : _models) {
 		if (m->hidden)
 			continue;
-		const Common::Array<O3DObject> &objects = m->file.objects;
-		for (uint i = 0; i < objects.size(); i++) {
-			// Weld objects index the vertices of the nearest ancestor that has some (Q-0020)
-			int owner = i;
-			while (owner >= 0 && objects[owner].vertices.empty())
-				owner = objects[owner].parent;
-			if (owner < 0)
-				continue;
-			const Common::Array<float> &vertices = m->worldVertices[owner];
-
-			for (const O3DFace &face : objects[i].faces) {
-				const O3DMaterial &mat = m->file.materials[face.material];
-				const TGLuint tex = mat.textureMap.empty() ? 0 : texture(mat.textureMap);
-				// Lighting is not specified (Q-0019): texture x ambient, or the second colour
-				if (tex) {
-					tglEnable(TGL_TEXTURE_2D);
-					tglBindTexture(TGL_TEXTURE_2D, tex);
-					tglColor3ub(_ambient[0], _ambient[1], _ambient[2]);
-				} else {
-					tglDisable(TGL_TEXTURE_2D);
-					tglColor3ub(mat.colors[1][0] * _ambient[0] / 255, mat.colors[1][1] * _ambient[1] / 255,
-					            mat.colors[1][2] * _ambient[2] / 255);
+		for (uint i = 0; i < m->file.objects.size(); i++) {
+			// Level of detail by squared distance from the object's origin to the camera
+			const float *origin = m->file.objects[i].world + 12;
+			float s = 0;
+			for (int k = 0; k < 3; k++)
+				s += (origin[k] - p[k]) * (origin[k] - p[k]);
+			const Model *drawn = m;
+			uint object = i;
+			for (const Lod &lod : m->lods[i]) {
+				if (lod.threshold <= s) {
+					drawn = lod.model;
+					object = lod.object;
 				}
-
-				tglBegin(TGL_TRIANGLE_FAN);
-				for (uint k = 0; k < face.indices.size(); k++) {
-					const uint32 index = face.indices[k] * 3;
-					if (index + 2 >= vertices.size())
-						break;
-					if (!face.uvs.empty())
-						tglTexCoord2f(face.uvs[k * 2], face.uvs[k * 2 + 1]);
-					tglVertex3f(vertices[index], vertices[index + 1], vertices[index + 2]);
-				}
-				tglEnd();
 			}
+			drawObject(*drawn, object);
 		}
+	}
+}
+
+void Scene::drawObject(const Model &m, uint object) {
+	// Weld objects index the vertices of the nearest ancestor that has some (Q-0020)
+	const Common::Array<O3DObject> &objects = m.file.objects;
+	int owner = object;
+	while (owner >= 0 && objects[owner].vertices.empty())
+		owner = objects[owner].parent;
+	if (owner < 0)
+		return;
+	const Common::Array<float> &vertices = m.worldVertices[owner];
+
+	for (const O3DFace &face : objects[object].faces) {
+		const O3DMaterial &mat = m.file.materials[face.material];
+		const TGLuint tex = mat.textureMap.empty() ? 0 : texture(mat.textureMap);
+		// Lighting is not specified (Q-0019): texture x ambient, or the second colour
+		if (tex) {
+			tglEnable(TGL_TEXTURE_2D);
+			tglBindTexture(TGL_TEXTURE_2D, tex);
+			tglColor3ub(_ambient[0], _ambient[1], _ambient[2]);
+		} else {
+			tglDisable(TGL_TEXTURE_2D);
+			tglColor3ub(mat.colors[1][0] * _ambient[0] / 255, mat.colors[1][1] * _ambient[1] / 255,
+			            mat.colors[1][2] * _ambient[2] / 255);
+		}
+
+		tglBegin(TGL_TRIANGLE_FAN);
+		for (uint k = 0; k < face.indices.size(); k++) {
+			const uint32 index = face.indices[k] * 3;
+			if (index + 2 >= vertices.size())
+				break;
+			if (!face.uvs.empty())
+				tglTexCoord2f(face.uvs[k * 2], face.uvs[k * 2 + 1]);
+			tglVertex3f(vertices[index], vertices[index + 1], vertices[index + 2]);
+		}
+		tglEnd();
 	}
 }
 
