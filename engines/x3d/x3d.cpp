@@ -31,11 +31,13 @@
 #include "engines/util.h"
 
 #include "graphics/screen.h"
+#include "graphics/tinygl/tinygl.h"
 
 #include "image/bmp.h"
 
 #include "video/avi_decoder.h"
 
+#include "x3d/scene.h"
 #include "x3d/x3d.h"
 
 namespace X3D {
@@ -51,7 +53,8 @@ X3DEngine::~X3DEngine() {
 Common::Error X3DEngine::run() {
 	// All original paths are relative to Data/, which the detector (kADFlagMatchFullPaths)
 	// has already added to SearchMan
-	initGraphics(640, 480, nullptr);
+	const Graphics::PixelFormat format = g_system->getSupportedFormats().front();
+	initGraphics(640, 480, &format);
 	_screen = new Graphics::Screen();
 
 	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
@@ -68,13 +71,51 @@ Common::Error X3DEngine::run() {
 		playVideo("Prologue");
 	}
 
-	while (!shouldQuit()) {
-		Common::Event e;
-		while (_system->getEventManager()->pollEvent(e)) {
-		}
-		_system->delayMillis(10);
+	// A new game starts at the scene named in App.bin #GAME# (E-0037)
+	Common::String sceneName = "U01.X3D";
+	if (ConfMan.hasKey("start_scene")) {
+		sceneName = ConfMan.get("start_scene");
+	} else if (Common::SeekableReadStream *game = openBinChunk("App.bin", "#GAME#")) {
+		sceneName = game->readString(0, 30);
+		delete game;
 	}
 
+	// U01 draws ~5,000 immediate-mode faces a frame, more than the default 5 MB of draw calls
+	TinyGL::createContext(_screen->w, _screen->h, _screen->format, 256, false, false, 64 * 1024 * 1024);
+	{
+		Scene scene;
+		if (!scene.load(sceneName))
+			error("Unable to load scene %s", sceneName.c_str());
+
+		// U01's normal entry holds this first shot for 1.5 s (E-0041)
+		// ponytail: only U01's start camera, other units need their Uxx_Start values
+		Camera camera = scene.camera;
+		if (sceneName.hasPrefixIgnoreCase("U01")) {
+			camera.position[0] = -258.44f;
+			camera.position[1] = -508.20f;
+			camera.position[2] = 29.546f;
+			camera.yaw = 1.31f;
+			camera.pitch = 1.5707960f;
+		}
+
+		// Game logic ticks will run here at a fixed rate once there is logic (movement, scripts);
+		// rendering stays once per loop iteration
+		while (!shouldQuit()) {
+			Common::Event e;
+			while (_system->getEventManager()->pollEvent(e)) {
+			}
+
+			scene.draw(camera, _screen->w, _screen->h);
+			TinyGL::presentBuffer();
+			Graphics::Surface frame;
+			TinyGL::getSurfaceRef(frame);
+			_system->copyRectToScreen(frame.getPixels(), frame.pitch, 0, 0, frame.w, frame.h);
+			_system->updateScreen();
+			_system->delayMillis(10);
+		}
+	}
+
+	TinyGL::destroyContext();
 	return Common::kNoError;
 }
 
