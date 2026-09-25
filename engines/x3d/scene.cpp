@@ -570,6 +570,58 @@ void Scene::loadClip(const Common::String &name, const Common::String &path, flo
 	}
 }
 
+void Scene::setClip(const Common::String &name, const Common::String &path, const Common::String &subAnimation) {
+	AnimNode *n = findNode(name);
+	Common::File f;
+	A3DFile *file = new A3DFile();
+	if (!n || !f.open(Common::Path(_dir + path)) || !file->load(f) || file->animations.empty()) {
+		warning("Unable to load clip %s%s on %s", _dir.c_str(), path.c_str(), name.c_str());
+		delete file;
+		return;
+	}
+	uint animation = 0;
+	int object = -1;
+	if (!subAnimation.empty()) {
+		while (animation < file->animations.size() && !file->animations[animation].name.equalsIgnoreCase(subAnimation))
+			animation++;
+		const Common::Array<O3DObject> &objects = n->model->file.objects;
+		for (uint o = 0; o < objects.size() && object < 0; o++)
+			if (objects[o].name.equalsIgnoreCase(subAnimation))
+				object = o;
+		if (animation == file->animations.size() || object < 0) {
+			warning("Clip %s has no sub-animation %s", path.c_str(), subAnimation.c_str());
+			delete file;
+			return;
+		}
+	}
+	// ponytail: every call loads the file again; cache by path if clips get reloaded often
+	_animationFiles.push_back(file);
+	n->clip = Playback();
+	n->clip.file = file;
+	n->clip.animation = animation;
+	n->clip.object = object;
+	n->clip.fps = n->base.fps;
+	n->clip.frame = file->animations[animation].firstFrame;
+	n->clip.running = false;
+	n->clip.loop = false;
+	n->clipActive = true;
+}
+
+void Scene::endClip(const Common::String &name) {
+	if (AnimNode *n = findNode(name))
+		n->clipActive = false;
+}
+
+void Scene::setNodePingPong(const Common::String &name, bool pingPong) {
+	if (AnimNode *n = findNode(name))
+		active(*n).pingPong = pingPong;
+}
+
+void Scene::enableNode(const Common::String &name, bool enabled) {
+	if (AnimNode *n = findNode(name))
+		n->enabled = enabled;
+}
+
 void Scene::startAnimation(const Common::String &objectName) {
 	if (AnimNode *n = findNode(objectName))
 		n->base.running = true;
@@ -687,7 +739,12 @@ void Scene::Playback::advance(float dt) {
 	const float lo = first >= 0 ? first : a.firstFrame;
 	const float hi = last >= 0 ? last : a.lastFrame;
 	frame += (backward ? -dt : dt) * fps;
-	if (!loop) {
+	if (!loop && pingPong) {
+		if (frame >= hi || frame <= lo) {
+			frame = CLIP(frame, lo, hi);
+			backward = frame >= hi;
+		}
+	} else if (!loop) {
 		frame = CLIP(frame, lo, hi);
 		if (backward ? frame <= lo : frame >= hi)
 			running = false;

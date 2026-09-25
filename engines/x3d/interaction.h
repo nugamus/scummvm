@@ -74,6 +74,9 @@ public:
 	void setCondition(uint32 id, const Common::String &condition);
 	int runs(uint32 id) const;
 	bool exhausted(uint32 id) const;
+	// Steps 2 and 3 run by unit code: take a hotspot's object, use up the held item on one
+	void take(const Common::String &hotspot);
+	void useUp(const Common::String &hotspot);
 	const Common::String &hotspotObject(const Common::String &hotspot) const; // "U01_07" -> "*U01_07"
 	Common::StringArray hotspotNames() const;
 

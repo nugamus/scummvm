@@ -19,54 +19,63 @@
  *
  */
 
-#ifndef X3D_U01_H
-#define X3D_U01_H
+#ifndef X3D_U02_H
+#define X3D_U02_H
 
 #include "common/random.h"
 
-#include "x3d/unit.h"
-#include "common/str.h"
-
 #include "math/vector3d.h"
+
+#include "x3d/unit.h"
 
 namespace X3D {
 
 class X3DEngine;
 
-// U01, the station: its unit code (docs/engine-spec/u01.md)
-class U01 : public Unit {
+// U02, the level crossing and the ticket office (docs/engine-spec/u02.md)
+class U02 : public Unit {
 public:
-	explicit U01(X3DEngine *vm);
+	explicit U02(X3DEngine *vm) : _vm(vm), _random("x3d_u02") {}
 
 	void afterLoad() override;
-	// The scripted entry, after the prologue when video is set; newGame false: state only
 	void start(bool newGame, bool video) override;
-	bool input(float dt) override; // the train
 	bool handle(const Common::String &action) override;
-	void afterFrame() override;    // the escape timer
-	void draw() override;          // the escape timer's gauge
+	void afterFrame() override;
+	void draw() override; // the train gauge
 
 private:
-	void closeDoor();
-	void openDoor();
-	void call();
-	void climb();
-	void throwSwitch();
-	void ride(float dt);
-	bool onTrain(const Common::String &ground);
-	void caught();
-	void leave();
-	void waitVoice();
-	Math::Vector3d objectUnder(const Common::String &parent, const Common::String &name);
-	Math::Vector3d at(const char *object);
+	void say(const char *character, const char *line);
+	void effect(const char *name, const Math::Vector3d &position);
+	Math::Vector3d hotspotPosition(const char *hotspot);
+	void resetCalls();
+	void waitClip(const char *node);
+	void waitGroup(int group);
+	void startSnore();
+	void walkPath(uint32 ms, const Math::Vector3d &target);
+	void follow(const char *object, float untilFrame);
+
+	void refuseCoin();
+	void retakeCoin();
+	void buyChestnuts();
+	void magpieSteals();
+	void magpieFlies();
+	void feedMagpie();
+	void ringBell();
+	void buyTicket();
+	void takeTicket();
+	void board();
+	void fall();
+	void gameOver();
 
 	X3DEngine *_vm;
 	Common::RandomSource _random;
-	bool _switchThrown = false, _train2Loaded = false, _onTrain = false, _firstMaire = true;
+	uint32 _callStart = 0, _callPeriod = 10000; // the seller's calls, in logic ms
+	bool _callOff = false;
+	int _magpie = 0; // 0 idle, 1 perched and waiting, 2 flown
 	bool _gauge = false;
 	uint32 _gaugeStart = 0;
 };
 
 } // End of namespace X3D
 
-#endif // X3D_U01_H
+#endif // X3D_U02_H

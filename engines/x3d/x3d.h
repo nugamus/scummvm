@@ -61,11 +61,14 @@ public:
 	void lookAt(uint32 ms, const Math::Vector3d &target);
 	void setView(const float *position, float yaw, float pitch); // a cut, no interpolation
 	bool enterHeld() const { return _enterHeld; }
+	uint32 logicMs() const { return _logicMs; } // logic time in the scene (ms)
 	// Suspend: no cursor, camera keys or clicks (u01.md)
 	void suspend(bool suspended);
 	void gotoScene(const Common::String &name) { _nextScene = name; }
 	void addUnitAction(const Common::String &name) { _unitActions.push_back(name); }
-	void playVideo(const Common::String &name);
+	// Video/<name>.avi with its soundtrack Video/<wav>.wav (the video's name when empty)
+	void playVideo(const Common::String &name, const Common::String &wav = "");
+	void fadeToBlack(uint32 ms); // the ambient light down to 0 over ms (u01.md, caught)
 
 	// Shows a frame until a command is chosen (ui.md); returns the command, "escape", or
 	// "enter". The scene, if any, stays frozen underneath.
@@ -76,7 +79,7 @@ public:
 	void afterOptionMenu(const Common::String &command);
 	const Common::String &menuText() const { return _menuText; }
 
-	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold
+	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold, pos, act
 	Common::String command(const Common::String &line);
 
 	static constexpr float kKeep = 100.0f;
