@@ -65,6 +65,8 @@ public:
 	void fillRect(int x0, int y0, int x1, int y1, byte r, byte g, byte b);
 	virtual void clear() = 0; // black frame without 3D, for 2D-only screens
 	virtual void present() = 0;
+	// A thumbnail-sized copy of the frame drawn so far (before present), for saves
+	virtual Graphics::Surface *thumbnail(int width, int height) = 0;
 
 protected:
 	int _width = 0, _height = 0;

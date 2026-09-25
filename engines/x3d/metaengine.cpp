@@ -21,6 +21,8 @@
 
 #include "common/translation.h"
 
+#include "graphics/surface.h"
+
 #include "x3d/metaengine.h"
 #include "x3d/detection.h"
 #include "x3d/x3d.h"
@@ -46,6 +48,17 @@ const ADExtraGuiOptionsMap *X3DMetaEngine::getAdvancedExtraGuiOptions() const {
 
 const char *X3DMetaEngine::getName() const {
 	return "x3d";
+}
+
+void X3DMetaEngine::getSavegameThumbnail(Graphics::Surface &thumb) {
+	// The 3D screen cannot be read back by ScummVM: the engine redraws its last view
+	if (X3D::X3DEngine *engine = (X3D::X3DEngine *)g_engine) {
+		if (Graphics::Surface *small = engine->thumbnail(160, 120)) {
+			thumb.copyFrom(*small);
+			small->free();
+			delete small;
+		}
+	}
 }
 
 Common::Error X3DMetaEngine::createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const {

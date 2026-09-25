@@ -32,6 +32,10 @@
 #include "x3d/player.h"
 #include "x3d/scene.h"
 
+namespace Graphics {
+struct Surface;
+}
+
 namespace X3D {
 
 class Collision;
@@ -61,6 +65,8 @@ public:
 	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
 	// A game over (u01.md caught, u02.md): the load screen, else the Option menu
 	void gameOver();
+	// The last view redrawn at thumbnail size (save thumbnails in 3D mode), or nullptr
+	Graphics::Surface *thumbnail(int width, int height);
 
 	// Script primitives for unit code (movement.md, "Scripted camera moves"; u01.md).
 	// They run frames until done, like the original's blocking loops: animation, sound

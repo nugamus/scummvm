@@ -24,6 +24,7 @@
 #include "engines/util.h"
 
 #include "graphics/surface.h"
+#include "graphics/transform_struct.h"
 
 #include "x3d/renderer.h"
 
@@ -169,6 +170,15 @@ public:
 
 	void present() override {
 		g_system->updateScreen();
+	}
+
+	Graphics::Surface *thumbnail(int width, int height) override {
+		Graphics::Surface frame;
+		frame.create(_width, _height, Graphics::PixelFormat::createFormatRGBA32());
+		glReadPixels(0, 0, _width, _height, GL_RGBA, GL_UNSIGNED_BYTE, frame.getPixels());
+		Graphics::Surface *small = frame.scale(width, height, true, Graphics::FLIP_V);
+		frame.free();
+		return small;
 	}
 
 private:

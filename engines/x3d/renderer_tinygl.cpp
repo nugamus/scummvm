@@ -163,6 +163,13 @@ public:
 		g_system->updateScreen();
 	}
 
+	Graphics::Surface *thumbnail(int width, int height) override {
+		TinyGL::presentBuffer();
+		Graphics::Surface frame;
+		TinyGL::getSurfaceRef(frame);
+		return frame.scale(width, height, true);
+	}
+
 private:
 	struct Image {
 		Graphics::Surface surface;
