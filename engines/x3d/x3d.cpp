@@ -144,6 +144,13 @@ Common::Error X3DEngine::loadGameStream(Common::SeekableReadStream *stream) {
 	return Common::kNoError;
 }
 
+Graphics::Surface *X3DEngine::thumbnail(int width, int height) {
+	if (!_scene)
+		return nullptr;
+	_scene->draw(_camera, _renderer->width(), _renderer->height());
+	return _renderer->thumbnail(width, height);
+}
+
 void X3DEngine::gameOver() {
 	// ponytail: ScummVM's load dialog stands in for the OptionLoad frame (save.md)
 	_sound->stopAll();

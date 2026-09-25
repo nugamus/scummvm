@@ -31,6 +31,7 @@ public:
 	Common::Error createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override;
 
 	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override;
+	void getSavegameThumbnail(Graphics::Surface &thumb) override;
 };
 
 #endif // X3D_METAENGINE_H
