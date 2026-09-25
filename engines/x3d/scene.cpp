@@ -56,6 +56,8 @@ Scene::~Scene() {
 		delete m;
 	for (Model *m : _lodModels)
 		delete m;
+	for (A3DFile *f : _animationFiles)
+		delete f;
 	for (auto &t : _textures)
 		if (t._value)
 			tglDeleteTextures(1, &t._value);
@@ -122,8 +124,10 @@ bool Scene::load(const Common::String &scriptName) {
 			i++;
 		field.replace('\\', '/');
 
-		// Animations, lights (Q-0019) and cameras are not used yet
-		if (keyword == 1) {
+		// Lights (Q-0019) and cameras are not used yet
+		if (keyword == 2 && !_models.empty()) {
+			bindAnimation(field, value.empty() ? 30.0f : atof(value.c_str()));
+		} else if (keyword == 1) {
 			Model *m = loadModel(field);
 			if (m) {
 				m->hidden = field.hasPrefixIgnoreCase("static/col");
@@ -152,33 +156,52 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 		return nullptr;
 	}
 
-	// Static view: bake each object's world transform into its vertices
 	m->worldVertices.resize(m->file.objects.size());
 	m->lods.resize(m->file.objects.size());
 	m->hiddenObjects.resize(m->file.objects.size());
-	for (uint i = 0; i < m->file.objects.size(); i++) {
-		const O3DObject &o = m->file.objects[i];
+	m->bounds.resize(m->file.objects.size() * 4);
+	pose(*m);
+	return m;
+}
+
+void Scene::pose(Model &m) {
+	const Common::Array<O3DObject> &objects = m.file.objects;
+
+	// Each object transforms its own vertex range; welded objects write into their top
+	// object's shared array (animation.md, Welded objects)
+	for (uint i = 0; i < objects.size(); i++)
+		m.worldVertices[i].resize(objects[i].vertices.size());
+	for (uint i = 0; i < objects.size(); i++) {
+		const O3DObject &o = objects[i];
+		int top = i;
+		while (top >= 0 && objects[top].vertices.empty())
+			top = objects[top].parent;
+		if (top < 0)
+			continue;
+		const uint first = o.welded ? o.weldFirst : 0;
+		const uint count = o.welded ? o.ownCount : objects[top].vertices.size() / 3;
+		if (!o.welded && top != (int)i)
+			continue;
+		const Common::Array<float> &in = objects[top].vertices;
+		Common::Array<float> &out = m.worldVertices[top];
 		const float *w = o.world;
-		Common::Array<float> &out = m->worldVertices[i];
-		out.resize(o.vertices.size());
-		for (uint v = 0; v < o.vertices.size(); v += 3) {
-			const float x = o.vertices[v], y = o.vertices[v + 1], z = o.vertices[v + 2];
+		for (uint v = first * 3; v < (first + count) * 3 && v + 2 < in.size(); v += 3) {
+			const float x = in[v], y = in[v + 1], z = in[v + 2];
 			for (int k = 0; k < 3; k++)
 				out[v + k] = x * w[k] + y * w[4 + k] + z * w[8 + k] + w[12 + k];
 		}
 	}
 
 	// Bounding spheres of what each object draws, for view culling
-	m->bounds.resize(m->file.objects.size() * 4);
-	for (uint i = 0; i < m->file.objects.size(); i++) {
+	for (uint i = 0; i < objects.size(); i++) {
 		int owner = i;
-		while (owner >= 0 && m->file.objects[owner].vertices.empty())
-			owner = m->file.objects[owner].parent;
+		while (owner >= 0 && objects[owner].vertices.empty())
+			owner = objects[owner].parent;
 		float lo[3] = { 1e30f, 1e30f, 1e30f }, hi[3] = { -1e30f, -1e30f, -1e30f };
 		bool any = false;
 		if (owner >= 0) {
-			const Common::Array<float> &v = m->worldVertices[owner];
-			for (const O3DFace &face : m->file.objects[i].faces) {
+			const Common::Array<float> &v = m.worldVertices[owner];
+			for (const O3DFace &face : objects[i].faces) {
 				for (uint32 index : face.indices) {
 					if (index * 3 + 2 >= v.size())
 						continue;
@@ -190,7 +213,7 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 				}
 			}
 		}
-		float *b = &m->bounds[i * 4];
+		float *b = &m.bounds[i * 4];
 		float r2 = 0;
 		for (int k = 0; k < 3; k++) {
 			b[k] = (lo[k] + hi[k]) / 2;
@@ -198,7 +221,84 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 		}
 		b[3] = any ? sqrtf(r2) : -1;
 	}
-	return m;
+}
+
+void Scene::bindAnimation(const Common::String &path, float fps) {
+	Common::File f;
+	A3DFile *file = new A3DFile();
+	if (!f.open(Common::Path(_dir + path)) || !file->load(f) || file->animations.empty()) {
+		warning("Unable to load %s%s", _dir.c_str(), path.c_str());
+		delete file;
+		return;
+	}
+	_animationFiles.push_back(file);
+	Model *m = _models.back();
+	if (m->file.objects.empty())
+		return;
+
+	// A character's root ("*" in its name) drives the whole file; otherwise each child of
+	// the root drives the object of the same name under the file's first object
+	const A3DAnimation &root = file->animations[0];
+	if (root.name.contains('*')) {
+		_nodes.push_back(AnimNode{ file, 0, m, 0, fps, (float)root.firstFrame });
+		return;
+	}
+	for (uint c = 1; c < file->animations.size(); c++) {
+		if (file->animations[c].parent != 0)
+			continue;
+		// Depth first under the first object: file order, since parents come first
+		for (uint o = 1; o < m->file.objects.size(); o++) {
+			if (m->file.objects[o].name.equalsIgnoreCase(file->animations[c].name)) {
+				_nodes.push_back(AnimNode{ file, c, m, o, fps, (float)file->animations[c].firstFrame });
+				break;
+			}
+		}
+	}
+}
+
+void Scene::animate(const A3DFile &file, uint animation, Model &m, uint object, float frame) {
+	file.sample(animation, frame, m.file.objects[object]);
+
+	// Children pair up by position, both in file order
+	uint o = object + 1;
+	for (uint a = animation + 1; a < file.animations.size(); a++) {
+		if (file.animations[a].parent != (int)animation)
+			continue;
+		while (o < m.file.objects.size() && m.file.objects[o].parent != (int)object)
+			o++;
+		if (o == m.file.objects.size())
+			break;
+		animate(file, a, m, o++, frame);
+	}
+}
+
+void Scene::update(float dt) {
+	for (AnimNode &n : _nodes) {
+		const A3DAnimation &a = n.file->animations[n.animation];
+		if (n.running) {
+			n.frame += dt * n.fps;
+			if (!n.loop) {
+				if (n.frame >= a.lastFrame) {
+					n.frame = a.lastFrame;
+					n.running = false;
+				}
+			} else if (n.frame > a.lastFrame) {
+				n.frame = fmod(n.frame, (float)a.lastFrame) + a.firstFrame;
+			}
+		}
+		animate(*n.file, n.animation, *n.model, n.object, n.frame);
+	}
+
+	// ponytail: re-poses every animated file each step; track dirty objects if it shows up in profiles
+	for (Model *m : _models) {
+		bool animated = false;
+		for (const AnimNode &n : _nodes)
+			animated |= n.model == m;
+		if (animated) {
+			m->file.updateWorld();
+			pose(*m);
+		}
+	}
 }
 
 bool Scene::inView(const float *sphere) const {

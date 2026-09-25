@@ -52,8 +52,14 @@ struct O3DObject {
 	int parent = -1; // index into O3DFile::objects
 	Common::Array<float> vertices; // x, y, z per vertex, object-local
 	Common::Array<O3DFace> faces;
+	// Live transform: loaded from the file, rewritten by animations (animation.md)
 	float pivot[3], localPosition[3], localScale[3];
 	float matrix[16]; // row-vector form, translation in elements 12..14
+
+	// A welded object transforms vertices weldFirst .. weldFirst + ownCount - 1 of its top
+	// object's array (the nearest ancestor with vertices); others own [0, ownCount)
+	bool welded = false;
+	uint32 weldFirst = 0, ownCount = 0;
 
 	// Object-local to world, row-vector form (docs/engine-spec/scene.md, Geometry)
 	float world[16];
@@ -64,6 +70,7 @@ struct O3DFile {
 	Common::Array<O3DObject> objects;
 
 	bool load(Common::SeekableReadStream &s);
+	void updateWorld(); // rebuilds every object's world matrix from its live transform
 };
 
 } // End of namespace X3D

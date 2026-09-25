@@ -104,6 +104,7 @@ Common::Error X3DEngine::run() {
 			player.sphereOffset = 37.0f;
 			noCollision.push_back("Box203");
 			scene.hideObject("Box203");
+			scene.hideObject("Cylinder07");
 		}
 		// Development shortcut: start_camera=x,y,z,yaw,pitch places the camera anywhere
 		if (ConfMan.hasKey("start_camera"))
@@ -148,6 +149,7 @@ Common::Error X3DEngine::run() {
 				previous = player;
 				if (player.tick(stepMs / 1000.0f, keys, collision))
 					playSound("SAUT.WAV");
+				scene.update(stepMs / 1000.0f);
 			}
 
 			const float alpha = (float)pending / stepMs;

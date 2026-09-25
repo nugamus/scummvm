@@ -92,9 +92,12 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 					o.parent = j;
 		}
 
-		uint32 count = s.readUint32LE();
-		if (s.readUint32LE()) {
-			s.readUint32LE();
+		// Welded objects share their top object's vertex array (animation.md, E-0054)
+		o.ownCount = s.readUint32LE();
+		uint32 count = o.ownCount;
+		o.welded = s.readUint32LE() != 0;
+		if (o.welded) {
+			o.weldFirst = s.readUint32LE();
 			count = s.readUint32LE();
 		}
 		o.vertices.resize(count * 3);
@@ -122,6 +125,19 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 		readFloats(s, o.localScale, 3);
 		readFloats(s, o.matrix, 16);
 
+		for (const O3DFace &f : o.faces)
+			for (uint32 index : f.indices)
+				if (f.material >= materials.size() || (count && index >= count))
+					error("O3D: face out of range in '%s'", o.name.c_str());
+	}
+
+	updateWorld();
+	return !s.err() && s.pos() == s.size();
+}
+
+void O3DFile::updateWorld() {
+	// Parents come before their children in the file
+	for (O3DObject &o : objects) {
 		// Tr(-pivot) * diag(scale) * M * [Tr(parent pivot)] * Tr(position) * [parent world]
 		float m[16], t[16];
 		translation(m, -o.pivot[0], -o.pivot[1], -o.pivot[2]);
@@ -141,14 +157,7 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 		if (o.parent >= 0)
 			mult(m, m, objects[o.parent].world);
 		memcpy(o.world, m, sizeof(m));
-
-		for (const O3DFace &f : o.faces)
-			for (uint32 index : f.indices)
-				if (f.material >= materials.size() || (count && index >= count))
-					error("O3D: face out of range in '%s'", o.name.c_str());
 	}
-
-	return !s.err() && s.pos() == s.size();
 }
 
 } // End of namespace X3D
