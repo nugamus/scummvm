@@ -56,6 +56,8 @@ public:
 	// A 2D image over the frame at (x, y), drawn at present(); white (255, 255, 255) is
 	// transparent when keyed
 	virtual void drawImage(const Graphics::Surface &image, int x, int y, bool keyed) = 0;
+	// A filled rectangle over the frame, right/bottom exclusive, drawn at present()
+	void fillRect(int x0, int y0, int x1, int y1, byte r, byte g, byte b);
 	virtual void clear() = 0; // black frame without 3D, for 2D-only screens
 	virtual void present() = 0;
 

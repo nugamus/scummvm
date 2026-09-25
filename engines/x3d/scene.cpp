@@ -71,7 +71,7 @@ bool Scene::load(const Common::String &scriptName) {
 
 	Common::SeekableReadStream *s = openBinChunk(Common::Path(_dir + "SCENE.BIN"), "#SCENE#");
 	if (s) {
-		for (byte &c : _ambient)
+		for (byte &c : ambient)
 			c = s->readUint32LE();
 		scale = s->readFloatLE();
 		delete s;
@@ -165,6 +165,7 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 	m->worldVertices.resize(m->file.objects.size());
 	m->lods.resize(m->file.objects.size());
 	m->hiddenObjects.resize(m->file.objects.size());
+	m->unpickable.resize(m->file.objects.size());
 	m->worldNormals.resize(m->file.objects.size());
 	m->colors.resize(m->file.objects.size());
 	m->colorFrame.resize(m->file.objects.size());
@@ -281,7 +282,9 @@ void Scene::bindAnimation(const Common::String &path, float fps) {
 }
 
 void Scene::addNode(const A3DFile *file, uint animation, Model *m, uint object, float fps) {
+	m->animated = true;
 	AnimNode n;
+	n.name = m->file.objects[object].name;
 	n.model = m;
 	n.object = object;
 	n.base.file = file;
@@ -325,10 +328,7 @@ void Scene::update(float dt) {
 
 	// ponytail: re-poses every animated file each step; track dirty objects if it shows up in profiles
 	for (Model *m : _models) {
-		bool animated = false;
-		for (const AnimNode &n : _nodes)
-			animated |= n.model == m;
-		if (animated) {
+		if (m->animated) {
 			m->file.updateWorld();
 			pose(*m);
 		}
@@ -346,7 +346,7 @@ const Common::Array<byte> &Scene::lighting(const Model &m, uint owner) const {
 	const Common::Array<float> &v = m.worldVertices[owner], &n = m.worldNormals[owner];
 	out.resize(v.size() / 3 * 6);
 	for (uint i = 0; i < v.size() / 3; i++) {
-		float d[3] = { (float)_ambient[0], (float)_ambient[1], (float)_ambient[2] };
+		float d[3] = { (float)ambient[0], (float)ambient[1], (float)ambient[2] };
 		if (m.lit && i * 3 + 2 < n.size()) {
 			for (const Light &l : _lights) {
 				if (l.hidden)
@@ -442,9 +442,123 @@ void Scene::hideObject(const Common::String &name, bool hidden) {
 
 Scene::AnimNode *Scene::findNode(const Common::String &objectName) {
 	for (AnimNode &n : _nodes)
-		if (n.model->file.objects[n.object].name.equalsIgnoreCase(objectName))
+		if (n.name.equalsIgnoreCase(objectName))
 			return &n;
 	return nullptr;
+}
+
+bool Scene::findObject(const Common::String &name, Model *&model, uint &object) const {
+	for (int i = _models.size() - 1; i >= 0; i--)
+		for (uint o = 0; o < _models[i]->file.objects.size(); o++)
+			if (_models[i]->file.objects[o].name.equalsIgnoreCase(name)) {
+				model = _models[i];
+				object = o;
+				return true;
+			}
+	return false;
+}
+
+void Scene::renameObject(const Common::String &from, const Common::String &to) {
+	Model *m;
+	uint o;
+	if (findObject(from, m, o)) {
+		for (AnimNode &n : _nodes)
+			if (n.model == m && n.object == o && n.name.equalsIgnoreCase(from))
+				n.name = to;
+		m->file.objects[o].name = to;
+	}
+}
+
+void Scene::renameNode(const Common::String &from, const Common::String &to) {
+	if (AnimNode *n = findNode(from))
+		n->name = to;
+}
+
+void Scene::setPickable(const Common::String &namePrefix, bool pickable) {
+	for (Model *m : _models)
+		for (uint i = 0; i < m->file.objects.size(); i++)
+			if (m->file.objects[i].name.hasPrefixIgnoreCase(namePrefix))
+				m->unpickable[i] = !pickable;
+}
+
+Scene::Playback &Scene::active(AnimNode &n) {
+	return n.clipActive ? n.clip : n.base;
+}
+
+void Scene::runNodeTo(const Common::String &name, float target, bool backward) {
+	if (AnimNode *n = findNode(name)) {
+		Playback &p = active(*n);
+		p.running = true;
+		p.backward = backward;
+		p.stopAt = target;
+	}
+}
+
+void Scene::pauseNode(const Common::String &name) {
+	if (AnimNode *n = findNode(name))
+		active(*n).running = false;
+}
+
+void Scene::setNodeFrame(const Common::String &name, float frame) {
+	if (AnimNode *n = findNode(name)) {
+		Playback &p = active(*n);
+		const A3DAnimation &a = p.file->animations[p.animation];
+		p.frame = CLIP(frame, p.first >= 0 ? p.first : (float)a.firstFrame, p.last >= 0 ? p.last : (float)a.lastFrame);
+	}
+}
+
+void Scene::setNodeFps(const Common::String &name, float fps) {
+	if (AnimNode *n = findNode(name))
+		active(*n).fps = fps;
+}
+
+void Scene::setNodeLoop(const Common::String &name, bool loop) {
+	if (AnimNode *n = findNode(name))
+		active(*n).loop = loop;
+}
+
+void Scene::setNodeRange(const Common::String &name, float first, float last) {
+	if (AnimNode *n = findNode(name)) {
+		active(*n).first = first;
+		active(*n).last = last;
+	}
+}
+
+void Scene::stepNode(const Common::String &name, float dt) {
+	if (AnimNode *n = findNode(name)) {
+		Playback &p = active(*n);
+		const bool running = p.running;
+		p.running = true;
+		p.advance(dt);
+		p.running = running && p.running;
+	}
+}
+
+float Scene::nodeFrame(const Common::String &name) {
+	AnimNode *n = findNode(name);
+	return n ? active(*n).frame : 0;
+}
+
+float Scene::nodeLastFrame(const Common::String &name) {
+	AnimNode *n = findNode(name);
+	if (!n)
+		return 0;
+	Playback &p = active(*n);
+	return p.last >= 0 ? p.last : p.file->animations[p.animation].lastFrame;
+}
+
+bool Scene::nodeRunning(const Common::String &name) {
+	AnimNode *n = findNode(name);
+	return n && active(*n).running;
+}
+
+void Scene::loadClip(const Common::String &name, const Common::String &path, float fps, float frame) {
+	playClip(name, path);
+	if (AnimNode *n = findNode(name)) {
+		n->clip.fps = fps;
+		n->clip.running = false;
+		n->clip.frame = frame;
+	}
 }
 
 void Scene::startAnimation(const Common::String &objectName) {
@@ -550,16 +664,17 @@ void Scene::Playback::advance(float dt) {
 	if (!running)
 		return;
 	const A3DAnimation &a = file->animations[animation];
-	const float first = a.firstFrame, last = a.lastFrame;
+	const float lo = first >= 0 ? first : a.firstFrame;
+	const float hi = last >= 0 ? last : a.lastFrame;
 	frame += (backward ? -dt : dt) * fps;
 	if (!loop) {
-		frame = CLIP(frame, first, last);
-		if (backward ? frame <= first : frame >= last)
+		frame = CLIP(frame, lo, hi);
+		if (backward ? frame <= lo : frame >= hi)
 			running = false;
-	} else if (frame > last) {
-		frame = fmod(frame, last) + first;
-	} else if (frame < first) {
-		frame = last - (first - frame);
+	} else if (frame > hi) {
+		frame = fmod(frame, hi) + lo;
+	} else if (frame < lo) {
+		frame = hi - (lo - frame);
 	}
 	if (stopAt >= 0 && fabs(frame - stopAt) <= 2 * dt * fps) {
 		frame = stopAt;
@@ -795,7 +910,7 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 		const Common::Array<O3DObject> &objects = m->file.objects;
 		for (uint i = 0; i < objects.size(); i++) {
 			// Welded objects are tested with their top object, whose vertices they share
-			if (m->hiddenObjects[i] || objects[i].vertices.empty())
+			if (m->hiddenObjects[i] || m->unpickable[i] || objects[i].vertices.empty())
 				continue;
 
 			// The drawn level of detail supplies the faces

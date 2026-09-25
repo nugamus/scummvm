@@ -26,7 +26,7 @@ namespace X3D {
 
 using Math::Vector3d;
 
-void Collision::build(const Scene &scene, const Common::StringArray &noCollision) {
+void Collision::build(const Scene &scene) {
 	_objects.clear();
 	for (const Scene::Model *m : scene.models()) {
 		const Common::Array<O3DObject> &objects = m->file.objects;
@@ -46,55 +46,75 @@ void Collision::build(const Scene &scene, const Common::StringArray &noCollision
 		}
 
 		for (int i : order) {
-			const O3DObject &o = objects[i];
-			if (o.faces.empty())
+			if (objects[i].faces.empty())
 				continue;
-			bool excluded = false;
-			for (const Common::String &name : noCollision)
-				excluded |= o.name.equalsIgnoreCase(name);
-			if (excluded)
-				continue;
-
-			// Weld objects use the vertices of the nearest ancestor that has some (Q-0020)
-			int owner = i;
-			while (owner >= 0 && objects[owner].vertices.empty())
-				owner = objects[owner].parent;
-			if (owner < 0)
-				continue;
-			const Common::Array<float> &vertices = m->worldVertices[owner];
-			const float *w = objects[owner].world;
-
 			Object obj;
-			Vector3d lo(1e30f, 1e30f, 1e30f), hi(-1e30f, -1e30f, -1e30f);
-			for (const O3DFace &f : o.faces) {
-				Face face;
-				for (uint32 index : f.indices) {
-					if (index * 3 + 2 >= vertices.size())
-						break;
-					const Vector3d v(&vertices[index * 3]);
-					face.vertices.push_back(v);
-					for (int k = 0; k < 3; k++) {
-						lo.getData()[k] = (MIN(lo.getData()[k], v.getData()[k]));
-						hi.getData()[k] = (MAX(hi.getData()[k], v.getData()[k]));
-					}
-				}
-				if (face.vertices.size() < 3)
-					continue;
-				// The stored normal is object-local; rotate it with the object (row vectors)
-				const float *n = f.normal;
-				face.normal.set(n[0] * w[0] + n[1] * w[4] + n[2] * w[8],
-				                n[0] * w[1] + n[1] * w[5] + n[2] * w[9],
-				                n[0] * w[2] + n[1] * w[6] + n[2] * w[10]);
-				face.normal.normalize();
-				obj.faces.push_back(face);
-			}
-			if (obj.faces.empty())
-				continue;
-			obj.center = (lo + hi) * 0.5f;
-			obj.radius = (hi - lo).getMagnitude() * 0.5f;
+			obj.model = m;
+			obj.object = i;
+			fill(obj);
 			_objects.push_back(obj);
 		}
 	}
+}
+
+void Collision::refresh() {
+	for (Object &obj : _objects)
+		if (((const Scene::Model *)obj.model)->animated)
+			fill(obj);
+}
+
+void Collision::setEnabled(const Common::String &name, bool enabled, bool subtree) {
+	for (Object &obj : _objects) {
+		const Common::Array<O3DObject> &objects = ((const Scene::Model *)obj.model)->file.objects;
+		for (int o = obj.object; o >= 0; o = subtree ? objects[o].parent : -1) {
+			if (objects[o].name.equalsIgnoreCase(name)) {
+				obj.enabled = enabled;
+				break;
+			}
+		}
+	}
+}
+
+void Collision::fill(Object &obj) const {
+	const Scene::Model *m = (const Scene::Model *)obj.model;
+	const Common::Array<O3DObject> &objects = m->file.objects;
+	const O3DObject &o = objects[obj.object];
+	obj.faces.clear();
+
+	// Welded objects use the vertices of their top object (animation.md)
+	int owner = obj.object;
+	while (owner >= 0 && objects[owner].vertices.empty())
+		owner = objects[owner].parent;
+	if (owner < 0)
+		return;
+	const Common::Array<float> &vertices = m->worldVertices[owner];
+	const float *w = objects[owner].world;
+
+	Vector3d lo(1e30f, 1e30f, 1e30f), hi(-1e30f, -1e30f, -1e30f);
+	for (const O3DFace &f : o.faces) {
+		Face face;
+		for (uint32 index : f.indices) {
+			if (index * 3 + 2 >= vertices.size())
+				break;
+			const Vector3d v(&vertices[index * 3]);
+			face.vertices.push_back(v);
+			for (int k = 0; k < 3; k++) {
+				lo.getData()[k] = MIN(lo.getData()[k], v.getData()[k]);
+				hi.getData()[k] = MAX(hi.getData()[k], v.getData()[k]);
+			}
+		}
+		if (face.vertices.size() < 3)
+			continue;
+		// The stored normal is object-local; rotate it with the object (row vectors)
+		const float *n = f.normal;
+		face.normal.set(n[0] * w[0] + n[1] * w[4] + n[2] * w[8],
+		                n[0] * w[1] + n[1] * w[5] + n[2] * w[9],
+		                n[0] * w[2] + n[1] * w[6] + n[2] * w[10]);
+		face.normal.normalize();
+		obj.faces.push_back(face);
+	}
+	obj.center = (lo + hi) * 0.5f;
+	obj.radius = (hi - lo).getMagnitude() * 0.5f;
 }
 
 bool Collision::inside(const Face &face, const Vector3d &p) {
@@ -137,7 +157,7 @@ Vector3d Collision::nearestOnBoundary(const Face &face, const Vector3d &p) {
 Vector3d Collision::resolveSphere(Vector3d c, float r) const {
 	const float cos45 = 0.70710678f;
 	for (const Object &o : _objects) {
-		if ((c - o.center).getMagnitude() >= r + o.radius)
+		if (!o.enabled || o.faces.empty() || (c - o.center).getMagnitude() >= r + o.radius)
 			continue;
 		for (const Face &f : o.faces) {
 			const float d = Vector3d::dotProduct(c - f.vertices[0], f.normal);
@@ -161,10 +181,12 @@ Vector3d Collision::resolveSphere(Vector3d c, float r) const {
 	return c;
 }
 
-bool Collision::cast(const Vector3d &from, const Vector3d &to, float &t) const {
+bool Collision::cast(const Vector3d &from, const Vector3d &to, float &t, Common::String *hitName) const {
 	bool hit = false;
 	t = 1;
 	for (const Object &o : _objects) {
+		if (!o.enabled)
+			continue;
 		for (const Face &f : o.faces) {
 			const float d0 = Vector3d::dotProduct(from - f.vertices[0], f.normal);
 			const float d1 = Vector3d::dotProduct(to - f.vertices[0], f.normal);
@@ -175,6 +197,8 @@ bool Collision::cast(const Vector3d &from, const Vector3d &to, float &t) const {
 				continue;
 			t = u;
 			hit = true;
+			if (hitName)
+				*hitName = ((const Scene::Model *)o.model)->file.objects[o.object].name;
 		}
 	}
 	return hit;

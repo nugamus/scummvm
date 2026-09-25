@@ -37,7 +37,8 @@ namespace X3D {
 class Sound {
 public:
 	enum Group { kAmbient = 1, kVoice = 2, kEffects = 3 };
-	enum Emitter { kVoiceEmitter, kEffectsEmitter };
+	// The phone emitter is U01's third one (u01.md, ClicTel)
+	enum Emitter { kVoiceEmitter, kEffectsEmitter, kPhoneEmitter };
 
 	explicit Sound(Audio::Mixer *mixer);
 	~Sound();
@@ -55,6 +56,8 @@ public:
 	bool emit(Emitter e, const Common::Path &path, const Math::Vector3d &position, bool loop);
 	void detach(Emitter e); // op 101: the emitter no longer owns its sound
 	void updateVolumes(const Math::Vector3d &eye);
+	void setEmitterPosition(Emitter e, const Math::Vector3d &position) { _emitters[e].position = position; }
+	void stopEmitter(Emitter e);
 
 private:
 	struct Playing {
@@ -76,7 +79,7 @@ private:
 		Common::String lastName;
 		Audio::SoundHandle handle;
 		bool owns = false;
-	} _emitters[2];
+	} _emitters[3];
 };
 
 } // End of namespace X3D

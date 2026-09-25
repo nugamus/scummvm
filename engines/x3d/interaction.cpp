@@ -236,6 +236,39 @@ void Interaction::setCursorKind(const Common::String &hotspot, uint kind) {
 		_hotspots[h].cursor = kind;
 }
 
+void Interaction::runAction(uint32 id, Common::StringArray &unitActions) {
+	for (Action &a : _actions)
+		if (a.id == id) {
+			run(a, unitActions);
+			return;
+		}
+}
+
+void Interaction::setCondition(uint32 id, const Common::String &condition) {
+	for (Action &a : _actions)
+		if (a.id == id)
+			a.condition = condition;
+}
+
+int Interaction::runs(uint32 id) const {
+	for (const Action &a : _actions)
+		if (a.id == id)
+			return a.runs;
+	return 0;
+}
+
+bool Interaction::exhausted(uint32 id) const {
+	for (const Action &a : _actions)
+		if (a.id == id)
+			return a.exhausted;
+	return false;
+}
+
+const Common::String &Interaction::hotspotObject(const Common::String &hotspot) const {
+	const int h = findHotspot(hotspot);
+	return h >= 0 ? _hotspots[h].name : hotspot;
+}
+
 bool Interaction::evaluate(const Common::String &condition) const {
 	// true / false, mNN or NN (action NN is exhausted), !, & and | left to right, ( )
 	Common::String c = condition;

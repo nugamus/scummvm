@@ -62,6 +62,13 @@ public:
 
 	void setCursorKind(const Common::String &hotspot, uint kind);
 
+	// Unit code access to actions by id (Mnn)
+	void runAction(uint32 id, Common::StringArray &unitActions); // steps, then count the run
+	void setCondition(uint32 id, const Common::String &condition);
+	int runs(uint32 id) const;
+	bool exhausted(uint32 id) const;
+	const Common::String &hotspotObject(const Common::String &hotspot) const; // "U01_07" -> "*U01_07"
+
 	bool actionsEnabled = true;
 
 private:

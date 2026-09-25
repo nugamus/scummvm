@@ -34,14 +34,19 @@ class Scene;
 // World-space collision against a scene's objects (docs/engine-spec/movement.md, Collision)
 class Collision {
 public:
-	// Every object of every loaded file, visible or hidden, except the named ones
-	void build(const Scene &scene, const Common::StringArray &noCollision);
+	// Every object of every loaded file, visible or hidden
+	void build(const Scene &scene);
+	// Re-reads the faces of animated files (their objects move)
+	void refresh();
+	// Collision on or off for the named object, and optionally everything below it
+	void setEnabled(const Common::String &name, bool enabled, bool subtree = false);
 
 	// Sphere resolution: pushes the centre c of a sphere of radius r out of the faces
 	Math::Vector3d resolveSphere(Math::Vector3d c, float r) const;
 
-	// Nearest face crossed from its front side by the segment from -> to; t in [0, 1]
-	bool cast(const Math::Vector3d &from, const Math::Vector3d &to, float &t) const;
+	// Nearest face crossed from its front side by the segment from -> to; t in [0, 1].
+	// hitName, if given, receives the hit object's name.
+	bool cast(const Math::Vector3d &from, const Math::Vector3d &to, float &t, Common::String *hitName = nullptr) const;
 
 private:
 	struct Face {
@@ -50,10 +55,15 @@ private:
 	};
 
 	struct Object {
+		const void *model; // Scene::Model
+		uint object;
+		bool enabled = true;
 		Math::Vector3d center;
 		float radius;
 		Common::Array<Face> faces;
 	};
+
+	void fill(Object &obj) const;
 
 	static bool inside(const Face &face, const Math::Vector3d &p);
 	static Math::Vector3d nearestOnBoundary(const Face &face, const Math::Vector3d &p);

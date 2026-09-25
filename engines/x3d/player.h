@@ -22,6 +22,8 @@
 #ifndef X3D_PLAYER_H
 #define X3D_PLAYER_H
 
+#include "common/str.h"
+
 #include "math/vector3d.h"
 
 namespace X3D {
@@ -46,6 +48,11 @@ public:
 	float yaw = 0, pitch = M_PI / 2, fov = 90, roll = 0;
 	float sphereOffset = 0; // eye minus collision sphere centre, along Z
 	bool canMove = true, canTurn = true;
+	bool collide = true;           // collision and ground snapping (U01's train turns it off)
+	Common::String groundObject;   // name of the object the last ground probe hit
+
+	// The downward probe alone: updates groundObject, not the position
+	void probeGround(const Collision &collision);
 
 private:
 	Math::Vector3d slide(const Math::Vector3d &eye, const Math::Vector3d &velocity, const Collision &collision) const;

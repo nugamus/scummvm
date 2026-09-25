@@ -22,6 +22,7 @@
 #include "common/config-manager.h"
 
 #include "graphics/renderer.h"
+#include "graphics/surface.h"
 
 #include "x3d/renderer.h"
 
@@ -39,6 +40,16 @@ Renderer *Renderer::create(int width, int height) {
 		if (Renderer *r = createOpenGLRenderer(width, height))
 			return r;
 	return createTinyGLRenderer(width, height);
+}
+
+void Renderer::fillRect(int x0, int y0, int x1, int y1, byte r, byte g, byte b) {
+	if (x1 <= x0 || y1 <= y0)
+		return;
+	Graphics::Surface s;
+	s.create(x1 - x0, y1 - y0, Graphics::PixelFormat::createFormatRGBA32());
+	s.fillRect(Common::Rect(s.w, s.h), s.format.ARGBToColor(255, r, g, b));
+	drawImage(s, x0, y0, false);
+	s.free();
 }
 
 } // End of namespace X3D
