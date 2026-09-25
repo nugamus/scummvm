@@ -123,6 +123,9 @@ private:
 	// The view of the frame being drawn, for culling: eye, axes, half-extents per unit depth
 	float _eye[3], _right[3], _up[3], _forward[3], _halfWidth, _halfHeight;
 	TGLuint _boundTexture;
+	// Camera-facing ($Z$) objects: world offset -> world, rotating it as if the camera
+	// had yaw pi/2 (row vectors, 3x3)
+	float _facing[9];
 	Common::HashMap<Common::String, TGLuint, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _textures;
 };
 
