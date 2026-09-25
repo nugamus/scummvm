@@ -157,6 +157,7 @@ Common::Error X3DEngine::run() {
 			camera.yaw = previous.yaw + (player.yaw - previous.yaw) * alpha;
 			camera.pitch = previous.pitch + (player.pitch - previous.pitch) * alpha;
 			camera.fov = player.fov;
+			camera.roll = player.roll;
 
 			scene.draw(camera, _screen->w, _screen->h);
 			TinyGL::presentBuffer();

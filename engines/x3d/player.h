@@ -43,7 +43,7 @@ public:
 	bool tick(float dt, const Keys &keys, const Collision &collision);
 
 	Math::Vector3d eye;
-	float yaw = 0, pitch = M_PI / 2, fov = 90;
+	float yaw = 0, pitch = M_PI / 2, fov = 90, roll = 0;
 	float sphereOffset = 0; // eye minus collision sphere centre, along Z
 	bool canMove = true, canTurn = true;
 
@@ -52,6 +52,7 @@ private:
 	bool ground(const Collision &collision); // snaps eye to the ground or starts a fall
 
 	float _scale = 1, _speed = 2, _eyeHeight = 1.5f, _radius = 0.5f;
+	float _bob = 1; // head bob direction, kept across scenes
 
 	// A fall in progress: drops _fallDrop from _fallZ, then slides once with _fallVelocity
 	bool _falling = false;

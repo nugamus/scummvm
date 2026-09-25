@@ -85,8 +85,12 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 				_speed = 1;
 			direction = -1;
 		}
-		// ponytail: no head bob (camera roll); add it with the roll term in the view matrix
 		if (direction) {
+			// Head bob: roll 1 degree per second, turning back at +-0.4
+			roll += _bob * dt;
+			if (fabs(roll) >= 0.4f)
+				_bob = -_bob;
+
 			float step = _speed * _scale * dt;
 			const Vector3d centre = eye - Vector3d(0, 0, sphereOffset);
 			const Vector3d ahead(10000 * d.x(), 10000 * d.y(), d.z());
