@@ -28,11 +28,9 @@
 
 #include "x3d/detection.h"
 
-namespace Graphics {
-class Screen;
-}
-
 namespace X3D {
+
+class Renderer;
 
 class X3DEngine : public Engine {
 public:
@@ -60,7 +58,7 @@ private:
 	static const uint kStepsPerSecond = 60;
 
 	const ADGameDescription *_gameDescription;
-	Graphics::Screen *_screen = nullptr;
+	Renderer *_renderer = nullptr;
 };
 
 } // End of namespace X3D

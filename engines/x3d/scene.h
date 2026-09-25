@@ -29,7 +29,6 @@
 #include "common/path.h"
 #include "common/str.h"
 
-#include "graphics/tinygl/tinygl.h"
 
 #include "x3d/a3d.h"
 #include "x3d/o3d.h"
@@ -52,8 +51,11 @@ struct Camera {
 	float roll = 0;          // degrees, about the view direction
 };
 
+class Renderer;
+
 class Scene {
 public:
+	explicit Scene(Renderer *renderer) : _renderer(renderer) {}
 	~Scene();
 
 	// Loads a unit from its .X3D script name, e.g. "U01.X3D"
@@ -136,7 +138,7 @@ private:
 	void attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold);
 	void drawObject(const Model &m, uint object);
 	bool inView(const float *sphere) const;
-	TGLuint texture(const Common::String &mapName);
+	uint32 texture(const Common::String &mapName);
 
 	Common::String _dir;  // asset directory, e.g. "U01/"
 	byte _ambient[3] = { 255, 255, 255 };
@@ -147,11 +149,11 @@ private:
 
 	// The view of the frame being drawn, for culling: eye, axes, half-extents per unit depth
 	float _eye[3], _right[3], _up[3], _forward[3], _halfWidth, _halfHeight;
-	TGLuint _boundTexture;
 	// Camera-facing ($Z$) objects: world offset -> world, rotating it as if the camera
 	// had yaw pi/2 (row vectors, 3x3)
 	float _facing[9];
-	Common::HashMap<Common::String, TGLuint, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _textures;
+	Renderer *_renderer;
+	Common::HashMap<Common::String, uint32, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _textures;
 };
 
 } // End of namespace X3D
