@@ -12,6 +12,8 @@ MODULE_OBJS = \
 	renderer_opengl.o \
 	renderer_tinygl.o \
 	scene.o \
+	sound.o \
+	talk.o \
 	x3d.o
 
 # This module can be built as a plugin

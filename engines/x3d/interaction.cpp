@@ -33,7 +33,8 @@
 
 #include "x3d/interaction.h"
 #include "x3d/scene.h"
-#include "x3d/x3d.h"
+#include "x3d/sound.h"
+#include "x3d/talk.h"
 
 namespace X3D {
 
@@ -56,7 +57,7 @@ static const char *const kCursorNames[] = {
 };
 static const int kCursorHotspots[][2] = { { 0, 0 }, { 9, 2 }, { 9, 2 }, { 10, 10 }, { 10, 4 }, { 10, 10 } };
 
-Interaction::Interaction(X3DEngine *vm, Scene &scene) : _vm(vm), _scene(scene) {
+Interaction::Interaction(Scene &scene, Sound &sound, Talk &talk) : _scene(scene), _sound(sound), _talk(talk) {
 	// The cursors are resources of the game's EXE: next to Data/ in an installed copy,
 	// under INSTALL/02_PR/ on the CD
 	Common::PEResources exe;
@@ -317,14 +318,33 @@ void Interaction::click(int hotspot, Common::StringArray &unitActions) {
 	}
 }
 
+// Sound/<name>.WAV, or Sound/<name> when the name has the extension (sound.md)
+Common::Path Interaction::soundPath(const Common::String &name) const {
+	Common::String lower = name;
+	lower.toLowercase();
+	return Common::Path(_soundDir + (lower.contains(".wav") ? name : name + ".WAV"));
+}
+
+Common::String Interaction::hotspotName(const Action &a) const {
+	const int h = findHotspot(a.hotspot);
+	return h >= 0 ? _hotspots[h].name : a.hotspot;
+}
+
 void Interaction::run(Action &a, Common::StringArray &unitActions) {
+	debug(1, "action %s on %s", a.name.c_str(), a.hotspot.c_str());
 	const int target = findHotspot(a.target);
 	const Common::String targetName = target >= 0 ? _hotspots[target].name : a.target;
 	for (uint k = 0; k < a.ops.size(); k++) {
 		const Common::String &arg = a.args[k];
 		switch (a.ops[k]) {
-		case 1: // voice; characters' lip sync is not implemented
-			_vm->playSound(_soundDir + arg + ".wav");
+		case 1: // voice: a character talks, anything else speaks from the hotspot (sound.md)
+			if (a.targetType == 6 || (target >= 0 && _hotspots[target].type == 6)) {
+				const Common::String character = targetName.hasPrefix("*") ? targetName.substr(1) : targetName;
+				if (!_talk.say(character, arg))
+					_sound.emit(Sound::kVoiceEmitter, soundPath(arg), eye, false);
+			} else {
+				_sound.emit(Sound::kVoiceEmitter, soundPath(arg), _scene.objectPosition(hotspotName(a)), false);
+			}
 			break;
 		case 2: // take the target
 			if (target >= 0)
@@ -351,9 +371,15 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 			unitActions.push_back(arg);
 			break;
 		case 12:
+			_sound.play(soundPath(arg), Sound::kAmbient, 85, true);
+			break;
 		case 13:
-		case 101: // ponytail: no positional sound or second channel yet
-			_vm->playSound(_soundDir + (arg.hasSuffixIgnoreCase(".wav") ? arg : arg + ".WAV"));
+			_sound.emit(Sound::kEffectsEmitter, soundPath(arg), _scene.objectPosition(hotspotName(a)), false);
+			break;
+		case 101:
+			_sound.stopGroup(Sound::kVoice);
+			_sound.detach(Sound::kVoiceEmitter);
+			_sound.play(soundPath(arg), Sound::kVoice, 100, false);
 			break;
 		case 14:
 			for (Action &b : _actions)
