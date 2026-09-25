@@ -3,6 +3,7 @@ MODULE := engines/x3d
 MODULE_OBJS = \
 	a3d.o \
 	collision.o \
+	console.o \
 	dmf.o \
 	interaction.o \
 	inventory.o \

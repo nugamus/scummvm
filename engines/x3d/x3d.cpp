@@ -38,6 +38,7 @@
 #include "video/avi_decoder.h"
 
 #include "x3d/collision.h"
+#include "x3d/console.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
 #include "x3d/player.h"
@@ -66,6 +67,7 @@ Common::Error X3DEngine::run() {
 	// and shows more to the sides. 2D images stay 640x480, centred.
 	_renderer = Renderer::create(ConfMan.hasKey("widescreen") && ConfMan.getBool("widescreen") ? 854 : 640, 480);
 	_sound = new Sound(_mixer);
+	setDebugger(new Console(this));
 
 	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
 	// sequence and the scene's entry video
@@ -155,6 +157,26 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 		}
 	}
 
+	// Development shortcut: dev_commands=ms:command[;ms:command...] runs console commands
+	// at those times after the scene starts (console.h)
+	_devCommands.clear();
+	if (ConfMan.hasKey("dev_commands")) {
+		const Common::String commands = ConfMan.get("dev_commands");
+		Common::String c;
+		for (const char *p = commands.c_str(); ; p++) {
+			if (*p == ';' || !*p) {
+				c.trim();
+				if (!c.empty())
+					_devCommands.push_back(c);
+				c.clear();
+				if (!*p)
+					break;
+			} else {
+				c += *p;
+			}
+		}
+	}
+
 	// Development shortcut: start_camera=x,y,z,yaw,pitch places the camera anywhere and
 	// skips the unit's scripted start
 	if (ConfMan.hasKey("start_camera")) {
@@ -203,6 +225,12 @@ void X3DEngine::frame(bool input) {
 		_clickNow = true;
 		for (int i = 0; i < 3; i++)
 			_devClicks.remove_at(0);
+	}
+
+	// Due commands, up to the first click (one click per frame)
+	while (input && !_clickNow && !_devCommands.empty() && _system->getMillis() - _sceneStart >= (uint32)atoi(_devCommands[0].c_str())) {
+		const Common::String c = _devCommands.remove_at(0);
+		debug(1, "dev command %s: %s", c.c_str(), command(c.substr(c.findFirstOf(':') + 1)).c_str());
 	}
 
 	Common::Event e;
@@ -409,6 +437,76 @@ void X3DEngine::setView(const float *position, float yaw, float pitch) {
 	_player.yaw = yaw;
 	_player.pitch = pitch;
 	_previous = _player;
+}
+
+Common::String X3DEngine::command(const Common::String &line) {
+	if (!_scene)
+		return "no scene";
+	Common::StringArray a;
+	Common::String w;
+	for (uint i = 0; i <= line.size(); i++) {
+		if (i == line.size() || line[i] == ' ') {
+			if (!w.empty())
+				a.push_back(w);
+			w.clear();
+		} else {
+			w += line[i];
+		}
+	}
+	if (a.empty())
+		return "";
+	const Common::String &c = a[0];
+	if (c == "where")
+		return Common::String::format("%g,%g,%g,%g,%g fov %g", _player.eye.x(), _player.eye.y(), _player.eye.z(),
+		                              _player.yaw, _player.pitch, _player.fov);
+	if (c == "goto" && a.size() >= 4) {
+		const float p[3] = { (float)atof(a[1].c_str()), (float)atof(a[2].c_str()), (float)atof(a[3].c_str()) };
+		setView(p, a.size() > 4 ? atof(a[4].c_str()) : _player.yaw, a.size() > 5 ? atof(a[5].c_str()) : _player.pitch);
+		return "ok";
+	}
+	if (c == "lookat" && a.size() >= 2) {
+		lookAt(a.size() > 2 ? atoi(a[2].c_str()) : 0, _scene->objectCenter(a[1]));
+		return "ok";
+	}
+	if (c == "click") {
+		if (a.size() >= 3) {
+			_mouse = Common::Point(atoi(a[1].c_str()), atoi(a[2].c_str()));
+		} else if (a.size() == 2) {
+			// The object's centre on screen, with the render projection
+			const Math::Vector3d d = _scene->objectCenter(a[1]) - _player.eye;
+			const float yaw = _player.yaw, pitch = _player.pitch;
+			const Math::Vector3d right(-sinf(yaw), -cosf(yaw), 0);
+			const Math::Vector3d up(cosf(pitch) * cosf(yaw), -cosf(pitch) * sinf(yaw), sinf(pitch));
+			const Math::Vector3d fwd(sinf(pitch) * cosf(yaw), -sinf(pitch) * sinf(yaw), -cosf(pitch));
+			const float z = Math::Vector3d::dotProduct(d, fwd);
+			if (z <= 0)
+				return "behind the camera";
+			const float ky = (4.0f / 3.0f) / tan(_player.fov * M_PI / 360.0), kx = ky * _renderer->height() / _renderer->width();
+			const float cx = _renderer->width() / 2.0f, cy = _renderer->height() / 2.0f;
+			_mouse = Common::Point(cx + cx * Math::Vector3d::dotProduct(d, right) * kx / z,
+			                       cy - cy * Math::Vector3d::dotProduct(d, up) * ky / z);
+		}
+		_clickNow = true;
+		return Common::String::format("click %d,%d", _mouse.x, _mouse.y);
+	}
+	if (c == "hotspots") {
+		Common::String out;
+		for (const Common::String &h : _interaction->hotspotNames()) {
+			const Common::String name = h.substr(0, h.findFirstOf(' '));
+			const Math::Vector3d p = _scene->objectCenter(name);
+			out += Common::String::format("%s at %g,%g,%g\n", h.c_str(), p.x(), p.y(), p.z());
+		}
+		return out;
+	}
+	if (c == "give" && a.size() >= 2) {
+		_inventory->add(a[1]);
+		return "ok";
+	}
+	if (c == "hold" && a.size() >= 2) {
+		_interaction->holdItem(a[1]);
+		return "ok";
+	}
+	return "unknown command " + c;
 }
 
 void X3DEngine::suspend(bool suspended) {

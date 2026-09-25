@@ -75,6 +75,7 @@ public:
 	int runs(uint32 id) const;
 	bool exhausted(uint32 id) const;
 	const Common::String &hotspotObject(const Common::String &hotspot) const; // "U01_07" -> "*U01_07"
+	Common::StringArray hotspotNames() const;
 
 	bool actionsEnabled = true;
 

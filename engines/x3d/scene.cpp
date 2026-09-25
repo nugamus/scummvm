@@ -434,15 +434,22 @@ bool Scene::inView(const float *sphere) const {
 }
 
 void Scene::hideObject(const Common::String &name, bool hidden) {
-	for (Model *m : _models)
-		for (uint i = 0; i < m->file.objects.size(); i++)
-			if (m->file.objects[i].name.equalsIgnoreCase(name))
-				m->hiddenObjects[i] = hidden;
+	// X3d_Object_Hide / _Unhide (obj, 1): the object and everything below it
+	for (Model *m : _models) {
+		const Common::Array<O3DObject> &objects = m->file.objects;
+		for (uint i = 0; i < objects.size(); i++)
+			for (int a = i; a >= 0; a = objects[a].parent)
+				if (objects[a].name.equalsIgnoreCase(name)) {
+					m->hiddenObjects[i] = hidden;
+					break;
+				}
+	}
 }
 
 Scene::AnimNode *Scene::findNode(const Common::String &objectName) {
+	// Steps name hotspot nodes without their '*' (op 4 "U01_24" is node "*U01_24")
 	for (AnimNode &n : _nodes)
-		if (n.name.equalsIgnoreCase(objectName))
+		if (n.name.equalsIgnoreCase(objectName) || (n.name.hasPrefix("*") && n.name.substr(1).equalsIgnoreCase(objectName)))
 			return &n;
 	return nullptr;
 }
@@ -650,6 +657,17 @@ void Scene::setNodeFrame(int node, float frame) {
 
 void Scene::setNodeFps(int node, float fps) {
 	_nodes[node].base.fps = fps;
+}
+
+Math::Vector3d Scene::objectCenter(const Common::String &name) const {
+	Model *m;
+	uint o;
+	if (!findObject(name, m, o))
+		return Math::Vector3d();
+	const float *b = &m->bounds[o * 4];
+	if (b[3] >= 0)
+		return Math::Vector3d(b[0], b[1], b[2]);
+	return Math::Vector3d(m->file.objects[o].world[12], m->file.objects[o].world[13], m->file.objects[o].world[14]);
 }
 
 Math::Vector3d Scene::objectPosition(const Common::String &name) const {
