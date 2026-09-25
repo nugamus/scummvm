@@ -126,7 +126,12 @@ bool Scene::load(const Common::String &scriptName) {
 		field.replace('\\', '/');
 
 		// Lights (Q-0019) and cameras are not used yet
-		if (keyword == 2 && !_models.empty()) {
+		if (keyword == 4) {
+			// Every light of the file reaches every object loaded so far (lighting.md)
+			loadLights(field);
+			for (Model *m : _models)
+				m->lit = true;
+		} else if (keyword == 2 && !_models.empty()) {
 			bindAnimation(field, value.empty() ? 30.0f : atof(value.c_str()));
 		} else if (keyword == 1) {
 			Model *m = loadModel(field);
@@ -160,6 +165,9 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 	m->worldVertices.resize(m->file.objects.size());
 	m->lods.resize(m->file.objects.size());
 	m->hiddenObjects.resize(m->file.objects.size());
+	m->worldNormals.resize(m->file.objects.size());
+	m->colors.resize(m->file.objects.size());
+	m->colorFrame.resize(m->file.objects.size());
 	m->bounds.resize(m->file.objects.size() * 4);
 	pose(*m);
 	return m;
@@ -170,8 +178,10 @@ void Scene::pose(Model &m) {
 
 	// Each object transforms its own vertex range; welded objects write into their top
 	// object's shared array (animation.md, Welded objects)
-	for (uint i = 0; i < objects.size(); i++)
+	for (uint i = 0; i < objects.size(); i++) {
 		m.worldVertices[i].resize(objects[i].vertices.size());
+		m.worldNormals[i].resize(objects[i].normals.size());
+	}
 	for (uint i = 0; i < objects.size(); i++) {
 		const O3DObject &o = objects[i];
 		int top = i;
@@ -186,10 +196,23 @@ void Scene::pose(Model &m) {
 		const Common::Array<float> &in = objects[top].vertices;
 		Common::Array<float> &out = m.worldVertices[top];
 		const float *w = o.world;
+		const Common::Array<float> &nin = objects[top].normals;
+		Common::Array<float> &nout = m.worldNormals[top];
 		for (uint v = first * 3; v < (first + count) * 3 && v + 2 < in.size(); v += 3) {
 			const float x = in[v], y = in[v + 1], z = in[v + 2];
 			for (int k = 0; k < 3; k++)
 				out[v + k] = x * w[k] + y * w[4 + k] + z * w[8 + k] + w[12 + k];
+			if (v + 2 < nin.size()) {
+				// Normals turn with the owner, without translation, renormalised
+				float n[3], len = 0;
+				for (int k = 0; k < 3; k++) {
+					n[k] = nin[v] * w[k] + nin[v + 1] * w[4 + k] + nin[v + 2] * w[8 + k];
+					len += n[k] * n[k];
+				}
+				len = len > 0 ? 1 / sqrtf(len) : 0;
+				for (int k = 0; k < 3; k++)
+					nout[v + k] = n[k] * len;
+			}
 		}
 	}
 
@@ -309,6 +332,86 @@ void Scene::update(float dt) {
 			m->file.updateWorld();
 			pose(*m);
 		}
+	}
+}
+
+const Common::Array<byte> &Scene::lighting(const Model &m, uint owner) const {
+	Common::Array<byte> &out = m.colors[owner];
+	if (m.colorFrame[owner] == _frame && !out.empty())
+		return out;
+	m.colorFrame[owner] = _frame;
+
+	// D starts at the ambient, each light adds colour * multiplier * falloff * cos; the
+	// excess over 255 becomes S (lighting.md, Per-vertex colour)
+	const Common::Array<float> &v = m.worldVertices[owner], &n = m.worldNormals[owner];
+	out.resize(v.size() / 3 * 6);
+	for (uint i = 0; i < v.size() / 3; i++) {
+		float d[3] = { (float)_ambient[0], (float)_ambient[1], (float)_ambient[2] };
+		if (m.lit && i * 3 + 2 < n.size()) {
+			for (const Light &l : _lights) {
+				if (l.hidden)
+					continue;
+				float L[3], d2 = 0;
+				for (int k = 0; k < 3; k++) {
+					L[k] = l.position[k] - v[i * 3 + k];
+					d2 += L[k] * L[k];
+				}
+				float kf = 1;
+				if (l.attenuate) {
+					if (d2 >= l.outer * l.outer)
+						continue;
+					if (d2 > l.inner * l.inner)
+						kf = 1 - (d2 - l.inner * l.inner) / (l.outer * l.outer - l.inner * l.inner);
+				}
+				const float len = sqrtf(d2);
+				if (len == 0)
+					continue;
+				const float c = (L[0] * n[i * 3] + L[1] * n[i * 3 + 1] + L[2] * n[i * 3 + 2]) / len;
+				if (c <= 0)
+					continue;
+				for (int k = 0; k < 3; k++)
+					d[k] += l.color[k] * l.multiplier * kf * c;
+			}
+		}
+		for (int k = 0; k < 3; k++) {
+			float s = 0;
+			if (d[k] > 255) {
+				s = MIN(d[k] - 255, 255.0f);
+				d[k] = 255;
+			} else if (d[k] < 0) {
+				d[k] = 0;
+			}
+			out[i * 6 + k] = (byte)d[k];
+			out[i * 6 + 3 + k] = (byte)s;
+		}
+	}
+	return out;
+}
+
+void Scene::loadLights(const Common::String &path) {
+	Common::File f;
+	if (!f.open(Common::Path(_dir + path))) {
+		warning("Unable to load %s%s", _dir.c_str(), path.c_str());
+		return;
+	}
+	f.skip(32); // signature
+	const uint32 count = f.readUint32LE();
+	for (uint32 i = 0; i < count && !f.err(); i++) {
+		Light l;
+		f.skip(32); // name
+		for (float &c : l.position)
+			c = f.readFloatLE();
+		f.read(l.color, 3);
+		l.inner = f.readFloatLE();
+		l.outer = f.readFloatLE();
+		l.multiplier = f.readFloatLE();
+		l.hidden = f.readUint32LE() != 0;
+		l.attenuate = f.readUint32LE() != 0;
+		if (f.readUint32LE()) {
+			f.skip(5 * 4); // spot target and angles: no corpus sample (Q-0013)
+			warning("%s: spot lights are drawn as omni lights", path.c_str());
+		}
+		_lights.push_back(l);
 	}
 }
 
@@ -549,6 +652,7 @@ void Scene::draw(const Camera &cam, int width, int height) {
 		view[12 + k] = -(p[0] * view[k] + p[1] * view[4 + k] + p[2] * view[8 + k]);
 
 	_renderer->begin3D(projection, view);
+	_frame++;
 
 	for (int k = 0; k < 3; k++) {
 		_eye[k] = p[k];
@@ -629,15 +733,15 @@ void Scene::drawObject(const Model &m, uint object) {
 	for (const O3DFace &face : objects[object].faces) {
 		const O3DMaterial &mat = m.file.materials[face.material];
 		const uint32 tex = mat.textureMap.empty() ? 0 : texture(mat.textureMap);
-		// Lighting is not specified (Q-0019): texture x ambient, or the second colour
 		_renderer->setTexture(tex);
 		if (tex)
-			_renderer->setColor(_ambient[0], _ambient[1], _ambient[2]);
-		else
-			_renderer->setColor(mat.colors[1][0] * _ambient[0] / 255, mat.colors[1][1] * _ambient[1] / 255,
-			                    mat.colors[1][2] * _ambient[2] / 255);
+			_renderer->setClamp(!mat.wrap);
 
+		// Class 0 draws the texture as stored; class 2 is lit per vertex (lighting.md)
+		const Common::Array<byte> *lit = mat.renderClass == 0 ? nullptr : &lighting(m, owner);
 		float xyz[3 * 64], uv[2 * 64];
+		byte rgb[3 * 64], spec[3 * 64];
+		bool anySpecular = false;
 		uint count = 0;
 		for (uint k = 0; k < face.indices.size() && count < 64; k++) {
 			const uint32 index = face.indices[k] * 3;
@@ -649,9 +753,27 @@ void Scene::drawObject(const Model &m, uint object) {
 				uv[count * 2] = face.uvs[k * 2];
 				uv[count * 2 + 1] = face.uvs[k * 2 + 1];
 			}
+			if (lit) {
+				const byte *c = &(*lit)[face.indices[k] * 6];
+				for (int j = 0; j < 3; j++) {
+					// Untextured faces: the diffuse colour times the light
+					rgb[count * 3 + j] = tex ? c[j] : mat.colors[1][j] * c[j] / 256;
+					spec[count * 3 + j] = tex ? c[3 + j] : 0;
+					anySpecular |= spec[count * 3 + j] != 0;
+				}
+			}
 			count++;
 		}
-		_renderer->drawFan(xyz, face.uvs.empty() ? nullptr : uv, count);
+		_renderer->drawFan(xyz, face.uvs.empty() ? nullptr : uv, lit ? rgb : nullptr, count);
+
+		// Light beyond 255 is added on top: pixel = texture * D / 255 + S
+		if (anySpecular) {
+			_renderer->setAdditive(true);
+			_renderer->setTexture(0);
+			_renderer->drawFan(xyz, nullptr, spec, count);
+			_renderer->setAdditive(false);
+			_renderer->setTexture(tex);
+		}
 	}
 }
 

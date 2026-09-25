@@ -47,9 +47,11 @@ public:
 	// Clears the frame and sets up the 3D view; column-major GL matrices
 	virtual void begin3D(const float projection[16], const float view[16]) = 0;
 	virtual void setTexture(uint32 texture) = 0; // 0: untextured
-	virtual void setColor(byte r, byte g, byte b) = 0;
-	// count vertices: xyz each, uv each (uv may be null)
-	virtual void drawFan(const float *xyz, const float *uv, uint count) = 0;
+	virtual void setClamp(bool clamp) = 0; // texture coordinates clamped or wrapped
+	// Adds the following fans onto the frame (depth tested, not written), or back to normal
+	virtual void setAdditive(bool additive) = 0;
+	// count vertices: xyz, uv (may be null) and rgb (0..255, may be null: white) each
+	virtual void drawFan(const float *xyz, const float *uv, const byte *rgb, uint count) = 0;
 
 	// A 2D image over the frame at (x, y), drawn at present(); white (255, 255, 255) is
 	// transparent when keyed

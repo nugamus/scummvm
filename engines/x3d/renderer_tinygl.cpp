@@ -92,13 +92,32 @@ public:
 		_texture = texture;
 	}
 
-	void setColor(byte r, byte g, byte b) override {
-		tglColor3ub(r, g, b);
+	void setClamp(bool clamp) override {
+		const int mode = clamp ? TGL_CLAMP_TO_EDGE : TGL_REPEAT;
+		tglTexParameteri(TGL_TEXTURE_2D, TGL_TEXTURE_WRAP_S, mode);
+		tglTexParameteri(TGL_TEXTURE_2D, TGL_TEXTURE_WRAP_T, mode);
 	}
 
-	void drawFan(const float *xyz, const float *uv, uint count) override {
+	void setAdditive(bool additive) override {
+		if (additive) {
+			tglEnable(TGL_BLEND);
+			tglBlendFunc(TGL_ONE, TGL_ONE);
+			tglDepthMask(TGL_FALSE);
+			tglDepthFunc(TGL_LEQUAL);
+		} else {
+			tglDisable(TGL_BLEND);
+			tglDepthMask(TGL_TRUE);
+			tglDepthFunc(TGL_LESS);
+		}
+	}
+
+	void drawFan(const float *xyz, const float *uv, const byte *rgb, uint count) override {
 		tglBegin(TGL_TRIANGLE_FAN);
 		for (uint i = 0; i < count; i++) {
+			if (rgb)
+				tglColor3ub(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
+			else
+				tglColor3ub(255, 255, 255);
 			if (uv)
 				tglTexCoord2f(uv[i * 2], uv[i * 2 + 1]);
 			tglVertex3f(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]);
