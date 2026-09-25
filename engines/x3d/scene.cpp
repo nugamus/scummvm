@@ -431,6 +431,18 @@ void Scene::draw(const Camera &cam, int width, int height) {
 	_halfHeight = 1 / sy;
 	_boundTexture = ~0u;
 
+	// E-0058: camera type 2 draws with the view rotation of yaw pi/2 and the camera's
+	// pitch, keeping the object's origin where the true view puts it. In world terms an
+	// offset d from the origin becomes d * R(pi/2, e) * R(a, e)^T.
+	{
+		const float fixedRight[3] = { -1, 0, 0 };
+		const float fixedUp[3] = { 0, -cosf(e), sinf(e) };
+		const float fixedForward[3] = { 0, -sinf(e), -cosf(e) };
+		for (int i = 0; i < 3; i++)
+			for (int j = 0; j < 3; j++)
+				_facing[i * 3 + j] = fixedRight[i] * right0[j] + fixedUp[i] * up0[j] + fixedForward[i] * forward[j];
+	}
+
 	tglEnable(TGL_DEPTH_TEST);
 	tglDisable(TGL_CULL_FACE);
 	tglDisable(TGL_LIGHTING);
@@ -472,7 +484,24 @@ void Scene::drawObject(const Model &m, uint object) {
 		owner = objects[owner].parent;
 	if (owner < 0)
 		return;
-	const Common::Array<float> &vertices = m.worldVertices[owner];
+	const Common::Array<float> *vertices = &m.worldVertices[owner];
+
+	// ponytail: only camera type 2 ($Z$, the only one in U01); types 1 and 3 fix the yaw at
+	// -pi/2 instead (E-0045, E-0058)
+	Common::Array<float> facing;
+	const O3DObject &o = objects[object];
+	if (o.name.contains("$Z$") && owner == (int)object) {
+		const float *w = o.world;
+		facing.resize(o.vertices.size());
+		for (uint v = 0; v < o.vertices.size(); v += 3) {
+			float d[3];
+			for (int k = 0; k < 3; k++)
+				d[k] = o.vertices[v] * w[k] + o.vertices[v + 1] * w[4 + k] + o.vertices[v + 2] * w[8 + k];
+			for (int k = 0; k < 3; k++)
+				facing[v + k] = w[12 + k] + d[0] * _facing[k] + d[1] * _facing[3 + k] + d[2] * _facing[6 + k];
+		}
+		vertices = &facing;
+	}
 
 	for (const O3DFace &face : objects[object].faces) {
 		const O3DMaterial &mat = m.file.materials[face.material];
@@ -497,11 +526,11 @@ void Scene::drawObject(const Model &m, uint object) {
 		tglBegin(TGL_TRIANGLE_FAN);
 		for (uint k = 0; k < face.indices.size(); k++) {
 			const uint32 index = face.indices[k] * 3;
-			if (index + 2 >= vertices.size())
+			if (index + 2 >= vertices->size())
 				break;
 			if (!face.uvs.empty())
 				tglTexCoord2f(face.uvs[k * 2], face.uvs[k * 2 + 1]);
-			tglVertex3f(vertices[index], vertices[index + 1], vertices[index + 2]);
+			tglVertex3f((*vertices)[index], (*vertices)[index + 1], (*vertices)[index + 2]);
 		}
 		tglEnd();
 	}
