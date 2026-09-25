@@ -45,6 +45,7 @@ public:
 	bool handle(const Common::String &action) override;
 	void afterFrame() override;    // the escape timer
 	void draw() override;          // the escape timer's gauge
+	void syncState(Common::Serializer &s) override; // TRAIN_CHANGED and the gauge
 
 private:
 	void closeDoor();

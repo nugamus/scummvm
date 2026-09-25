@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/serializer.h"
 #include "common/debug.h"
 #include "common/file.h"
 #include "common/textconsole.h"
@@ -38,7 +39,27 @@ static const int kBarTop = 420, kParked = 480;
 static const Common::Rect kLeftArrow(20, 10, 53, 50), kRightArrow(580, 10, 613, 50);
 static const int kStripLeft = 57, kStripRight = 592, kSlots = 7;
 
-Inventory::Inventory(Interaction &interaction) : _interaction(interaction) {
+void Inventory::syncState(Common::Serializer &s) {
+	uint32 n = _items.size();
+	s.syncAsUint32LE(n);
+	if (s.isLoading())
+		clear();
+	for (uint32 i = 0; i < n; i++) {
+		Common::String item = s.isSaving() ? _items[i] : "";
+		s.syncString(item);
+		if (s.isLoading())
+			_items.push_back(item);
+	}
+}
+
+void Inventory::attach(Interaction *interaction) {
+	_interaction = interaction;
+	_y = 480;
+	_step = _ticks = 0;
+	_nextTick = _now = 0; // logic time restarts with each scene
+}
+
+Inventory::Inventory() {
 	_background = image("PorteF");
 }
 
@@ -130,7 +151,7 @@ void Inventory::click(const Common::Point &p) {
 		return;
 
 	// An item goes onto the cursor (a held one goes back first); the strip stores a held item
-	const Common::String held = _interaction.heldItem();
+	const Common::String held = _interaction->heldItem();
 	for (uint i = 0; i < _items.size(); i++) {
 		const int x = 86 + 70 * ((int)i + _offset);
 		if (!Common::Rect(x, _y + 5, x + 51, _y + 56).contains(p))
@@ -138,13 +159,13 @@ void Inventory::click(const Common::Point &p) {
 		const Common::String item = _items.remove_at(i);
 		if (!held.empty())
 			add(held + "P");
-		_interaction.holdItem(item.substr(0, 6));
+		_interaction->holdItem(item.substr(0, 6));
 		hide();
 		return;
 	}
 	if (!held.empty()) {
 		add(held + "P");
-		_interaction.holdItem("");
+		_interaction->holdItem("");
 		hide();
 	}
 }

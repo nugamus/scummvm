@@ -27,6 +27,10 @@
 
 #include "math/vector3d.h"
 
+namespace Common {
+class Serializer;
+}
+
 namespace X3D {
 
 class Scene;
@@ -40,6 +44,7 @@ public:
 	void refresh();
 	// Collision on or off for the named object, and optionally everything below it
 	void setEnabled(const Common::String &name, bool enabled, bool subtree = false);
+	void syncState(Common::Serializer &s); // the enabled flags
 
 	// Sphere resolution: pushes the centre c of a sphere of radius r out of the faces
 	Math::Vector3d resolveSphere(Math::Vector3d c, float r) const;

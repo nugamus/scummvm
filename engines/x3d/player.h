@@ -26,6 +26,10 @@
 
 #include "math/vector3d.h"
 
+namespace Common {
+class Serializer;
+}
+
 namespace X3D {
 
 class Collision;
@@ -41,6 +45,7 @@ class Player {
 public:
 	void init(float scale); // camera defaults from the scene scale s
 	void setSphere(float radius, float offset) { _radius = radius; sphereOffset = offset; }
+	void syncState(Common::Serializer &s); // save.md CAMERA
 
 	// One logic step of dt seconds. Returns true when a fall ends with the landing sound.
 	bool tick(float dt, const Keys &keys, const Collision &collision);

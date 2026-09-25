@@ -27,6 +27,7 @@
 #include "common/hash-str.h"
 #include "common/hashmap.h"
 #include "common/path.h"
+#include "common/serializer.h"
 #include "common/str.h"
 
 #include "math/vector3d.h"
@@ -151,6 +152,9 @@ public:
 
 	byte ambient[3] = { 255, 255, 255 };
 
+	// Saved state (save.md): ambient, hidden and unpickable objects, animation nodes
+	void syncState(Common::Serializer &s);
+
 	const Common::String &dir() const { return _dir; } // asset directory, e.g. "U01/"
 	// The unit's own data: SCENE.BIN, INFOOBJ/INFOACT, voices ("U00/" while assets are U04's)
 	const Common::String &dataDir() const { return _dataDir; }
@@ -174,6 +178,7 @@ private:
 		float stopAt = -1; // stop target, < 0 for none
 		float first = -1, last = -1; // range override, < 0: the animation's
 		int object = -1;             // the object it drives, < 0: the node's
+		Common::String path;         // a clip's .A3D, for saves
 
 		void advance(float dt);
 	};
@@ -189,6 +194,8 @@ private:
 	};
 
 	AnimNode *findNode(const Common::String &objectName);
+	const A3DFile *clipFile(const Common::String &path); // loaded once, owned by the scene
+	void syncPlayback(Common::Serializer &s, Playback &p);
 	Playback &active(AnimNode &n);
 
 	Model *loadModel(const Common::String &path);
@@ -218,6 +225,7 @@ private:
 	Common::Array<Model *> _models;
 	Common::Array<Model *> _lodModels; // only drawn through their base objects
 	Common::Array<A3DFile *> _animationFiles;
+	Common::HashMap<Common::String, const A3DFile *, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _clipFiles;
 	Common::Array<AnimNode> _nodes;
 
 	// The view of the frame being drawn, for culling: eye, axes, half-extents per unit depth

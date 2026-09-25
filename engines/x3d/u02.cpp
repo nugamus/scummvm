@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/serializer.h"
 #include "common/textconsole.h"
 
 #include "x3d/collision.h"
@@ -76,7 +77,8 @@ void U02::start(bool newGame, bool video) {
 	_vm->setView(p, 0.1f, kHalfPi);
 	if (!_vm->inventory()->has("U02_01P"))
 		_vm->inventory()->add("U02_01P");
-	// ponytail: the autosave to slot 0 waits for saving (docs/engine-spec/save.md)
+	// The autosave, named after Message.txt line 1003 (E-0160)
+	_vm->saveGameState(_vm->getAutosaveSlot(), "Automatic save", true);
 }
 
 void U02::say(const char *character, const char *line) {
@@ -572,13 +574,25 @@ void U02::fall() {
 }
 
 void U02::gameOver() {
-	_vm->sound()->stopAll();
-	// ponytail: the original opens the load-game frame (OptionLoad); until saving exists
-	// the unit restarts
-	warning("Game over: the load-game screen is not implemented, restarting U02");
 	_vm->suspend(false);
 	_vm->player().collide = true;
-	_vm->gotoScene("U02.X3D");
+	_vm->gameOver();
+}
+
+void U02::syncState(Common::Serializer &s) {
+	// Times as ms since their start: logic time restarts with the scene (Q-0092)
+	const uint32 now = _vm->logicMs();
+	uint32 call = now - _callStart, gauge = now - _gaugeStart;
+	s.syncAsUint32LE(call);
+	s.syncAsUint32LE(_callPeriod);
+	s.syncAsByte(_callOff);
+	s.syncAsSint32LE(_magpie);
+	s.syncAsByte(_gauge);
+	s.syncAsUint32LE(gauge);
+	if (s.isLoading()) {
+		_callStart = now - call;
+		_gaugeStart = now - gauge;
+	}
 }
 
 void U02::draw() {

@@ -26,6 +26,10 @@
 
 #include "x3d/renderer.h"
 
+namespace Common {
+class Serializer;
+}
+
 namespace X3D {
 
 // A unit's own code on top of the generic scene (U##.cpp in the original): U00, U01, ...
@@ -40,6 +44,7 @@ public:
 	virtual void afterFrame() {}                     // per-frame checks after rendering
 	virtual void draw() {}                           // 2D drawn over the frame
 	virtual bool gameStarted() const { return true; } // false: Escape opens the Option menu
+	virtual void syncState(Common::Serializer &s) {}  // the unit's save chunk (save.md)
 };
 
 // The timer gauge (u01.md): a grey frame and a red bar that shrinks as the elapsed

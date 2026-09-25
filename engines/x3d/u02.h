@@ -42,6 +42,7 @@ public:
 	bool handle(const Common::String &action) override;
 	void afterFrame() override;
 	void draw() override; // the train gauge
+	void syncState(Common::Serializer &s) override; // TIMEVENDEUSE and the gauge
 
 private:
 	void say(const char *character, const char *line);

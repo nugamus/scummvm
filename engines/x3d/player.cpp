@@ -19,6 +19,8 @@
  *
  */
 
+#include "common/serializer.h"
+
 #include "x3d/collision.h"
 #include "x3d/player.h"
 
@@ -27,6 +29,20 @@ namespace X3D {
 using Math::Vector3d;
 
 // docs/engine-spec/movement.md, Camera state
+void Player::syncState(Common::Serializer &s) {
+	for (int k = 0; k < 3; k++)
+		s.syncAsFloatLE(eye.getData()[k]);
+	s.syncAsFloatLE(yaw);
+	s.syncAsFloatLE(pitch);
+	s.syncAsFloatLE(fov);
+	s.syncAsFloatLE(_radius);
+	s.syncAsFloatLE(sphereOffset);
+	s.syncAsByte(canMove);
+	s.syncAsByte(canTurn);
+	s.syncAsByte(collide);
+	s.syncAsFloatLE(_eyeHeight);
+}
+
 void Player::init(float scale) {
 	_scale = scale;
 	_speed = 2;
