@@ -387,9 +387,7 @@ bool U05::handle(const Common::String &action) {
 		scene->setNodeFps("*U05_10", 15);
 		scene->runNodeTo("*U05_10", -1, true);
 	} else if (action.equalsIgnoreCase("DoTableauA") || action.equalsIgnoreCase("DoTableauB")) {
-		// ponytail: what TableauJeu shows for the painting and how it closes is Q-0161;
-		// the frame is shown until a command or Escape
-		_vm->runMenu("TableauJeu");
+		_vm->showPainting(action.hasSuffix("A") ? "U14_02" : "U14_05"); // ui.md, Other frames
 	} else {
 		return false;
 	}

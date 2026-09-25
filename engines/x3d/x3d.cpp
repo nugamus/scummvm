@@ -77,6 +77,12 @@ Common::Error X3DEngine::run() {
 	_renderer = Renderer::create(ConfMan.hasKey("widescreen") && ConfMan.getBool("widescreen") ? 854 : 640, 480);
 	_sound = new Sound(_mixer);
 	_inventory = new Inventory();
+	if (ConfMan.hasKey("music_level"))
+		_musicVolume = ConfMan.getInt("music_level");
+	if (ConfMan.hasKey("voice_level")) {
+		_sound->setGroupVolume(Sound::kVoice, ConfMan.getInt("voice_level"));
+		_sound->setGroupVolume(Sound::kEffects, ConfMan.getInt("voice_level"));
+	}
 	setDebugger(new Console(this));
 
 	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
@@ -120,6 +126,11 @@ Common::Error X3DEngine::saveGameStream(Common::WriteStream *stream, bool isAuto
 	s.syncAsUint32LE(version);
 	s.syncString(_sceneName);
 	s.syncAsByte(_practice);
+	// The player's unit number follows every save: it unlocks the gallery (ui.md)
+	if (!_playerName.empty()) {
+		ConfMan.setInt("unit_" + _playerName, atoi(_sceneName.c_str() + 1));
+		ConfMan.flushToDisk();
+	}
 	_scene->syncState(s);
 	_interaction->syncState(s);
 	_collision->syncState(s);
@@ -230,6 +241,7 @@ Common::StringArray X3DEngine::players() const {
 }
 
 bool X3DEngine::selectPlayer(const Common::String &name) {
+	_playerName = name;
 	// ponytail: players share ScummVM's save slots; the original keeps saves per player
 	Common::StringArray names = players();
 	for (const Common::String &n : names)
@@ -267,7 +279,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_scene = &scene;
 
 	// Sound (sound.md): mode 0 group volumes, the scene's emitters
-	_sound->setGroupVolume(Sound::kAmbient, 85);
+	_sound->setGroupVolume(Sound::kAmbient, _musicVolume);
 	_sound->setGroupVolume(4, 80);
 	_sound->setGroupVolume(5, 80);
 	_sound->setScale(scene.scale);
@@ -676,16 +688,28 @@ Common::String X3DEngine::runMenu(const Common::String &name, MenuList *list, co
 		return "escape";
 	if (!placeholder.empty())
 		frame.setText(placeholder, true);
+	const Common::String result = runFrame(frame, list);
+	debug(1, "menu %s: %s", name.c_str(), result.c_str());
+	return result;
+}
+
+Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout) {
 	if (list)
 		frame.setList(list->rows, list->selected);
 	const int x2d = (_renderer->width() - 640) / 2;
 	CursorMan.showMouse(true);
+	const uint32 start = _system->getMillis();
+	_menuView = -1;
 	Common::String result;
 	while (result.empty() && !shouldQuit()) {
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
-			if (e.type == Common::EVENT_MOUSEMOVE || e.type == Common::EVENT_LBUTTONDOWN)
+			if (e.type == Common::EVENT_MOUSEMOVE || e.type == Common::EVENT_LBUTTONDOWN) {
 				_mouse = e.mouse;
+				frame.drag(Common::Point(_mouse.x - x2d, _mouse.y));
+			}
+			if (e.type == Common::EVENT_LBUTTONUP)
+				frame.release();
 			// A click acts on press (ui.md, Events)
 			if (e.type == Common::EVENT_LBUTTONDOWN) {
 				const Common::Point p(_mouse.x - x2d, _mouse.y);
@@ -695,8 +719,9 @@ Common::String X3DEngine::runMenu(const Common::String &name, MenuList *list, co
 					frame.selectRow(row);
 					if (row < (int)list->names.size())
 						frame.setText(list->names[row]);
-				} else {
-					result = frame.commandAt(frame.viewAt(p));
+				} else if (!frame.press(p)) {
+					_menuView = frame.viewAt(p);
+					result = frame.commandAt(_menuView);
 				}
 			}
 			if (e.type == Common::EVENT_KEYDOWN) {
@@ -704,12 +729,16 @@ Common::String X3DEngine::runMenu(const Common::String &name, MenuList *list, co
 					result = "escape";
 				else if (e.kbd.keycode == Common::KEYCODE_RETURN || e.kbd.keycode == Common::KEYCODE_KP_ENTER)
 					result = "enter";
+				else if (!frame.hasEdit())
+					result = "key";
 				else if (e.kbd.keycode == Common::KEYCODE_BACKSPACE)
 					frame.backspace();
 				else if (e.kbd.ascii >= 32 && e.kbd.ascii < 127)
 					frame.type(e.kbd.ascii);
 			}
 		}
+		if (timeout && result.empty() && _system->getMillis() - start >= timeout)
+			result = "timeout";
 
 		const int hovered = frame.viewAt(Common::Point(_mouse.x - x2d, _mouse.y));
 		if (_interaction)
@@ -723,13 +752,250 @@ Common::String X3DEngine::runMenu(const Common::String &name, MenuList *list, co
 		_system->delayMillis(10);
 	}
 	_menuText = frame.text();
-	debug(1, "menu %s: %s", name.c_str(), result.c_str());
+	_last = _system->getMillis();
 	return result;
+}
+
+void X3DEngine::showPainting(const Common::String &name) {
+	// TableauJeu (ui.md, Other frames): full screen until a click, Escape blocked; then
+	// the voice stops
+	Frame frame;
+	if (!frame.load("TableauJeu"))
+		return;
+	frame.setBitmap(1, name);
+	for (;;) {
+		const Common::String c = runFrame(frame);
+		if (shouldQuit() || (c != "escape" && c != "key" && c != "enter"))
+			break;
+	}
+	_sound->stopGroup(Sound::kVoice);
+}
+
+void X3DEngine::credits() {
+	// Credits (ui.md): a click or 6 s turns the page; page 1 shows twice (the frame's
+	// first name has no extension), a key leaves
+	Frame frame;
+	if (!frame.load("Credits"))
+		return;
+	for (int page : { 1, 2, 3, 4, 5 }) {
+		frame.setBitmap(1, Common::String::format("Credit%02d", page));
+		for (int shown = 0; shown < (page == 1 ? 2 : 1); shown++) {
+			const Common::String c = runFrame(frame, nullptr, 6000);
+			if (shouldQuit() || (c != "timeout" && c != "MoveCredit"))
+				return;
+		}
+	}
+}
+
+void X3DEngine::settings() {
+	// OptionReglages (ui.md Settings): music is group 1, voice groups 2 and 3
+	Frame frame;
+	if (!frame.load("OptionReglages"))
+		return;
+	const int max = frame.sliderMax(4);
+	frame.setSliderValue(4, (int)(max * 0.01f * _musicVolume));
+	frame.setSliderValue(5, (int)(max * 0.01f * _sound->groupVolume(Sound::kVoice)));
+	for (;;) {
+		const Common::String c = runFrame(frame);
+		if (shouldQuit() || c == "ReglageAnnuler" || c == "escape")
+			return;
+		if (c == "ReglageOK" || c == "enter") {
+			// ponytail: the original's music value is lost at the next mode change
+			// (Q-0190); here it is kept as the level of group 1 in play
+			_musicVolume = frame.sliderValue(4) * 100 / MAX(1, max);
+			const int voice = frame.sliderValue(5) * 100 / MAX(1, max);
+			_sound->setGroupVolume(Sound::kVoice, voice);
+			_sound->setGroupVolume(Sound::kEffects, voice);
+			ConfMan.setInt("music_level", _musicVolume);
+			ConfMan.setInt("voice_level", voice);
+			ConfMan.flushToDisk();
+			return;
+		}
+	}
+}
+
+// The gallery's paintings in unlock order and the saved unit that unlocks up to each
+// (ui.md Gallery)
+static const char *const kPaintings[] = {
+	"U11_01", "U11_02", "U11_03", "U12_03", "U12_04", "U13_14", "U13_05", "U13_13", "U13_03",
+	"U13_01", "U13_12", "U13_11", "U13_06", "U13_04", "U14_01", "U13_15", "U14_02", "U14_05",
+	"U14_03", "U14_07"
+};
+
+static uint unlockedPaintings(int unit) {
+	switch (unit) {
+	case 1: return 1;
+	case 2: return 3;
+	case 3: return 4;
+	case 33: return 5;
+	case 4: return 14;
+	case 5: case 6: case 7: return 20;
+	default: return 0;
+	}
+}
+
+// The Galerie frame's thumbnail view per painting
+static int thumbnailView(const Common::String &painting) {
+	static const struct { const char *painting; int id; } views[] = {
+		{ "U11_01", 5 }, { "U11_02", 22 }, { "U11_03", 6 }, { "U12_03", 7 }, { "U12_04", 40 },
+		{ "U13_01", 8 }, { "U13_03", 9 }, { "U13_04", 10 }, { "U13_05", 11 }, { "U13_06", 12 },
+		{ "U13_11", 13 }, { "U13_12", 14 }, { "U13_13", 15 }, { "U13_14", 30 }, { "U14_01", 16 },
+		{ "U13_15", 17 }, { "U14_02", 18 }, { "U14_03", 19 }, { "U14_05", 20 }, { "U14_07", 21 }
+	};
+	for (const auto &v : views)
+		if (painting == v.painting)
+			return v.id;
+	return -1;
+}
+
+int X3DEngine::playerUnit() const {
+	return ConfMan.hasKey("unit_" + _playerName) ? ConfMan.getInt("unit_" + _playerName) : 0;
+}
+
+void X3DEngine::gallery() {
+	const uint count = unlockedPaintings(playerUnit());
+	for (;;) {
+		Frame galerie;
+		if (!galerie.load("Galerie"))
+			return;
+		for (uint i = 0; i < ARRAYSIZE(kPaintings); i++)
+			galerie.setVisible(thumbnailView(kPaintings[i]), i < count);
+		const Common::String c = runFrame(galerie);
+		if (shouldQuit() || c != "GoToTableau")
+			return;
+		const Common::String painting = galerie.bitmapName(_menuView).substr(0, 6);
+		uint index = 0;
+		while (index < count && painting != kPaintings[index])
+			index++;
+		if (index < count && !paintingScreens(index, count))
+			return;
+	}
+}
+
+// Tableau, Taille and Loupe of the unlocked painting index; false to leave the gallery
+bool X3DEngine::paintingScreens(uint index, uint count) {
+	Common::String screen = "Tableau";
+	for (;;) {
+		const Common::String p = kPaintings[index];
+		Frame frame;
+		if (!frame.load(screen))
+			return false;
+		frame.setBitmap(1, p + (screen == "Tableau" ? "TAB" : "_Size"));
+		if (screen == "Tableau" && (p == "U14_02" || p == "U14_05"))
+			frame.setVisible(30, false);
+		const Common::String c = runFrame(frame);
+		if (shouldQuit() || c == "escape")
+			return false;
+		if (c == "GoBack")
+			return true;
+		if (c == "GoPrev")
+			index = (index + count - 1) % count;
+		else if (c == "GoNext")
+			index = (index + 1) % count;
+		else if (c == "GoTaille")
+			screen = "Taille";
+		else if (c == "GoEcranTableau")
+			screen = "Tableau";
+		else if (c == "GoLoupe")
+			magnifier(p);
+		else if (c == "GotoScene3D")
+			warning("The painting's 3D scene is not implemented (Q-0192)");
+	}
+}
+
+void X3DEngine::magnifier(const Common::String &painting) {
+	// Loupe (ui.md): the parts listed in Media.txt stitched together, panned from the
+	// edges, left on a click
+	Common::File media;
+	int cols = 0, rows = 0;
+	if (media.open("2dbit/Media.txt")) {
+		while (!media.eos()) {
+			const Common::String line = media.readLine();
+			if (line.hasPrefixIgnoreCase(painting + "Loupe;")) {
+				const char *c = strchr(line.c_str() + painting.size() + 6, ';');
+				if (c)
+					sscanf(c + 1, "%d,%d", &cols, &rows);
+				break;
+			}
+		}
+	}
+	if (cols <= 0 || rows <= 0)
+		return;
+	Common::Array<Graphics::Surface *> parts;
+	int width = 0, height = 0;
+	for (int i = 0; i < cols * rows; i++) {
+		parts.push_back(loadBitmap(Common::Path(Common::String::format("2dbit/%sLoupe%d.BMP", painting.c_str(), i + 1))));
+		if (!parts.back())
+			warning("Missing magnifier part %d of %s", i + 1, painting.c_str());
+		if (parts.back() && i / cols == 0)
+			width += parts.back()->w;
+		if (parts.back() && i % cols == 0)
+			height += parts.back()->h;
+	}
+	Graphics::Surface image;
+	image.create(MAX(width, 640), MAX(height, 480), Graphics::PixelFormat::createFormatRGBA32());
+	for (int i = 0; i < cols * rows; i++) {
+		if (!parts[i])
+			continue;
+		Graphics::Surface *rgba = parts[i]->convertTo(image.format);
+		image.copyRectToSurface(*rgba, (i % cols) * 640, (i / cols) * 480, Common::Rect(rgba->w, rgba->h));
+		rgba->free();
+		delete rgba;
+		parts[i]->free();
+		delete parts[i];
+	}
+
+	const int x2d = (_renderer->width() - 640) / 2;
+	int ox = 0, oy = 0;
+	uint32 lastPan = 0;
+	bool done = false;
+	while (!done && !shouldQuit()) {
+		Common::Event e;
+		while (_system->getEventManager()->pollEvent(e)) {
+			if (e.type == Common::EVENT_MOUSEMOVE)
+				_mouse = e.mouse;
+			if (e.type == Common::EVENT_LBUTTONDOWN || (e.type == Common::EVENT_KEYDOWN && e.kbd.keycode == Common::KEYCODE_ESCAPE))
+				done = true;
+		}
+		const int mx = _mouse.x - x2d, my = _mouse.y;
+		const int left = mx < 30, right = mx >= 610, top = my < 30, bottom = my >= 450;
+		static const int kinds[3][3] = { { 12, 13, 9 }, { 10, 0, 7 }, { 11, 6, 8 } }; // [v][h]
+		if (_interaction)
+			_interaction->showCursor(kinds[top ? 0 : bottom ? 2 : 1][left ? 0 : right ? 2 : 1]);
+		const uint32 now = _system->getMillis();
+		if (now - lastPan >= 80) {
+			lastPan = now;
+			if (left)
+				ox -= (30 - mx) * 50 / 30;
+			if (right)
+				ox += (mx - 609) * 50 / 30;
+			if (top)
+				oy -= (30 - my) * 50 / 30;
+			if (bottom)
+				oy += (my - 449) * 50 / 30;
+			ox = CLIP(ox, 0, image.w - 640);
+			oy = CLIP(oy, 0, image.h - 480);
+		}
+		_renderer->clear();
+		const Graphics::Surface view = image.getSubArea(Common::Rect(ox, oy, ox + 640, oy + 480));
+		_renderer->drawImage(view, x2d, 0, false);
+		_renderer->present();
+		_system->delayMillis(10);
+	}
+	image.free();
 }
 
 Common::String X3DEngine::optionMenu() {
 	for (;;) {
-		const Common::String c = runMenu("Option");
+		// Load and Gallery are greyed when empty and still react (ui.md, Q-0063)
+		Frame frame;
+		if (!frame.load("Option"))
+			return "";
+		if (getMetaEngine()->listSaves(_targetName.c_str()).empty())
+			frame.setBitmap(3, "SomB2");
+		if (!unlockedPaintings(playerUnit()))
+			frame.setBitmap(6, "SomE2");
+		const Common::String c = runFrame(frame);
 		if (shouldQuit())
 			return "";
 		if (c == "OptionNouvelleP" || c == "OptionEntrenement")
@@ -741,7 +1007,13 @@ Common::String X3DEngine::optionMenu() {
 				quitGame();
 				return "";
 			}
-		} else if (!c.empty() && c != "escape" && c != "enter") {
+		} else if (c == "OptionCredits") {
+			credits();
+		} else if (c == "OptionReglage") {
+			settings();
+		} else if (c == "OptionGalerie") {
+			gallery();
+		} else if (!c.empty() && c != "escape" && c != "enter" && c != "key") {
 			warning("Menu command %s is not implemented", c.c_str());
 		}
 	}
@@ -826,6 +1098,19 @@ Common::String X3DEngine::command(const Common::String &line) {
 		return saveGameState(atoi(a[1].c_str()), "console").getCode() == Common::kNoError ? "saved" : "save failed";
 	if (c == "load" && a.size() >= 2)
 		return loadGameState(atoi(a[1].c_str())).getCode() == Common::kNoError ? "loading" : "load failed";
+	if (c == "page" && a.size() >= 2) {
+		if (a[1] == "credits")
+			credits();
+		else if (a[1] == "settings")
+			settings();
+		else if (a[1] == "gallery")
+			gallery();
+		else if (a[1] == "loupe" && a.size() >= 3)
+			magnifier(a[2]);
+		else
+			showPainting(a[1]);
+		return "ok";
+	}
 	if (c == "savemenu") {
 		saveMenu();
 		return "ok";
