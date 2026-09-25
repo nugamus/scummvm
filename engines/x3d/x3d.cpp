@@ -39,6 +39,7 @@
 
 #include "x3d/collision.h"
 #include "x3d/console.h"
+#include "x3d/frame.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
 #include "x3d/player.h"
@@ -77,6 +78,18 @@ Common::Error X3DEngine::run() {
 		wait(3000);
 		showBitmap("2dbit/Intro2.bmp");
 		wait(2000);
+
+		// The players screen, then the Option menu (ui.md, Boot to U01). Monet's tutorial in
+		// U00 (a new player) and player profiles are not implemented.
+		for (;;) {
+			const Common::String c = runMenu("OptionUser");
+			if (shouldQuit() || c == "escape")
+				return Common::kNoError;
+			if ((c == "SelectUser" || c == "enter") && !_menuText.empty())
+				break;
+		}
+		if (!optionMenu())
+			return Common::kNoError;
 	}
 
 	// A new game starts at the scene named in App.bin #GAME# (E-0037). The original shows
@@ -269,6 +282,10 @@ void X3DEngine::frame(bool input) {
 			if (down && input && !_suspended)
 				_inventory->toggle();
 			break;
+		case Common::KEYCODE_ESCAPE:
+			if (down && input && !_suspended)
+				_escapeNow = true;
+			break;
 		default: break;
 		}
 	}
@@ -334,6 +351,7 @@ void X3DEngine::frame(bool input) {
 	if (interactive && !overBar)
 		_interaction->hover(_hotspot, now);
 
+	_camera = camera;
 	_scene->draw(camera, _renderer->width(), _renderer->height());
 	_inventory->draw(*_renderer, x2d);
 	if (_u01)
@@ -346,6 +364,22 @@ void X3DEngine::frame(bool input) {
 		debug(2, "%u frames per second", _frames * 1000 / (now - _fpsStart));
 		_frames = 0;
 		_fpsStart = now;
+	}
+
+	// Escape in a game: "Do you want to save?" over the frozen scene (ui.md, Escape)
+	if (_escapeNow) {
+		_escapeNow = false;
+		const Common::String held = _interaction->heldItem();
+		if (!held.empty()) {
+			_inventory->add(held + "P");
+			_interaction->holdItem("");
+		}
+		const Common::String c = runMenu("Save");
+		if (c == "SaveOui")
+			warning("Saving is not implemented");
+		else if (c == "SaveNon" && optionMenu())
+			gotoScene("U01.X3D"); // ponytail: a new game restarts at U01 without App.bin
+		_last = _system->getMillis();
 	}
 
 	// The unit's code: queued click actions, then its per-frame checks. Both may run
@@ -437,6 +471,67 @@ void X3DEngine::setView(const float *position, float yaw, float pitch) {
 	_player.yaw = yaw;
 	_player.pitch = pitch;
 	_previous = _player;
+}
+
+Common::String X3DEngine::runMenu(const Common::String &name) {
+	Frame frame;
+	if (!frame.load(name))
+		return "escape";
+	const int x2d = (_renderer->width() - 640) / 2;
+	CursorMan.showMouse(true);
+	Common::String result;
+	while (result.empty() && !shouldQuit()) {
+		Common::Event e;
+		while (_system->getEventManager()->pollEvent(e)) {
+			if (e.type == Common::EVENT_MOUSEMOVE || e.type == Common::EVENT_LBUTTONDOWN)
+				_mouse = e.mouse;
+			// A click acts on press (ui.md, Events)
+			if (e.type == Common::EVENT_LBUTTONDOWN)
+				result = frame.commandAt(frame.viewAt(Common::Point(_mouse.x - x2d, _mouse.y)));
+			if (e.type == Common::EVENT_KEYDOWN) {
+				if (e.kbd.keycode == Common::KEYCODE_ESCAPE)
+					result = "escape";
+				else if (e.kbd.keycode == Common::KEYCODE_RETURN || e.kbd.keycode == Common::KEYCODE_KP_ENTER)
+					result = "enter";
+				else if (e.kbd.keycode == Common::KEYCODE_BACKSPACE)
+					frame.backspace();
+				else if (e.kbd.ascii >= 32 && e.kbd.ascii < 127)
+					frame.type(e.kbd.ascii);
+			}
+		}
+
+		const int hovered = frame.viewAt(Common::Point(_mouse.x - x2d, _mouse.y));
+		if (_interaction)
+			_interaction->showCursor(MAX(0, frame.cursorAt(hovered)));
+		if (_scene)
+			_scene->draw(_camera, _renderer->width(), _renderer->height());
+		else
+			_renderer->clear();
+		frame.draw(*_renderer, x2d, hovered);
+		_renderer->present();
+		_system->delayMillis(10);
+	}
+	_menuText = frame.text();
+	debug(1, "menu %s: %s", name.c_str(), result.c_str());
+	return result;
+}
+
+bool X3DEngine::optionMenu() {
+	for (;;) {
+		const Common::String c = runMenu("Option");
+		if (shouldQuit())
+			return false;
+		if (c == "OptionNouvelleP")
+			return true;
+		if (c == "OptionQuitter") {
+			if (runMenu("OptionQuitter") == "QuitterOK") {
+				quitGame();
+				return false;
+			}
+		} else if (!c.empty() && c != "escape" && c != "enter") {
+			warning("Menu command %s is not implemented", c.c_str());
+		}
+	}
 }
 
 Common::String X3DEngine::command(const Common::String &line) {

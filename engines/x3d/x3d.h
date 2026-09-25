@@ -30,6 +30,7 @@
 
 #include "x3d/detection.h"
 #include "x3d/player.h"
+#include "x3d/scene.h"
 
 namespace X3D {
 
@@ -65,6 +66,12 @@ public:
 	void gotoScene(const Common::String &name) { _nextScene = name; }
 	void addUnitAction(const Common::String &name) { _unitActions.push_back(name); }
 	void playVideo(const Common::String &name);
+
+	// Shows a frame until a command is chosen (ui.md); returns the command, "escape", or
+	// "enter". The scene, if any, stays frozen underneath.
+	Common::String runMenu(const Common::String &name);
+	// The Option menu (ui.md): true for New game, false to quit
+	bool optionMenu();
 
 	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold
 	Common::String command(const Common::String &line);
@@ -120,6 +127,9 @@ private:
 	uint32 _sceneStart = 0;
 	Common::String _nextScene;
 	Common::StringArray _unitActions;
+	Camera _camera; // the last one drawn, for frames over a frozen scene
+	Common::String _menuText; // the text edit of the last menu
+	bool _escapeNow = false;
 };
 
 } // End of namespace X3D
