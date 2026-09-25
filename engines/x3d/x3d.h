@@ -71,7 +71,9 @@ public:
 	// Script primitives for unit code (movement.md, "Scripted camera moves"; u01.md).
 	// They run frames until done, like the original's blocking loops: animation, sound
 	// and rendering go on, the player's camera input does not.
-	void runFor(uint32 ms);   // 0: one frame
+	// 0: one frame. walk: the camera keys and the unit's input hook stay on (the original's
+	// "RunFor + generic input" waits), clicks and Escape do not.
+	void runFor(uint32 ms, bool walk = false);
 	// Moves the camera over ms; nullptr keeps the position, kKeep keeps an angle / the FOV
 	void moveTo(uint32 ms, const float *position, float yaw, float pitch, float fov = kKeep);
 	void lookAt(uint32 ms, const Math::Vector3d &target);
@@ -157,6 +159,7 @@ private:
 	Camera _camera; // the last one drawn, for frames over a frozen scene
 	Common::String _menuText; // the text edit of the last menu
 	bool _escapeNow = false;
+	bool _walk = false; // runFor with walking input
 };
 
 } // End of namespace X3D

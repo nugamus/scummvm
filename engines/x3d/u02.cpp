@@ -109,9 +109,9 @@ void U02::waitClip(const char *node) {
 		_vm->runFor(0);
 }
 
-void U02::waitGroup(int group) {
+void U02::waitGroup(int group, bool walk) {
 	while (_vm->sound()->isGroupPlaying(group) && !_vm->shouldQuit())
-		_vm->runFor(0);
+		_vm->runFor(0, walk);
 }
 
 void U02::startSnore() {
@@ -194,8 +194,7 @@ bool U02::handle(const Common::String &action) {
 		if (n == 3)
 			interaction->setCursorKind(kClerk, 0);
 		effect("d1_25_2", hotspotPosition("U02_04"));
-		// ponytail: the original takes walking input while the snore plays
-		waitGroup(Sound::kEffects);
+		waitGroup(Sound::kEffects, true);
 		startSnore();
 	} else if (action.equalsIgnoreCase("Sonner")) {
 		ringBell();
@@ -374,13 +373,12 @@ void U02::feedMagpie() {
 
 	resetCalls();
 	_vm->suspend(false);
-	// ponytail: the original keeps walking input on during these waits
 	const Vector3d voice = player.eye - Vector3d(0, 0, 5 * scene->scale); // before the wait
-	_vm->runFor(2000);
+	_vm->runFor(2000, true);
 	_vm->sound()->emit(Sound::kVoiceEmitter, Common::Path(scene->dir() + "Sound/d1_24.wav"), voice, false);
 	_gauge = true;
 	_gaugeStart = _vm->logicMs();
-	waitGroup(Sound::kEffects);
+	waitGroup(Sound::kEffects, true);
 
 	// The clerk falls asleep, breathing between two poses
 	scene->setClip(kClerk, "Anim/U02_04/ACTION01.A3D");
