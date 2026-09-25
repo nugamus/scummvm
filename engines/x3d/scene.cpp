@@ -286,6 +286,8 @@ void Scene::animate(const A3DFile &file, uint animation, Model &m, uint object, 
 
 void Scene::update(float dt) {
 	for (AnimNode &n : _nodes) {
+		if (!n.enabled)
+			continue;
 		// A rewound clip hands back to the node's own animation at frame 1 (E-0057)
 		if (n.clipActive && n.clip.backward && !n.clip.running) {
 			n.clipActive = false;
@@ -390,6 +392,55 @@ void Scene::rewindClip(const Common::String &objectName) {
 bool Scene::clipPlaying(const Common::String &objectName) {
 	AnimNode *n = findNode(objectName);
 	return n && n->clipActive && n->clip.running;
+}
+
+int Scene::addFaceClip(const Common::String &faceObject, const Common::String &path) {
+	Model *model = nullptr;
+	uint object = 0;
+	for (Model *m : _models)
+		for (uint i = 0; i < m->file.objects.size() && !model; i++)
+			if (m->file.objects[i].name.equalsIgnoreCase(faceObject)) {
+				model = m;
+				object = i;
+			}
+	Common::File f;
+	A3DFile *file = new A3DFile();
+	if (!model || !f.open(Common::Path(_dir + path)) || !file->load(f)) {
+		delete file;
+		return -1;
+	}
+	for (uint a = 0; a < file->animations.size(); a++) {
+		if (!file->animations[a].name.equalsIgnoreCase(faceObject))
+			continue;
+		_animationFiles.push_back(file);
+		addNode(file, a, model, object, 15);
+		_nodes.back().enabled = false;
+		_nodes.back().base.running = false;
+		return _nodes.size() - 1;
+	}
+	delete file;
+	return -1;
+}
+
+void Scene::setNode(int node, bool enabled, bool running) {
+	_nodes[node].enabled = enabled;
+	_nodes[node].base.running = running;
+}
+
+void Scene::setNodeFrame(int node, float frame) {
+	_nodes[node].base.frame = frame;
+}
+
+void Scene::setNodeFps(int node, float fps) {
+	_nodes[node].base.fps = fps;
+}
+
+Math::Vector3d Scene::objectPosition(const Common::String &name) const {
+	for (const Model *m : _models)
+		for (const O3DObject &o : m->file.objects)
+			if (o.name.equalsIgnoreCase(name))
+				return Math::Vector3d(o.world[12], o.world[13], o.world[14]);
+	return Math::Vector3d();
 }
 
 void Scene::Playback::advance(float dt) {

@@ -29,6 +29,8 @@
 #include "common/path.h"
 #include "common/str.h"
 
+#include "math/vector3d.h"
+
 
 #include "x3d/a3d.h"
 #include "x3d/o3d.h"
@@ -98,6 +100,17 @@ public:
 	void rewindClip(const Common::String &objectName);
 	bool clipPlaying(const Common::String &objectName);
 
+	// Mouth clips for talk (sound.md, Talkers): a node that plays the sub-animation named
+	// like the face object from a whole-body .A3D, created disabled and paused. -1 if the
+	// file or the object is missing.
+	int addFaceClip(const Common::String &faceObject, const Common::String &path);
+	void setNode(int node, bool enabled, bool running);
+	void setNodeFrame(int node, float frame);
+	void setNodeFps(int node, float fps);
+
+	// An object's world origin, by name
+	Math::Vector3d objectPosition(const Common::String &name) const;
+
 	const Common::String &dir() const { return _dir; } // asset directory, e.g. "U01/"
 
 	// Files loaded by object= lines (not their LODs), in script order
@@ -126,6 +139,7 @@ private:
 		uint object;
 		Playback base, clip;
 		bool clipActive = false;
+		bool enabled = true; // disabled nodes are neither advanced nor applied
 	};
 
 	AnimNode *findNode(const Common::String &objectName);

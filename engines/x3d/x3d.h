@@ -31,6 +31,7 @@
 namespace X3D {
 
 class Renderer;
+class Sound;
 
 class X3DEngine : public Engine {
 public:
@@ -44,9 +45,6 @@ public:
 protected:
 	Common::Error run() override;
 
-public:
-	void playSound(const Common::String &name);
-
 private:
 	void playScene(const Common::String &sceneName);
 	void showBitmap(const Common::Path &path);
@@ -59,6 +57,7 @@ private:
 
 	const ADGameDescription *_gameDescription;
 	Renderer *_renderer = nullptr;
+	Sound *_sound = nullptr;
 };
 
 } // End of namespace X3D

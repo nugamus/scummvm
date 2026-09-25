@@ -40,6 +40,8 @@
 #include "x3d/interaction.h"
 #include "x3d/player.h"
 #include "x3d/renderer.h"
+#include "x3d/sound.h"
+#include "x3d/talk.h"
 #include "x3d/scene.h"
 #include "x3d/x3d.h"
 
@@ -50,6 +52,7 @@ X3DEngine::X3DEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(
 }
 
 X3DEngine::~X3DEngine() {
+	delete _sound;
 	delete _renderer;
 }
 
@@ -59,6 +62,7 @@ Common::Error X3DEngine::run() {
 	// The original frames every mode as 4:3 (E-0040); widescreen keeps its height and view
 	// and shows more to the sides. 2D images stay 640x480, centred.
 	_renderer = Renderer::create(ConfMan.hasKey("widescreen") && ConfMan.getBool("widescreen") ? 854 : 640, 480);
+	_sound = new Sound(_mixer);
 
 	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
 	// sequence and the scene's entry video
@@ -91,7 +95,13 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	Scene scene(_renderer);
 	if (!scene.load(sceneName))
 		error("Unable to load scene %s", sceneName.c_str());
-	Interaction interaction(this, scene);
+	// Sound (sound.md): mode 0 group volumes, the scene's emitters, talkers
+	_sound->setGroupVolume(Sound::kAmbient, 85);
+	_sound->setGroupVolume(4, 80);
+	_sound->setGroupVolume(5, 80);
+	_sound->setScale(scene.scale);
+	Talk talk(scene, *_sound, scene.dir());
+	Interaction interaction(scene, *_sound, talk);
 	interaction.load(scene.dir());
 
 	// U01 as its scripted entry leaves it (movement.md, U01 hand-over): the mayor holds out
@@ -113,6 +123,10 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 		scene.hideObject("Box203");
 		scene.hideObject("Cylinder07");
 		scene.playClip("*U01_02", "Anim/U01_02/Action03.A3D");
+		talk.addTalker("U01_01", "$$$DUMMY.*01SParle");
+		talk.addTalker("U01_02", "$$$DUMMY.*02SParle");
+		// The unit's ambient loop, started after the prologue
+		_sound->play(Common::Path(scene.dir() + "Sound/U01.WAV"), Sound::kAmbient, 85, true);
 	}
 	// Development shortcut: start_camera=x,y,z,yaw,pitch places the camera anywhere
 	if (ConfMan.hasKey("start_camera")) {
@@ -133,18 +147,31 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	int hotspot = -1;
 	Common::Point mouse(320, 240);
 	bool hoverNow = false, clickNow = false;
-	uint32 last = _system->getMillis(), pending = 0, frames = 0, fpsStart = last, lastClick = 0;
-	// Development shortcut: dev_click=x,y,ms clicks at game pixel (x, y) ms after the scene
-	// starts, for testing without focus (SDL takes click positions from the real cursor)
-	int devClick[3] = { -1, -1, -1 };
-	if (ConfMan.hasKey("dev_click"))
-		sscanf(ConfMan.get("dev_click").c_str(), "%d,%d,%d", &devClick[0], &devClick[1], &devClick[2]);
+	uint32 last = _system->getMillis(), pending = 0, frames = 0, fpsStart = last, lastClick = 0, logicMs = 0;
+	// Development shortcut: dev_click=x,y,ms[;x,y,ms...] clicks at game pixel (x, y) ms
+	// after the scene starts, for testing without focus (SDL takes click positions from
+	// the real cursor)
+	Common::Array<int> devClicks;
+	if (ConfMan.hasKey("dev_click")) {
+		const char *c = ConfMan.get("dev_click").c_str();
+		int x, y, ms, n;
+		while (sscanf(c, "%d,%d,%d%n", &x, &y, &ms, &n) == 3) {
+			devClicks.push_back(x);
+			devClicks.push_back(y);
+			devClicks.push_back(ms);
+			c += n;
+			if (*c == ';')
+				c++;
+		}
+	}
 	const uint32 sceneStart = last;
 	while (!shouldQuit()) {
-		if (devClick[2] >= 0 && _system->getMillis() - sceneStart >= (uint32)devClick[2]) {
-			mouse = Common::Point(devClick[0], devClick[1]);
+		if (!devClicks.empty() && _system->getMillis() - sceneStart >= (uint32)devClicks[2]) {
+			mouse = Common::Point(devClicks[0], devClicks[1]);
 			clickNow = true;
-			devClick[2] = -1;
+			devClicks.remove_at(0);
+			devClicks.remove_at(0);
+			devClicks.remove_at(0);
 		}
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
@@ -186,8 +213,12 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 			pending -= stepMs;
 			previous = player;
 			if (player.tick(stepMs / 1000.0f, keys, collision))
-				playSound("SAUT.WAV");
+				_sound->emit(Sound::kEffectsEmitter, "SAUT.WAV", player.eye, false);
+			logicMs += stepMs;
+			talk.tick(logicMs);
 			scene.update(stepMs / 1000.0f);
+			_sound->updateVolumes(player.eye);
+			interaction.eye = player.eye;
 
 			// TakeCard waits for the card animation, then allows walking (E-0050, E-0057)
 			if (takingCard && !scene.clipPlaying("*U01_02")) {
@@ -275,18 +306,6 @@ void X3DEngine::wait(uint32 ms) {
 	}
 }
 
-void X3DEngine::playSound(const Common::String &name) {
-	Common::File *file = new Common::File();
-	if (!file->open(Common::Path(name))) {
-		delete file;
-		warning("Unable to open sound %s", name.c_str());
-		return;
-	}
-	Audio::RewindableAudioStream *stream = Audio::makeWAVStream(file, DisposeAfterUse::YES);
-	if (stream)
-		_mixer->playStream(Audio::Mixer::kSFXSoundType, nullptr, stream);
-}
-
 void X3DEngine::playVideo(const Common::String &name) {
 	Video::AVIDecoder video;
 	if (!video.loadFile(Common::Path("Video/" + name + ".avi"))) {
@@ -295,6 +314,7 @@ void X3DEngine::playVideo(const Common::String &name) {
 	}
 
 	video.start();
+	_sound->stopAll(); // a video stops every sound (sound.md)
 
 	// The soundtrack is a separate WAV, started right after the video
 	Audio::SoundHandle sound;

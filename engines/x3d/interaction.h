@@ -23,8 +23,11 @@
 #define X3D_INTERACTION_H
 
 #include "common/array.h"
+#include "common/path.h"
 #include "common/str.h"
 #include "common/str-array.h"
+
+#include "math/vector3d.h"
 
 namespace Graphics {
 struct Surface;
@@ -33,12 +36,15 @@ struct Surface;
 namespace X3D {
 
 class Scene;
-class X3DEngine;
+class Sound;
+class Talk;
 
 // Hotspots, cursors and click actions of a unit (docs/engine-spec/interaction.md)
 class Interaction {
 public:
-	Interaction(X3DEngine *vm, Scene &scene);
+	Interaction(Scene &scene, Sound &sound, Talk &talk);
+
+	Math::Vector3d eye; // the camera position, for voices that play at the listener
 	~Interaction();
 
 	// Data/Uxx/INFOOBJ.BIN hotspots and INFOACT.BIN actions
@@ -79,10 +85,13 @@ private:
 	bool runnable(const Action &a, uint32 trigger) const;
 	bool evaluate(const Common::String &condition) const;
 	void run(Action &a, Common::StringArray &unitActions);
+	Common::Path soundPath(const Common::String &name) const;
+	Common::String hotspotName(const Action &a) const;
 	void setCursor(uint kind);
 	void holdItem(const Common::String &item);
 
-	X3DEngine *_vm;
+	Sound &_sound;
+	Talk &_talk;
 	Scene &_scene;
 	Common::String _soundDir;
 	Common::Array<Hotspot> _hotspots;
