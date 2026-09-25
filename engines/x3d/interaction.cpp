@@ -382,6 +382,26 @@ Common::String Interaction::hotspotName(const Action &a) const {
 	return h >= 0 ? _hotspots[h].name : a.hotspot;
 }
 
+void Interaction::take(const Common::String &hotspot) {
+	const int target = findHotspot(hotspot);
+	const Common::String name = target >= 0 ? _hotspots[target].name : hotspot;
+	if (target >= 0)
+		_hotspots[target].cursor = 0;
+	_scene.hideObject(name);
+	holdItem(name.substr(1, 6)); // six characters after the '*' (E-0204)
+	if (inventory)
+		inventory->show();
+}
+
+void Interaction::useUp(const Common::String &hotspot) {
+	const int target = findHotspot(hotspot);
+	holdItem("");
+	if (target >= 0)
+		_hotspots[target].cursor = 0;
+	if (inventory)
+		inventory->hide();
+}
+
 void Interaction::run(Action &a, Common::StringArray &unitActions) {
 	debug(1, "action %s on %s", a.name.c_str(), a.hotspot.c_str());
 	const int target = findHotspot(a.target);
@@ -399,19 +419,10 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 			}
 			break;
 		case 2: // take the target
-			if (target >= 0)
-				_hotspots[target].cursor = 0;
-			_scene.hideObject(targetName);
-			holdItem(targetName.hasPrefix("*") ? targetName.substr(1) : targetName);
-			if (inventory)
-				inventory->show();
+			take(a.target);
 			break;
 		case 3: // use up the held item
-			holdItem("");
-			if (target >= 0)
-				_hotspots[target].cursor = 0;
-			if (inventory)
-				inventory->hide();
+			useUp(a.target);
 			break;
 		case 4:
 			_scene.startAnimation(arg);

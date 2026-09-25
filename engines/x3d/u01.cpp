@@ -392,22 +392,11 @@ void U01::ride(float dt) {
 	}
 }
 
-void U01::fadeToBlack(uint32 ms) {
-	Scene *scene = _vm->scene();
-	const uint n = MAX<uint>(1, ms * X3DEngine::kStepsPerSecond / 1000);
-	const byte start[3] = { scene->ambient[0], scene->ambient[1], scene->ambient[2] };
-	for (uint i = 0; i < n && !_vm->shouldQuit(); i++) {
-		for (int k = 0; k < 3; k++)
-			scene->ambient[k] = MAX(0, (int)scene->ambient[k] - start[k] / (int)n);
-		_vm->runFor(10);
-	}
-}
-
 void U01::leave() {
 	// Leaving U01 for U02 (E-0087)
 	Sound *sound = _vm->sound();
 	_vm->suspend(true);
-	fadeToBlack(2000);
+	_vm->fadeToBlack(2000);
 	sound->emit(Sound::kEffectsEmitter, Common::Path(_vm->scene()->dir() + "Sound/s1_12.WAV"), _vm->player().eye, true);
 	sound->stopGroup(Sound::kAmbient);
 	for (float d = 10; d < 60 * _vm->scene()->scale && !_vm->shouldQuit(); d += 10) {
@@ -445,7 +434,7 @@ void U01::caught() {
 	const float p[3] = { 486.059f, -107.99f, 24 };
 	_vm->moveTo(1000, p, 0.0831f, 1.95f);
 	_vm->moveTo(2000, nullptr, 0.1631f, 2.19f, 35);
-	fadeToBlack(2000);
+	_vm->fadeToBlack(2000);
 	sound->stopAll();
 	// ponytail: the original opens the load-game frame (OptionLoad); without the 2D UI
 	// the unit restarts
@@ -457,12 +446,7 @@ void U01::caught() {
 void U01::draw() {
 	if (!_gauge)
 		return;
-	// A grey frame and a red bar that shrinks over 20 s, in 640x480 frame pixels
-	const float p = MIN(1.0f, (g_system->getMillis() - _gaugeStart) / 20000.0f);
-	Renderer *r = _vm->renderer();
-	const int x = (r->width() - 640) / 2;
-	r->fillRect(x + 9, 9, x + 111, 21, 0x80, 0x80, 0x80);
-	r->fillRect(x + 10, 10, x + 110 - (int)(100 * p), 20, 0xff, 0, 0);
+	drawGauge(_vm->renderer(), MIN(1.0f, (g_system->getMillis() - _gaugeStart) / 20000.0f));
 }
 
 } // End of namespace X3D

@@ -49,6 +49,7 @@
 #include "x3d/talk.h"
 #include "x3d/u00.h"
 #include "x3d/u01.h"
+#include "x3d/u02.h"
 #include "x3d/x3d.h"
 
 namespace X3D {
@@ -115,7 +116,10 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 
 	U00 unit00(this, _practice);
 	U01 unit01(this);
-	_unit = sceneName.hasPrefixIgnoreCase("U00") ? (Unit *)&unit00 : sceneName.hasPrefixIgnoreCase("U01") ? (Unit *)&unit01 : nullptr;
+	U02 unit02(this);
+	_unit = sceneName.hasPrefixIgnoreCase("U00") ? (Unit *)&unit00 :
+	        sceneName.hasPrefixIgnoreCase("U01") ? (Unit *)&unit01 :
+	        sceneName.hasPrefixIgnoreCase("U02") ? (Unit *)&unit02 : nullptr;
 	if (_unit)
 		_unit->afterLoad();
 	interaction.load(scene.dataDir());
@@ -560,8 +564,10 @@ Common::String X3DEngine::command(const Common::String &line) {
 	const Common::String &c = a[0];
 	if (c == "where") {
 		_player.probeGround(*_collision);
-		return Common::String::format("%g,%g,%g,%g,%g fov %g, over %s", _player.eye.x(), _player.eye.y(), _player.eye.z(),
-		                              _player.yaw, _player.pitch, _player.fov, _player.groundObject.c_str());
+		float t = 1;
+		_collision->cast(_player.eye, _player.eye - Math::Vector3d(0, 0, 10000), t);
+		return Common::String::format("%g,%g,%g,%g,%g fov %g, over %s at z %g", _player.eye.x(), _player.eye.y(), _player.eye.z(),
+		                              _player.yaw, _player.pitch, _player.fov, _player.groundObject.c_str(), _player.eye.z() - 10000 * t);
 	}
 	if (c == "goto" && a.size() >= 4) {
 		const float p[3] = { (float)atof(a[1].c_str()), (float)atof(a[2].c_str()), (float)atof(a[3].c_str()) };
@@ -593,6 +599,17 @@ Common::String X3DEngine::command(const Common::String &line) {
 		_clickNow = true;
 		return Common::String::format("click %d,%d", _mouse.x, _mouse.y);
 	}
+	if (c == "act" && a.size() >= 2) {
+		_interaction->runAction(atoi(a[1].c_str()), _unitActions); // Mnn, bypassing the click
+		return "ok";
+	}
+	if (c == "pos" && a.size() >= 2) {
+		const Math::Vector3d o = _scene->objectPosition(a[1]), m = _scene->objectCenter(a[1]);
+		Scene::Model *model;
+		uint i;
+		const bool hidden = _scene->findObject(a[1], model, i) && model->hiddenObjects[i];
+		return Common::String::format("origin %g,%g,%g centre %g,%g,%g%s", o.x(), o.y(), o.z(), m.x(), m.y(), m.z(), hidden ? " hidden" : "");
+	}
 	if (c == "hotspots") {
 		Common::String out;
 		for (const Common::String &h : _interaction->hotspotNames()) {
@@ -607,7 +624,7 @@ Common::String X3DEngine::command(const Common::String &line) {
 		return "ok";
 	}
 	if (c == "hold" && a.size() >= 2) {
-		_interaction->holdItem(a[1]);
+		_interaction->holdItem(a[1] == "-" ? "" : a[1]); // "-": nothing
 		return "ok";
 	}
 	return "unknown command " + c;
@@ -640,7 +657,17 @@ void X3DEngine::wait(uint32 ms) {
 	}
 }
 
-void X3DEngine::playVideo(const Common::String &name) {
+void X3DEngine::fadeToBlack(uint32 ms) {
+	const uint n = MAX<uint>(1, ms * kStepsPerSecond / 1000);
+	const byte start[3] = { _scene->ambient[0], _scene->ambient[1], _scene->ambient[2] };
+	for (uint i = 0; i < n && !shouldQuit(); i++) {
+		for (int k = 0; k < 3; k++)
+			_scene->ambient[k] = MAX(0, (int)_scene->ambient[k] - start[k] / (int)n);
+		runFor(10);
+	}
+}
+
+void X3DEngine::playVideo(const Common::String &name, const Common::String &wav) {
 	Video::AVIDecoder video;
 	if (!video.loadFile(Common::Path("Video/" + name + ".avi"))) {
 		warning("Unable to open video %s", name.c_str());
@@ -652,13 +679,13 @@ void X3DEngine::playVideo(const Common::String &name) {
 
 	// The soundtrack is a separate WAV, started right after the video
 	Audio::SoundHandle sound;
-	Common::File *wav = new Common::File();
-	if (wav->open(Common::Path("Video/" + name + ".wav"))) {
-		Audio::RewindableAudioStream *stream = Audio::makeWAVStream(wav, DisposeAfterUse::YES);
+	Common::File *file = new Common::File();
+	if (file->open(Common::Path("Video/" + (wav.empty() ? name : wav) + ".wav"))) {
+		Audio::RewindableAudioStream *stream = Audio::makeWAVStream(file, DisposeAfterUse::YES);
 		if (stream)
 			_mixer->playStream(Audio::Mixer::kSFXSoundType, &sound, stream);
 	} else {
-		delete wav;
+		delete file;
 	}
 
 	bool skip = false;

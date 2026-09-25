@@ -19,6 +19,7 @@ MODULE_OBJS = \
 	talk.o \
 	u00.o \
 	u01.o \
+	u02.o \
 	x3d.o
 
 # This module can be built as a plugin

@@ -141,6 +141,13 @@ public:
 	// Replaces the node's animation with a whole .A3D in its clip slot, paused, driving the
 	// node object's parent (U01's siding clip, u01.md)
 	void loadClip(const Common::String &name, const Common::String &path, float fps, float frame);
+	// A clip made the node's active slot, paused at its first frame, not looping; with a
+	// sub-animation name, only that animation plays, on the object of the same name
+	// (u02.md). The node* controls above then act on it; endClip goes back to slot 0.
+	void setClip(const Common::String &name, const Common::String &path, const Common::String &subAnimation = "");
+	void endClip(const Common::String &name);
+	void setNodePingPong(const Common::String &name, bool pingPong);
+	void enableNode(const Common::String &name, bool enabled);
 
 	byte ambient[3] = { 255, 255, 255 };
 
@@ -163,6 +170,7 @@ private:
 		uint animation = 0;
 		float fps = 30, frame = 0;
 		bool loop = true, running = true, backward = false;
+		bool pingPong = false; // not looping: turns round at both ends instead of stopping
 		float stopAt = -1; // stop target, < 0 for none
 		float first = -1, last = -1; // range override, < 0: the animation's
 		int object = -1;             // the object it drives, < 0: the node's
