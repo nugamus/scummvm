@@ -256,11 +256,7 @@ bool U00::input(float dt) {
 			stopGauge();
 		return true;
 	}
-	if (keys.space) {
-		_spaceSeen = true;
-		if (_state == 8)
-			stopGauge();
-	}
+	// Space never reaches the tutorial: the bar's frame takes it (E-0214)
 
 	// The ground object changes only in the walking step (E-0231)
 	if (player.tick(dt, keys, *_vm->collision()))
