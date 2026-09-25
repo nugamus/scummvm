@@ -69,7 +69,10 @@ public:
 		glLoadMatrixf(view);
 		glEnable(GL_DEPTH_TEST);
 		glDepthMask(GL_TRUE);
-		glDisable(GL_CULL_FACE);
+		// D3D's default culling: xd3d never sets D3DRENDERSTATE_CULLMODE (E-0205)
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_BACK);
+		glFrontFace(GL_CCW);
 		glDisable(GL_LIGHTING);
 		glDisable(GL_BLEND);
 		glEnable(GL_ALPHA_TEST);
