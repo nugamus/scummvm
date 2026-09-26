@@ -30,6 +30,10 @@ namespace Graphics {
 struct Surface;
 }
 
+namespace Video {
+class HNMDecoder;
+}
+
 namespace Peintre {
 
 class PeintreEngine;
@@ -45,6 +49,7 @@ struct MovieEntry {
 class MoviePlayer {
 public:
 	MoviePlayer(PeintreEngine *vm) : _vm(vm) {}
+	~MoviePlayer();
 
 	/** Reads the movie table out of the game's EXE. */
 	bool loadTable();
@@ -57,12 +62,30 @@ public:
 	 */
 	bool play(const Common::String &name, bool skippable = true);
 
+	/**
+	 * Movie_Open (ui.md "2D movies"): opens entry n of the table to be stepped inside the
+	 * 2D tick loop. Closes the previous one.
+	 */
+	bool open(uint n);
+	/** Draws the frame that is due into dst; false once the movie has ended. */
+	bool step(Graphics::Surface &dst);
+	void close();
+	bool isOpen() const { return _decoder != nullptr; }
+
 private:
+	Video::HNMDecoder *openDecoder(const Common::String &name);
 	bool loadMasks(const Common::String &name, Common::Array<Common::Array<byte> > &masks);
 	void paintMask(Graphics::Surface &dst, const Common::Array<byte> &mask, const Common::Point &origin);
+	void drawFrame(Graphics::Surface &dst, const Graphics::Surface &frame, const MovieEntry *entry,
+				   const Common::Array<Common::Array<byte> > &masks, int n);
 
 	PeintreEngine *_vm;
 	Common::Array<MovieEntry> _table;
+
+	// The movie opened by open().
+	Video::HNMDecoder *_decoder = nullptr;
+	const MovieEntry *_entry = nullptr;
+	Common::Array<Common::Array<byte> > _masks;
 };
 
 } // End of namespace Peintre

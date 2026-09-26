@@ -89,15 +89,18 @@ bool MoviePlayer::loadMasks(const Common::String &name, Common::Array<Common::Ar
 	Common::Array<uint32> offsets;
 	for (uint32 i = 0; i < count; i++)
 		offsets.push_back(f.readUint32LE());
+	// The offsets count from the end of their table.
+	const uint32 base = 8 + 4 * count;
 	masks.resize(count);
 	for (uint32 i = 0; i < count; i++) {
-		const uint32 end = i + 1 < count ? offsets[i + 1] : f.size();
-		if (offsets[i] >= end || end > f.size())
+		const uint32 start = base + offsets[i];
+		const uint32 end = i + 1 < count ? base + offsets[i + 1] : f.size();
+		if (start >= end || end > f.size())
 			return false;
-		f.seek(offsets[i]);
+		f.seek(start);
 		masks[i].resize(bufSize);
 		memset(masks[i].data(), 0, bufSize);
-		Image::HLZDecoder::decodeFrameInPlace(f, end - offsets[i], masks[i].data());
+		Image::HLZDecoder::decodeFrameInPlace(f, end - start, masks[i].data());
 	}
 	return true;
 }
@@ -144,50 +147,64 @@ void MoviePlayer::paintMask(Graphics::Surface &dst, const Common::Array<byte> &m
 	}
 }
 
-bool MoviePlayer::play(const Common::String &name, bool skippable) {
+MoviePlayer::~MoviePlayer() {
+	close();
+}
+
+Video::HNMDecoder *MoviePlayer::openDecoder(const Common::String &name) {
 	Common::File *f = new Common::File();
 	if (!f->open(Common::Path("MOVIES/" + name + ".HNM"))) {
 		delete f;
 		warning("MoviePlayer: cannot open %s.HNM", name.c_str());
-		return false;
+		return nullptr;
 	}
 	// Header byte 6: audio flags, bit 0 = has sound (formats README, .HNM).
 	f->seek(6);
 	const bool hasSound = f->readByte() & 1;
 	f->seek(0);
 
-	const Graphics::PixelFormat format = g_system->getScreenFormat();
-	Video::HNMDecoder decoder(format);
+	Video::HNMDecoder *decoder = new Video::HNMDecoder(g_system->getScreenFormat());
 	if (!hasSound)
-		decoder.setRegularFrameDelay(kSilentFrameDelay);
-	if (!decoder.loadStream(f))
-		return false;
+		decoder->setRegularFrameDelay(kSilentFrameDelay);
+	if (!decoder->loadStream(f)) {
+		delete decoder;
+		return nullptr;
+	}
+	debugC(1, kDebugLoad, "MoviePlayer: %s, %d frames, sound %d", name.c_str(), decoder->getFrameCount(), hasSound);
+	return decoder;
+}
 
+void MoviePlayer::drawFrame(Graphics::Surface &dst, const Graphics::Surface &frame, const MovieEntry *entry,
+							const Common::Array<Common::Array<byte> > &masks, int n) {
+	if (entry) {
+		// The top-left w x h of the frame goes to (x, y); the mask is painted over it.
+		const int w = MIN<int>(entry->rect.width(), frame.w);
+		const int h = MIN<int>(entry->rect.height(), frame.h);
+		dst.copyRectToSurface(frame, entry->rect.left, entry->rect.top, Common::Rect(0, 0, w, h));
+		if (n >= 0 && (uint)n < masks.size())
+			paintMask(dst, masks[n], Common::Point(entry->rect.left, entry->rect.top));
+	} else {
+		dst.copyRectToSurface(frame, 0, 0, Common::Rect(0, 0, MIN<int>(frame.w, 640), MIN<int>(frame.h, 480)));
+	}
+}
+
+bool MoviePlayer::play(const Common::String &name, bool skippable) {
+	Video::HNMDecoder *decoder = openDecoder(name);
+	if (!decoder)
+		return false;
 	const MovieEntry *entry = findEntry(name);
 	Common::Array<Common::Array<byte> > masks;
 	if (entry && entry->hasCvy && !loadMasks(name, masks))
 		warning("MoviePlayer: cannot read %s.CVY", name.c_str());
 
-	debugC(1, kDebugLoad, "MoviePlayer: %s, %d frames, sound %d, table %d", name.c_str(),
-		   decoder.getFrameCount(), hasSound, entry != nullptr);
-	decoder.start();
+	decoder->start();
 	bool skipped = false;
-	while (!_vm->shouldQuit() && !decoder.endOfVideo() && !skipped) {
-		if (decoder.needsUpdate()) {
-			const Graphics::Surface *frame = decoder.decodeNextFrame();
+	while (!_vm->shouldQuit() && !decoder->endOfVideo() && !skipped) {
+		if (decoder->needsUpdate()) {
+			const Graphics::Surface *frame = decoder->decodeNextFrame();
 			if (frame) {
 				Graphics::Surface *screen = g_system->lockScreen();
-				if (entry) {
-					// The top-left w x h of the frame goes to (x, y); the mask is painted over it.
-					const int w = MIN<int>(entry->rect.width(), frame->w);
-					const int h = MIN<int>(entry->rect.height(), frame->h);
-					screen->copyRectToSurface(*frame, entry->rect.left, entry->rect.top, Common::Rect(0, 0, w, h));
-					const int n = decoder.getCurFrame();
-					if (n >= 0 && (uint)n < masks.size())
-						paintMask(*screen, masks[n], Common::Point(entry->rect.left, entry->rect.top));
-				} else {
-					screen->copyRectToSurface(*frame, 0, 0, Common::Rect(0, 0, MIN<int>(frame->w, 640), MIN<int>(frame->h, 480)));
-				}
+				drawFrame(*screen, *frame, entry, masks, decoder->getCurFrame());
 				g_system->unlockScreen();
 				g_system->updateScreen();
 			}
@@ -200,8 +217,47 @@ bool MoviePlayer::play(const Common::String &name, bool skippable) {
 		}
 		g_system->delayMillis(5);
 	}
-	decoder.close();
+	delete decoder;
 	return true;
+}
+
+bool MoviePlayer::open(uint n) {
+	close();
+	if (n >= _table.size()) {
+		warning("MoviePlayer: no movie %d in the table", n);
+		return false;
+	}
+	_entry = &_table[n];
+	_decoder = openDecoder(_entry->name);
+	if (!_decoder)
+		return false;
+	if (_entry->hasCvy && !loadMasks(_entry->name, _masks))
+		warning("MoviePlayer: cannot read %s.CVY", _entry->name.c_str());
+	_decoder->start();
+	return true;
+}
+
+bool MoviePlayer::step(Graphics::Surface &dst) {
+	if (!_decoder)
+		return false;
+	if (_decoder->endOfVideo()) {
+		close();
+		return false;
+	}
+	// Movie frames last 80 ms or more, so a 40 ms tick draws at most one; catch up if late.
+	while (_decoder->needsUpdate() && !_decoder->endOfVideo()) {
+		const Graphics::Surface *frame = _decoder->decodeNextFrame();
+		if (frame)
+			drawFrame(dst, *frame, _entry, _masks, _decoder->getCurFrame());
+	}
+	return true;
+}
+
+void MoviePlayer::close() {
+	delete _decoder;
+	_decoder = nullptr;
+	_entry = nullptr;
+	_masks.clear();
 }
 
 } // End of namespace Peintre
