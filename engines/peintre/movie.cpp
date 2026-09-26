@@ -210,6 +210,7 @@ bool MoviePlayer::play(const Common::String &name, bool skippable) {
 			}
 		}
 		Common::Event event;
+		_vm->devStep();
 		while (g_system->getEventManager()->pollEvent(event)) {
 			// A left click skips a skippable movie (boot.md step 8; 0x40e4ef is the left button).
 			if (skippable && event.type == Common::EVENT_LBUTTONDOWN)
