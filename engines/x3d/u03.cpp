@@ -89,8 +89,8 @@ void U03::start(bool newGame, bool video) {
 	scene->setNodeLoop("*path", false);
 	scene->setNodePingPong("*path", false);
 	scene->setNodeFps("*path", 4);
-	// The route's whole model: *path, its white guide plane 0000aaaaaa and their dummy
-	// (u03.md Entry 7 hides *path; the plane cannot be visible either, Q-0144)
+	// u03.md Entry 7: *path's parent $$$DUMMY.Dummy01 hidden with its subtree (*path and
+	// the route plane 0000aaaaaa) and out of collision (E-0531)
 	Scene::Model *m;
 	uint o;
 	if (scene->findObject("*path", m, o)) {
@@ -210,12 +210,19 @@ void U03::clownTrick() {
 	while (sound->isGroupPlaying(Sound::kVoice) && _vm->logicMs() < t0 + 9000 && !_vm->enterHeld() && !_vm->shouldQuit())
 		_vm->runFor(0);
 	scene->runNodeTo(kClown, -1, false);
+	// U03::GiveCartePostale: at magie frame > 48 or Enter while the voice plays (E-0538)
+	auto giveCard = [&]() {
+		scene->hideObjectOnly("*U03_03");
+		if (!_vm->inventory()->has("U03_06P"))
+			_vm->inventory()->add("U03_06P");
+	};
+	// Deliberate deviation: when the line could not play at all (muted or missing audio)
+	// the original never gives the card and the game cannot go on; give it anyway
+	if (!sound->isGroupPlaying(Sound::kVoice))
+		giveCard();
 	while (sound->isGroupPlaying(Sound::kVoice) && !_vm->shouldQuit()) {
 		if (scene->nodeFrame(kClown) > 48 || _vm->enterHeld()) {
-			// U03::GiveCartePostale. If the line ends first there is no card (Q-0141).
-			scene->hideObjectOnly("*U03_03");
-			if (!_vm->inventory()->has("U03_06P"))
-				_vm->inventory()->add("U03_06P");
+			giveCard();
 			break;
 		}
 		_vm->runFor(0);
