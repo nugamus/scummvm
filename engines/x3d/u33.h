@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef X3D_U00_H
-#define X3D_U00_H
+#ifndef X3D_U33_H
+#define X3D_U33_H
 
 #include "math/vector3d.h"
 
@@ -28,44 +28,50 @@
 
 namespace X3D {
 
-class Collision;
-class Scene;
 class X3DEngine;
 
-// U04's name fix-ups and collision exclusions, shared by U00 and U04 (u00.md Start 0)
-void fixU04Names(Scene *scene);
-void disableU04Boxes(Collision *collision);
-
-// U00, the garden with Monet: players screen and tutorial (docs/engine-spec/u00.md)
-class U00 : public Unit {
+// U33, the square at night: the projectionist, the caravan, the clown and the bike
+// (docs/engine-spec/u33.md)
+class U33 : public Unit {
 public:
-	U00(X3DEngine *vm, bool practice) : _vm(vm), _practice(practice) {}
+	explicit U33(X3DEngine *vm) : _vm(vm) {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
-	bool input(float dt) override;
 	bool handle(const Common::String &action) override;
 	void afterFrame() override;
-	bool gameStarted() const override { return false; }
+	bool beforeClick() override; // the curtain trap
 
 private:
-	void say(const char *line, bool cut);
-	void remark(const char *line);
-	void startGauge(int state);
-	void stopGauge() { _state = 0; _gaugeStart = 0; }
-	bool fired() const;
-	void waitClip();
-	bool onStone(const Common::String &ground);
+	void run(uint32 id);
+	Math::Vector3d ground(float x, float y, float z);
+	void walk(uint32 ms, const Math::Vector3d &to, float yaw);
+	void walkG(uint32 ms, float x, float y, float z, float yaw);
+	float facing(const Math::Vector3d &target, const Math::Vector3d &from) const;
+	Math::Vector3d at(const char *object) const;
+	void effect(const char *name, const Math::Vector3d &position);
+	void waitNode(const char *node, float frame); // until the node pauses or reaches frame
+	void voiceWait(bool enterStops);
+
+	void walkToScreen();
+	void afterFilm();
+	void firstFilm();
+	void secondFilm();
+	void shutter();
+	void enterCaravan();
+	void leaveCaravan();
+	void hide();
+	void unhide();
+	void caughtBehindCurtain();
+	void gameOverClown();
+	void talkProjectionist();
+	void policeman();
+	void ride();
 
 	X3DEngine *_vm;
-	bool _practice;
-	bool _started = false, _onStone = false, _moved = false, _turned = false;
-	bool _glassesTaken = false, _nearMonet = false, _spaceSeen = false;
-	int _state = 0;          // the hidden gauge's state (u00.md, Unit state)
-	uint32 _gaugeStart = 0;  // 0: stopped
-	Math::Vector3d _monet, _boat; // hotspot positions at creation
+	uint32 _timer = 0; // the nag's and the clown search's shared clock (E-0422)
 };
 
 } // End of namespace X3D
 
-#endif // X3D_U00_H
+#endif // X3D_U33_H

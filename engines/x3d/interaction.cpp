@@ -507,6 +507,7 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 			break;
 		}
 	}
+	_lastRun = a.id;
 	if (a.id < kIds) {
 		_runs[a.id]++;
 		if (a.maxRuns < 100 && _runs[a.id] >= a.maxRuns)

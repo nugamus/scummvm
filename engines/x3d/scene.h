@@ -76,6 +76,9 @@ public:
 	Model *addModel(const Common::String &path, const Common::String &animation = "", float fps = 15);
 	void removeModel(Model *m);
 	void nameNodes(Model *m, const Common::String &name); // its nodes answer to name
+	// A new node playing the .A3D's root animation on an existing object, named after it
+	// (U07's tipping plank)
+	bool addObjectNode(const Common::String &object, const Common::String &path, float fps);
 	O3DObject *object(const Common::String &name); // newest file first
 	void draw(const Camera &cam, int width, int height);
 
@@ -98,6 +101,7 @@ public:
 		Common::Array<Common::Array<Lod> > lods;            // per object, by threshold
 		Common::Array<bool> hiddenObjects;
 		Common::Array<bool> unpickable;
+		Common::Array<bool> pickWhenHidden;
 		bool animated = false;
 		Common::Array<Common::Array<float> > worldNormals; // like worldVertices
 		bool lit = false; // reached by the scene's lights (light= after it in the script)
@@ -112,6 +116,11 @@ public:
 	void hideObject(const Common::String &name, bool hidden = true);
 	void hideObjectOnly(const Common::String &name, bool hidden = true); // not its children
 	void hideAll(); // every object of every file (U05's game over)
+	void hideParent(const Common::String &name, bool hidden = true); // and its subtree
+	// Hidden objects the pick still sees (U04's hole and ladder place, its hover hook)
+	void setPickWhenHidden(const Common::String &name, bool pick);
+	// The map of the first material of the object's first face (U04's gagged Monet)
+	void setObjectMap(const Common::String &object, const Common::String &mapName);
 	// The names of the object's siblings (same parent, itself excluded; top-level objects
 	// of its file when it has no parent)
 	Common::StringArray siblings(const Common::String &name) const;

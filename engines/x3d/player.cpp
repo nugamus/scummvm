@@ -87,8 +87,25 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 		return _fallDrop > 1.5f * _scale;
 	}
 
+	if (_jumping) {
+		_jumpTime += dt;
+		const float z = _jumpZ + _scale * _jumpTime - _scale * _jumpTime * _jumpTime / 2;
+		Vector3d next = collide ? slide(eye, _jumpVelocity, collision) : eye + _jumpVelocity;
+		next.z() = z;
+		float t;
+		const bool landed = collision.cast(next, next - Vector3d(0, 0, 10000), t) && 10000 * t < _eyeHeight && _jumpTime > 0.1f;
+		const bool blocked = collision.cast(next, next + Vector3d(0, 0, 0.4f * _scale), t);
+		eye = next;
+		if (landed || blocked || _jumpTime >= 2) {
+			_jumping = false;
+			ground(collision);
+		}
+		return false;
+	}
+
 	// Walk along the view direction's x and y, not renormalised
 	const Vector3d d(cosf(yaw) * sinf(pitch), -sinf(yaw) * sinf(pitch), -cosf(pitch));
+	const bool running = runAllowed && keys.ctrl;
 	Vector3d velocity;
 	if (canMove) {
 		int direction = 0;
@@ -107,7 +124,7 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 			if (fabs(roll) >= 0.4f)
 				_bob = -_bob;
 
-			float step = _speed * _scale * dt;
+			float step = _speed * _scale * dt * (running ? 2 : 1);
 			const Vector3d centre = eye - Vector3d(0, 0, sphereOffset);
 			const Vector3d ahead(10000 * d.x(), 10000 * d.y(), d.z());
 			float t;
@@ -115,7 +132,15 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 				step /= 2;
 			velocity.set(direction * d.x() * step, direction * d.y() * step, 0);
 		}
+		// Shift (press) jumps: the walk at x0.5 when running, x0.25 otherwise
+		if (jumpAllowed && keys.shift && !_shiftWas) {
+			_jumping = true;
+			_jumpTime = 0;
+			_jumpZ = eye.z();
+			_jumpVelocity = velocity * 0.25f; // the walk step: x0.5 of a run, x0.25 of a walk
+		}
 	}
+	_shiftWas = keys.shift;
 
 	// Per logic step, not per second: the original's rate per frame (Q-0022)
 	if (canTurn) {

@@ -178,6 +178,7 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 	m->lods.resize(m->file.objects.size());
 	m->hiddenObjects.resize(m->file.objects.size());
 	m->unpickable.resize(m->file.objects.size());
+	m->pickWhenHidden.resize(m->file.objects.size());
 	m->worldNormals.resize(m->file.objects.size());
 	m->colors.resize(m->file.objects.size());
 	m->colorFrame.resize(m->file.objects.size());
@@ -467,6 +468,35 @@ void Scene::hideObjectOnly(const Common::String &name, bool hidden) {
 				m->hiddenObjects[i] = hidden;
 }
 
+void Scene::hideParent(const Common::String &name, bool hidden) {
+	Model *m;
+	uint o;
+	if (!findObject(name, m, o) || m->file.objects[o].parent < 0)
+		return;
+	const int p = m->file.objects[o].parent;
+	for (uint i = 0; i < m->file.objects.size(); i++)
+		for (int a = i; a >= 0; a = m->file.objects[a].parent)
+			if (a == p) {
+				m->hiddenObjects[i] = hidden;
+				break;
+			}
+}
+
+void Scene::setPickWhenHidden(const Common::String &name, bool pick) {
+	Model *m;
+	uint o;
+	if (findObject(name, m, o))
+		m->pickWhenHidden[o] = pick;
+}
+
+void Scene::setObjectMap(const Common::String &object, const Common::String &mapName) {
+	Model *m;
+	uint o;
+	if (!findObject(object, m, o) || m->file.objects[o].faces.empty())
+		return;
+	m->file.materials[m->file.objects[o].faces[0].material].textureMap = mapName;
+}
+
 void Scene::hideAll() {
 	for (Model *m : _models)
 		for (uint i = 0; i < m->hiddenObjects.size(); i++)
@@ -639,8 +669,12 @@ void Scene::setClip(const Common::String &name, const Common::String &path, cons
 	p.running = false;
 	p.loop = false;
 	slot = CLIP(slot, 1, 15);
-	if (!activate && !(n->clipActive && n->slot == slot)) {
-		n->slots[slot] = p;
+	if (!activate) {
+		// clip holds slot n->slot; the others wait in slots[]
+		if (slot == n->slot)
+			n->clip = p;
+		else
+			n->slots[slot] = p;
 		return;
 	}
 	if (n->slot != slot) {
@@ -694,6 +728,16 @@ Scene::Model *Scene::addModel(const Common::String &path, const Common::String &
 	if (!animation.empty())
 		bindAnimation(animation, fps);
 	return m;
+}
+
+bool Scene::addObjectNode(const Common::String &object, const Common::String &path, float fps) {
+	Model *m;
+	uint o;
+	const A3DFile *file = findObject(object, m, o) ? clipFile(path) : nullptr;
+	if (!file)
+		return false;
+	addNode(file, 0, m, o, fps);
+	return true;
 }
 
 void Scene::nameNodes(Model *m, const Common::String &name) {
@@ -1282,7 +1326,7 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 		const Common::Array<O3DObject> &objects = m->file.objects;
 		for (uint i = 0; i < objects.size(); i++) {
 			// Welded objects are tested with their top object, whose vertices they share
-			if (m->hiddenObjects[i] || m->unpickable[i] || objects[i].vertices.empty())
+			if ((m->hiddenObjects[i] && !m->pickWhenHidden[i]) || m->unpickable[i] || objects[i].vertices.empty())
 				continue;
 
 			// The drawn level of detail supplies the faces
