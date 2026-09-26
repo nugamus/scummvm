@@ -33,6 +33,7 @@
 #include "peintre/movie.h"
 #include "peintre/obj3d.h"
 #include "peintre/peintre.h"
+#include "peintre/sound.h"
 
 namespace Peintre {
 
@@ -43,6 +44,7 @@ PeintreEngine::PeintreEngine(OSystem *syst, const ADGameDescription *gameDesc)
 
 PeintreEngine::~PeintreEngine() {
 	delete _movies;
+	delete _sound;
 	_screen.free();
 }
 
@@ -110,6 +112,7 @@ Common::Error PeintreEngine::run() {
 	if (ConfMan.getBool("dev_load_all"))
 		loadAllScenes();
 
+	_sound = new Sound(_mixer);
 	_movies = new MoviePlayer(this);
 	if (!_movies->loadTable())
 		warning("Cannot read the movie table from mission.___");
@@ -127,6 +130,7 @@ Common::Error PeintreEngine::run() {
 	if (!known)
 		deletePlayerSaves(_player);
 	savePlayers();
+	_sound->setVolume(_players[_player].volume);
 
 	uint32 in2d = 0;
 	_state.clear();

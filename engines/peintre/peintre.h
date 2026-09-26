@@ -36,6 +36,7 @@
 namespace Peintre {
 
 class MoviePlayer;
+class Sound;
 
 /** A player record (save.md "USERS.BIN"). */
 struct PlayerRecord {
@@ -103,6 +104,16 @@ public:
 	bool gameExists(uint player, uint slot) const;
 
 	MoviePlayer *movies() { return _movies; }
+	Sound *sound() { return _sound; }
+
+	// The 2D side (shell.cpp and zones/, ui.md). Codes as in ui.md "Leaving a zone":
+	// -1 back to 3D, -2 quit, -3 back to 3D and start over from the museum, n >= 0 load
+	// game n (player * 100 + slot).
+	int enterZone(uint zone);
+	/** The option menu; from 3D or from a zone. Returns -1 resume, -2 quit, n load. */
+	int runOptionMenu(bool from3D);
+	/** The credits after the end of the game (ui.md "Credits after the end"). */
+	void runEndCredits();
 
 private:
 	/** The player-name screen (accueil.cpp). Returns false when the player quits. */
@@ -112,6 +123,7 @@ private:
 	const ADGameDescription *_gameDescription;
 	Graphics::Surface _screen;
 	MoviePlayer *_movies = nullptr;
+	Sound *_sound = nullptr;
 
 	Common::Point _mouse;
 	bool _button = false;
