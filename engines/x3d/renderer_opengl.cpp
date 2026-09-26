@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/debug.h"
 #include "common/system.h"
 
 #include "engines/util.h"
@@ -26,6 +27,7 @@
 #include "graphics/surface.h"
 #include "graphics/transform_struct.h"
 
+#include "x3d/detection.h"
 #include "x3d/renderer.h"
 
 #if defined(USE_OPENGL_GAME) && !defined(USE_GLES2)
@@ -42,6 +44,39 @@ public:
 		_width = width;
 		_height = height;
 		initGraphics3d(width, height);
+		_viewport = Common::Rect(width, height);
+		_windowHeight = height;
+	}
+
+	bool updateSize(bool widescreen) override {
+		// The logical frame fills the window in widescreen (never narrower than 4:3);
+		// otherwise it is 4:3. The viewport is that aspect, centred in the window
+		const int ww = MAX<int>(1, g_system->getWidth()), wh = MAX<int>(1, g_system->getHeight());
+		const int width = widescreen ? MAX(640, (int)(480.0f * ww / wh + 0.5f)) : 640;
+		int vw = ww, vh = (int)((float)ww * 480 / width + 0.5f);
+		if (vh > wh) {
+			vh = wh;
+			vw = (int)((float)wh * width / 480 + 0.5f);
+		}
+		const Common::Rect viewport((ww - vw) / 2, (wh - vh) / 2, (ww - vw) / 2 + vw, (wh - vh) / 2 + vh);
+		const bool changed = width != _width || viewport != _viewport;
+		_width = width;
+		_height = 480;
+		_viewport = viewport;
+		_windowHeight = wh;
+		debugC(1, kDebugGraphics, "window %dx%d, frame %dx%d, viewport %d,%d %dx%d", ww, wh, _width, _height, viewport.left, viewport.top, vw, vh);
+		return changed;
+	}
+
+	Common::Point toLogical(const Common::Point &p) const override {
+		if (_viewport.isEmpty())
+			return p;
+		return Common::Point((p.x - _viewport.left) * _width / _viewport.width(),
+		                     (p.y - _viewport.top) * _height / _viewport.height());
+	}
+
+	void setViewport() {
+		glViewport(_viewport.left, _windowHeight - _viewport.bottom, _viewport.width(), _viewport.height());
 	}
 
 	uint32 createTexture(const Graphics::Surface &rgba) override {
@@ -70,7 +105,7 @@ public:
 	}
 
 	void begin3D(const float projection[16], const float view[16]) override {
-		glViewport(0, 0, _width, _height);
+		setViewport();
 		glClearColor(0, 0, 0, 1);
 		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -189,7 +224,7 @@ public:
 		rgba->free();
 		delete rgba;
 
-		glViewport(0, 0, _width, _height);
+		setViewport();
 		glMatrixMode(GL_PROJECTION);
 		glLoadIdentity();
 		glOrtho(0, _width, _height, 0, -1, 1);
@@ -229,14 +264,17 @@ public:
 
 	Graphics::Surface *thumbnail(int width, int height) override {
 		Graphics::Surface frame;
-		frame.create(_width, _height, Graphics::PixelFormat::createFormatRGBA32());
-		glReadPixels(0, 0, _width, _height, GL_RGBA, GL_UNSIGNED_BYTE, frame.getPixels());
+		frame.create(_viewport.width(), _viewport.height(), Graphics::PixelFormat::createFormatRGBA32());
+		glPixelStorei(GL_PACK_ALIGNMENT, 4);
+		glReadPixels(_viewport.left, _windowHeight - _viewport.bottom, _viewport.width(), _viewport.height(), GL_RGBA, GL_UNSIGNED_BYTE, frame.getPixels());
 		Graphics::Surface *small = frame.scale(width, height, true, Graphics::FLIP_V);
 		frame.free();
 		return small;
 	}
 
 private:
+	Common::Rect _viewport; // in window pixels, top-left origin
+	int _windowHeight = 480;
 	uint32 _texture = ~0u;
 	int _blend = -1, _clamp = -1; // the last setBlend (blend * 2 + keyed) and setClamp; -1: unknown
 };

@@ -32,7 +32,7 @@
 
 namespace X3D {
 
-Renderer *Renderer::create(int width, int height) {
+Renderer *Renderer::create(int width, int height, bool &native) {
 	const Graphics::RendererType desired = Graphics::Renderer::parseTypeCode(ConfMan.get("renderer"));
 	const Graphics::RendererType type = Graphics::Renderer::getBestMatchingAvailableType(desired,
 #if defined(USE_OPENGL_GAME) && !defined(USE_GLES2)
@@ -40,9 +40,11 @@ Renderer *Renderer::create(int width, int height) {
 #endif
 		Graphics::kRendererTypeTinyGL);
 
-	if (type == Graphics::kRendererTypeOpenGL)
+	native = type == Graphics::kRendererTypeOpenGL;
+	if (native)
 		if (Renderer *r = createOpenGLRenderer(width, height))
 			return r;
+	native = false;
 	return createTinyGLRenderer(width, height);
 }
 

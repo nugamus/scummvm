@@ -22,6 +22,7 @@
 #ifndef X3D_RENDERER_H
 #define X3D_RENDERER_H
 
+#include "common/rect.h"
 #include "common/scummsys.h"
 
 namespace Common {
@@ -38,12 +39,19 @@ namespace X3D {
 // What the engine draws with: textured triangle fans for the 3D view, images for 2D
 class Renderer {
 public:
-	// OpenGL when available, else TinyGL; also initialises the graphics mode
-	static Renderer *create(int width, int height);
+	// OpenGL when available, else TinyGL; also initialises the graphics mode. native is
+	// set before the graphics mode starts when the renderer draws at the window's size
+	static Renderer *create(int width, int height, bool &native);
 	virtual ~Renderer() {}
 
+	// The logical frame: 480 high, 640 wide (or wider in widescreen). Everything the
+	// engine draws and every mouse position is in these units
 	int width() const { return _width; }
 	int height() const { return _height; }
+	// A renderer drawing at the window's size: follows the window (true if the logical
+	// frame changed) and maps window pixels to the logical frame
+	virtual bool updateSize(bool widescreen) { return false; }
+	virtual Common::Point toLogical(const Common::Point &p) const { return p; }
 
 	// Enhancement: mipmapped, anisotropic scene textures (created after it is set)
 	bool filterTextures = false;
