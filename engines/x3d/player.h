@@ -78,6 +78,7 @@ private:
 
 	float _scale = 1, _speed = 2, _eyeHeight = 1.5f, _radius = 0.5f;
 	float _bob = 1; // head bob direction, kept across scenes
+	float _turn = 0.06f; // radians per step, turning and looking up or down
 
 	// A jump in progress (movement.md, Jump): z = z0 + s t - s t^2 / 2, the walk sampled
 	// once at the start

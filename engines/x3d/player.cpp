@@ -51,6 +51,7 @@ void Player::init(float scale) {
 	_radius = 0.5f * scale;
 	sphereOffset = _eyeHeight - 2 * _radius;
 	_runToggle = ConfMan.getBool("run_toggle");
+	_turn = 0.06f * ConfMan.getInt("turn_speed") / 100; // the turn_speed option, percent
 }
 
 Vector3d Player::slide(const Vector3d &from, const Vector3d &velocity, const Collision &collision) const {
@@ -194,13 +195,13 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 	// Per logic step, not per second: the original's rate per frame (Q-0022)
 	if (canTurn) {
 		if (keys.right)
-			yaw += 0.06f;
+			yaw += _turn;
 		if (keys.left)
-			yaw -= 0.06f;
+			yaw -= _turn;
 		if (keys.pageUp && !keys.ctrl && !crouched && pitch < 2.7f)
-			pitch += 0.06f;
+			pitch += _turn;
 		if (keys.pageDown && !keys.ctrl && !crouched && pitch > 0.6f)
-			pitch -= 0.06f;
+			pitch -= _turn;
 	}
 
 	if (velocity.getMagnitude() > 0) {
