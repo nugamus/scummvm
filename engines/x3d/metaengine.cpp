@@ -31,7 +31,7 @@
 #include "graphics/surface.h"
 
 #include "gui/ThemeEval.h"
-#include "gui/widgets/popup.h"
+#include "gui/widget.h"
 
 #include "x3d/metaengine.h"
 #include "x3d/detection.h"
@@ -118,27 +118,14 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 
-// Options with several values, as popups under the checkboxes
+// Options with a range of values, as sliders under the checkboxes
 static const struct {
-	const char *guioFlag, *configOption, *label, *tooltip;
-	int defaultValue;
-	struct {
-		const char *label;
-		int value;
-	} entries[5];
-} popUpList[] = {
-	{
-		GAMEOPTION_MOUSE_SENSITIVITY, "mouse_sensitivity", _s("Mouse look speed:"), _s("How fast the mouse turns the view with modern controls"), 100,
-		{ { _s("Slow"), 50 }, { _s("Medium slow"), 75 }, { _s("Normal"), 100 }, { _s("Fast"), 150 }, { _s("Very fast"), 200 } }
-	},
-	{
-		GAMEOPTION_TURN_SPEED, "turn_speed", _s("Turn speed:"), _s("How fast the arrow keys turn the view and look up or down"), 100,
-		{ { _s("Slow"), 50 }, { _s("Original"), 100 }, { _s("Fast"), 150 }, { _s("Very fast"), 200 }, { nullptr, 0 } }
-	},
-	{
-		GAMEOPTION_FOV, "fov", _s("Field of view:"), _s("Horizontal field of view while walking around (the scripted views keep theirs)"), 90,
-		{ { _s("90 degrees (original)"), 90 }, { _s("100 degrees"), 100 }, { _s("110 degrees"), 110 }, { nullptr, 0 } }
-	},
+	const char *guioFlag, *configOption, *label, *tooltip, *unit;
+	int defaultValue, minValue, maxValue;
+} sliderList[] = {
+	{ GAMEOPTION_MOUSE_SENSITIVITY, "mouse_sensitivity", _s("Mouse look speed:"), _s("How fast the mouse turns the view with modern controls"), "%", 100, 50, 200 },
+	{ GAMEOPTION_TURN_SPEED, "turn_speed", _s("Turn speed:"), _s("How fast the arrow keys turn the view and look up or down (100% is the original)"), "%", 100, 50, 150 },
+	{ GAMEOPTION_FOV, "fov", _s("Field of view:"), _s("Horizontal field of view while walking around, in degrees (90 is the original; the scripted views keep theirs)"), "", 90, 90, 110 },
 };
 
 class X3DOptionsWidget : public GUI::ExtraGuiOptionsWidget {
@@ -146,55 +133,77 @@ public:
 	X3DOptionsWidget(GuiObject *boss, const Common::String &name, const Common::String &domain, const ExtraGuiOptions &options) :
 		ExtraGuiOptionsWidget(boss, name, domain, options), _checkboxes(options.size()) {
 		const Common::String guiOptions = ConfMan.get("guioptions", domain);
-		for (uint i = 0; i < ARRAYSIZE(popUpList); i++) {
-			_popUps[i] = nullptr;
-			if (!checkGameGUIOption(popUpList[i].guioFlag, guiOptions))
+		for (uint i = 0; i < ARRAYSIZE(sliderList); i++) {
+			_sliders[i] = nullptr;
+			_values[i] = nullptr;
+			if (!checkGameGUIOption(sliderList[i].guioFlag, guiOptions))
 				continue;
-			const Common::String id = _dialogLayout + "." + popUpList[i].configOption;
-			new GUI::StaticTextWidget(widgetsBoss(), id + "_desc", _(popUpList[i].label), _(popUpList[i].tooltip));
-			_popUps[i] = new GUI::PopUpWidget(widgetsBoss(), id);
-			for (const auto &e : popUpList[i].entries)
-				if (e.label)
-					_popUps[i]->appendEntry(_(e.label), e.value);
+			const Common::String id = _dialogLayout + "." + sliderList[i].configOption;
+			new GUI::StaticTextWidget(widgetsBoss(), id + "_desc", _(sliderList[i].label), _(sliderList[i].tooltip));
+			_sliders[i] = new GUI::SliderWidget(widgetsBoss(), id, _(sliderList[i].tooltip), kSliderCmd + i);
+			_sliders[i]->setMinValue(sliderList[i].minValue);
+			_sliders[i]->setMaxValue(sliderList[i].maxValue);
+			_values[i] = new GUI::StaticTextWidget(widgetsBoss(), id + "_value", Common::U32String());
 		}
 	}
 
 	void load() override {
 		ExtraGuiOptionsWidget::load();
-		for (uint i = 0; i < ARRAYSIZE(popUpList); i++)
-			if (_popUps[i])
-				_popUps[i]->setSelectedTag(ConfMan.hasKey(popUpList[i].configOption, _domain) ?
-				                           ConfMan.getInt(popUpList[i].configOption, _domain) : popUpList[i].defaultValue);
+		for (uint i = 0; i < ARRAYSIZE(sliderList); i++) {
+			if (!_sliders[i])
+				continue;
+			const int v = ConfMan.hasKey(sliderList[i].configOption, _domain) ? ConfMan.getInt(sliderList[i].configOption, _domain) : sliderList[i].defaultValue;
+			_sliders[i]->setValue(CLIP(v, sliderList[i].minValue, sliderList[i].maxValue));
+			showValue(i);
+		}
 	}
 
 	bool save() override {
 		ExtraGuiOptionsWidget::save();
-		for (uint i = 0; i < ARRAYSIZE(popUpList); i++)
-			if (_popUps[i])
-				ConfMan.setInt(popUpList[i].configOption, _popUps[i]->getSelectedTag(), _domain);
+		for (uint i = 0; i < ARRAYSIZE(sliderList); i++)
+			if (_sliders[i])
+				ConfMan.setInt(sliderList[i].configOption, _sliders[i]->getValue(), _domain);
 		return true;
 	}
 
+	void handleCommand(GUI::CommandSender *sender, uint32 cmd, uint32 data) override {
+		if (cmd >= kSliderCmd && cmd < kSliderCmd + ARRAYSIZE(sliderList)) {
+			showValue(cmd - kSliderCmd);
+			return;
+		}
+		ExtraGuiOptionsWidget::handleCommand(sender, cmd, data);
+	}
+
 protected:
-	// The base class's checkboxes, then a label and popup per row
+	// The base class's checkboxes, then a label, slider and value per row
 	void defineLayout(GUI::ThemeEval &layouts, const Common::String &layoutName, const Common::String &overlayedLayout) const override {
 		layouts.addDialog(layoutName, overlayedLayout);
 		layouts.addLayout(GUI::ThemeLayout::kLayoutVertical).addPadding(0, 0, 0, 0);
 		for (uint i = 0; i < _checkboxes; i++)
 			layouts.addWidget(Common::String::format("customOption%dCheckbox", i + 1), "Checkbox");
-		for (uint i = 0; i < ARRAYSIZE(popUpList); i++) {
-			if (!_popUps[i])
+		for (uint i = 0; i < ARRAYSIZE(sliderList); i++) {
+			if (!_sliders[i])
 				continue;
+			const Common::String id = sliderList[i].configOption;
 			layouts.addLayout(GUI::ThemeLayout::kLayoutHorizontal).addPadding(0, 0, 0, 0);
-			layouts.addWidget(Common::String(popUpList[i].configOption) + "_desc", "OptionsLabel");
-			layouts.addWidget(popUpList[i].configOption, "PopUp").closeLayout();
+			layouts.addWidget(id + "_desc", "OptionsLabel");
+			layouts.addWidget(id, "Slider");
+			layouts.addWidget(id + "_value", "ShortOptionsLabel").closeLayout();
 		}
 		layouts.closeLayout().closeDialog();
 	}
 
 private:
+	enum { kSliderCmd = 'X3SL' };
+
+	void showValue(uint i) {
+		_values[i]->setLabel(Common::String::format("%d%s", _sliders[i]->getValue(), sliderList[i].unit));
+		_values[i]->markAsDirty();
+	}
+
 	uint _checkboxes;
-	GUI::PopUpWidget *_popUps[ARRAYSIZE(popUpList)];
+	GUI::SliderWidget *_sliders[ARRAYSIZE(sliderList)];
+	GUI::StaticTextWidget *_values[ARRAYSIZE(sliderList)];
 };
 
 GUI::OptionsContainerWidget *X3DMetaEngine::buildEngineOptionsWidget(GUI::GuiObject *boss, const Common::String &name, const Common::String &target) const {
