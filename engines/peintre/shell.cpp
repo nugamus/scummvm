@@ -534,6 +534,8 @@ int Shell::run(uint zone) {
 	delete _run;
 	_run = nullptr;
 	syncHeld();
+	// The zone's sunflower count goes to the 3D side with the code (0x42f2c2, E-0414).
+	_vm->zoneLeaveCount = counter(_def->counter);
 	return _code;
 }
 
