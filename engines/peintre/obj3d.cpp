@@ -244,6 +244,8 @@ bool Boxes3D::load(const Common::Array<byte> &entry) {
 	// Pointers are 1-based offsets from the body.
 	const int32 nv = b.s32(0), pv = b.s32(4), nf = b.s32(8), pf = b.s32(12);
 	const int32 ni = b.s32(16), pi = b.s32(20);
+	vertexBase = pv - 1;
+	itemBase = pi - 1;
 	for (int32 k = 0; k < nv && b.ok(); k++)
 		vertices.push_back(b.vec(pv - 1 + 12 * k));
 	static const int kWords[5] = { 0, 1, 2, 3, 17 };

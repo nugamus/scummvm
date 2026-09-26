@@ -115,7 +115,9 @@ struct Boxes3D {
 	};
 	Common::Array<Vec3i> vertices;
 	Common::Array<Face> faces;
-	Common::Array<Vec3i> items;  ///< 12-byte records
+	Common::Array<Vec3i> items;  ///< 12-byte records: the face normals (movement.md)
+	uint32 vertexBase = 0;       ///< body offset of vertices[0]
+	uint32 itemBase = 0;         ///< body offset of items[0]
 	bool load(const Common::Array<byte> &entry);
 };
 

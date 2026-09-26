@@ -81,6 +81,8 @@ public:
 	void pollInput();
 	Common::Point mouse() const { return _mouse; }
 	bool buttonDown() const { return _button; }
+	/** True while a key is down. */
+	bool keyHeld(Common::KeyCode key) const;
 	/** True on the tick a key is released (the original's "fires"). */
 	bool keyFired(Common::KeyCode key) const;
 	/** Characters typed since the last poll. */
@@ -118,6 +120,8 @@ public:
 private:
 	/** The player-name screen (accueil.cpp). Returns false when the player quits. */
 	bool runPlayerScreen(uint &player, bool &known);
+	/** The 3D world until the player quits (world.cpp). */
+	void runWorld(int scene, int prevScene);
 	void loadAllScenes();
 
 	const ADGameDescription *_gameDescription;
