@@ -1156,6 +1156,8 @@ Common::String X3DEngine::command(const Common::String &line) {
 					continue;
 				const Common::Point s(cx + cx * Math::Vector3d::dotProduct(d, right) * kx / z,
 				                      cy - cy * Math::Vector3d::dotProduct(d, up) * ky / z);
+				if (s.x < 0 || s.y < 0 || s.x >= _renderer->width() || s.y >= _renderer->height())
+					continue;
 				if (!found)
 					_mouse = s;
 				found = true;
