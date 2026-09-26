@@ -31,6 +31,10 @@
 
 #include "graphics/managed_surface.h"
 
+namespace Graphics {
+class WinFont;
+}
+
 namespace Ring {
 
 class Cursors;
@@ -78,6 +82,11 @@ public:
 
 	const Common::String &languageFolder() const { return _languageFolder; }
 
+	/** `GetMultiLanMes` (spec/text.md): loads the key's title and text from aMes.ini. */
+	void message(const char *key);
+	const Common::String &messageTitle() const { return _messageTitle; }
+	const Common::String &messageText() const { return _messageText; }
+
 private:
 	void showStartupScreens();
 	void addCursors();
@@ -93,6 +102,8 @@ private:
 	Common::ScopedPtr<Resources> _resources;
 	Common::ScopedPtr<World> _world;
 	Common::ScopedPtr<Cursors> _cursors;
+	Common::ScopedPtr<Graphics::WinFont> _font;
+	Common::String _messageTitle, _messageText;
 	int _zone = 1;
 	int _menuZone = 0;   ///< app+0x6f: the zone the menu returns to, 0 when the menu is down
 	int _puzzle = 0;     ///< the current puzzle (app+0x81)

@@ -28,6 +28,7 @@
 
 #include "engines/util.h"
 
+#include "graphics/fonts/winfont.h"
 
 #include "ring/cursor.h"
 #include "ring/detection.h"
@@ -188,6 +189,12 @@ Common::Error RingEngine::run() {
 	addCursors();
 	_world.reset(new World());
 	_world->setUp();
+	// Font 1: "ARX Pilgrim L" asked with a 12-pixel cell; the closest in arxrin.fon is 8 points (Q-0010).
+	_font.reset(new Graphics::WinFont());
+	if (_font->loadFromFON("arxrin.fon", Graphics::WinFontDirEntry("ARX Pilgrim L", 8)))
+		_world->setFont(_font.get());
+	else
+		warning("Ring: cannot load font 1 from arxrin.fon");
 	wait(2000);
 	_escapeDown = false;
 
@@ -226,6 +233,41 @@ Common::Error RingEngine::run() {
 		g_system->delayMillis(10);
 	}
 	return Common::kNoError;
+}
+
+void RingEngine::message(const char *key) {
+	_messageTitle.clear();
+	_messageText.clear();
+	Common::File f;
+	if (!f.open("aMes.ini")) {
+		warning("Ring: cannot open aMes.ini");
+		return;
+	}
+	// The key is a whitespace-separated word; up to ten language lines follow it.
+	bool found = false;
+	while (!found && !f.eos() && !f.err()) {
+		Common::String line = f.readLine();
+		for (const Common::String &word : Common::StringTokenizer(line, " 	").split())
+			if (word == key)
+				found = true;
+	}
+	for (int i = 0; found && i < 10 && !f.eos(); i++) {
+		Common::String line = f.readLine();
+		if (line.size() < 3)
+			break;
+		if (!line.hasPrefix(_languageFolder.substr(0, 3)))
+			continue;
+		size_t last = line.findLastOf('#');
+		if (last == Common::String::npos || last == 0)
+			break;
+		size_t first = line.substr(0, last).findLastOf('#');
+		if (first == Common::String::npos)
+			break;
+		_messageTitle = line.substr(first + 1, last - first - 1);
+		_messageText = line.substr(last + 1);
+		return;
+	}
+	warning("Ring: no message %s for %s in aMes.ini", key, _languageFolder.c_str());
 }
 
 void RingEngine::addCursors() {
