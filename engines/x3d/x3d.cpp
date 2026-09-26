@@ -899,40 +899,51 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 	return result;
 }
 
-bool X3DEngine::aimAt(const Common::String &object, int target, Common::Point &point, bool &hit, uint tries) {
-	// The object's surface points with the render projection, nearest first
+bool X3DEngine::toScreen(const Math::Vector3d &p, Common::Point &s) const {
+	// The render projection without the roll, as the pick uses it; false when off screen
 	const float yaw = _camera.yaw, pitch = _camera.pitch;
-	const Math::Vector3d eye(_camera.position[0], _camera.position[1], _camera.position[2]);
+	const Math::Vector3d d = p - Math::Vector3d(_camera.position[0], _camera.position[1], _camera.position[2]);
 	const Math::Vector3d right(-sinf(yaw), -cosf(yaw), 0);
 	const Math::Vector3d up(cosf(pitch) * cosf(yaw), -cosf(pitch) * sinf(yaw), sinf(pitch));
 	const Math::Vector3d fwd(sinf(pitch) * cosf(yaw), -sinf(pitch) * sinf(yaw), -cosf(pitch));
 	const float ky = (4.0f / 3.0f) / tan(_camera.fov * M_PI / 360.0), kx = ky * _renderer->height() / _renderer->width();
 	const float cx = _renderer->width() / 2.0f, cy = _renderer->height() / 2.0f;
+	const float z = Math::Vector3d::dotProduct(d, fwd);
+	if (z <= 0)
+		return false;
+	s = Common::Point(cx + cx * Math::Vector3d::dotProduct(d, right) * kx / z, cy - cy * Math::Vector3d::dotProduct(d, up) * ky / z);
+	return s.x >= 0 && s.y >= 0 && s.x < _renderer->width() && s.y < _renderer->height();
+}
+
+bool X3DEngine::picks(const Common::Point &s, int target) {
+	const Scene::Model *model;
+	uint o;
+	float depth;
+	if (!_scene->pick(_camera, _renderer->width(), _renderer->height(), s.x, s.y, model, o, depth))
+		return false;
+	Common::StringArray names;
+	for (int k = o; k >= 0; k = model->file.objects[k].parent)
+		names.push_back(model->file.objects[k].name);
+	return _interaction->hotspotFor(names) == target;
+}
+
+bool X3DEngine::aimAt(const Common::String &object, int target, Common::Point &point, bool &hit, uint tries, Math::Vector3d *world) {
+	// The object's surface points on screen, nearest first
+	const Math::Vector3d eye(_camera.position[0], _camera.position[1], _camera.position[2]);
 	bool found = false;
 	hit = false;
 	for (const Math::Vector3d &p : _scene->surfacePoints(object, eye)) {
-		const Math::Vector3d d = p - eye;
-		const float z = Math::Vector3d::dotProduct(d, fwd);
-		if (z <= 0)
-			continue;
-		const Common::Point s(cx + cx * Math::Vector3d::dotProduct(d, right) * kx / z,
-		                      cy - cy * Math::Vector3d::dotProduct(d, up) * ky / z);
-		if (s.x < 0 || s.y < 0 || s.x >= _renderer->width() || s.y >= _renderer->height())
+		Common::Point s;
+		if (!toScreen(p, s))
 			continue;
 		if (!found)
 			point = s;
 		found = true;
-		const Scene::Model *model;
-		uint o;
-		float depth;
-		if (target < 0 || !tries-- || !_scene->pick(_camera, _renderer->width(), _renderer->height(), s.x, s.y, model, o, depth))
-			continue;
-		Common::StringArray names;
-		for (int k = o; k >= 0; k = model->file.objects[k].parent)
-			names.push_back(model->file.objects[k].name);
-		if (_interaction->hotspotFor(names) == target) {
+		if (target >= 0 && tries-- && picks(s, target)) {
 			point = s;
 			hit = true;
+			if (world)
+				*world = p;
 			break;
 		}
 	}
@@ -940,12 +951,15 @@ bool X3DEngine::aimAt(const Common::String &object, int target, Common::Point &p
 }
 
 void X3DEngine::drawHotspots() {
-	// Markers found again when the view moves (at most every 50 ms) and a few times a
-	// second, and sent to ScummVM's overlay (a full-window upload) only when they changed
-	if (!_showHotspots || (!hotspotDirty() && !_hotspotForceRedraw))
+	// Which hotspots are marked, and where on them, is found again when the view moves
+	// (at most every 100 ms) and a few times a second; the markers follow their points on
+	// every frame. ScummVM's overlay (a full-window upload) is redrawn when they changed.
+	if (!_showHotspots)
 		return;
+	if (hotspotDirty() || _hotspotForceRedraw)
+		findHotspots();
 	const Common::Array<Graphics::HotspotInfo> last = _hotspots;
-	findHotspots();
+	placeMarkers();
 	bool same = !_hotspotForceRedraw && last.size() == _hotspots.size();
 	for (uint i = 0; same && i < last.size(); i++)
 		same = last[i].position == _hotspots[i].position && last[i].name == _hotspots[i].name;
@@ -957,6 +971,32 @@ void X3DEngine::drawHotspots() {
 		_system->hideOverlay(); // the base class keeps its last markers when there are none
 }
 
+void X3DEngine::placeMarkers() {
+	// Each marker's point, moved with its object's origin, in the drawn view (with its
+	// roll), to window pixels without rounding to the logical frame
+	_hotspots.clear();
+	const float a = _camera.yaw, e = _camera.pitch, r = _camera.roll * M_PI / 180;
+	const Math::Vector3d eye(_camera.position[0], _camera.position[1], _camera.position[2]);
+	const Math::Vector3d right0(-sinf(a), -cosf(a), 0), up0(cosf(e) * cosf(a), -cosf(e) * sinf(a), sinf(e));
+	const Math::Vector3d right = right0 * cosf(r) + up0 * sinf(r), up = up0 * cosf(r) - right0 * sinf(r);
+	const Math::Vector3d fwd(sinf(e) * cosf(a), -sinf(e) * sinf(a), -cosf(e));
+	const float w = _renderer->width(), h = _renderer->height();
+	const float ky = (4.0f / 3.0f) / tan(_camera.fov * M_PI / 360.0), kx = ky * h / w;
+	const Common::Point o = _renderer->toWindow(Common::Point(0, 0)), c = _renderer->toWindow(Common::Point(w, h));
+	for (const Marker &m : _markers) {
+		const Math::Vector3d d = _scene->objectPosition(m.object) + m.offset - eye;
+		const float z = Math::Vector3d::dotProduct(d, fwd);
+		if (z <= 0)
+			continue;
+		const float x = w / 2 * (1 + Math::Vector3d::dotProduct(d, right) * kx / z);
+		const float y = h / 2 * (1 - Math::Vector3d::dotProduct(d, up) * ky / z);
+		if (x < 0 || y < 0 || x >= w || y >= h)
+			continue;
+		_hotspots.push_back(Graphics::HotspotInfo(Common::Point(o.x + (int)(x * (c.x - o.x) / w + 0.5f),
+		                                                        o.y + (int)(y * (c.y - o.y) / h + 0.5f)), m.label));
+	}
+}
+
 void X3DEngine::getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) {
 	hotspots = _hotspots;
 }
@@ -964,7 +1004,8 @@ void X3DEngine::getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspo
 void X3DEngine::findHotspots() {
 	// Each clickable hotspot once, at a point where a click reaches it; its INFOOBJ name
 	// (the data has no other)
-	_hotspots.clear();
+	const Common::Array<Marker> last = _markers;
+	_markers.clear();
 	_highlight.clear();
 	if (!_freePlay || !_scene)
 		return;
@@ -983,14 +1024,30 @@ void X3DEngine::findHotspots() {
 				continue;
 			if ((uint)h >= done.size())
 				done.resize(h + 1);
-			Common::Point s;
-			bool hit;
-			// ponytail: 8 picks per hotspot; a mostly covered object may not get its marker
-			if (done[h] || !_interaction->clickable(h) || !aimAt(name, h, s, hit, 8) || !hit)
+			if (done[h] || !_interaction->clickable(h))
 				continue;
+			// The marker stays on its point while a click still reaches the hotspot there
+			Marker marker;
+			Common::Point s;
+			bool hit = false;
+			for (const Marker &l : last)
+				if (l.hotspot == h && l.object == name && toScreen(_scene->objectPosition(name) + l.offset, s) && picks(s, h)) {
+					marker = l;
+					hit = true;
+				}
+			if (!hit) {
+				Math::Vector3d p;
+				// ponytail: 8 picks per hotspot; a mostly covered object may not get its marker
+				if (!aimAt(name, h, s, hit, 8, &p) || !hit)
+					continue;
+				const Common::String &label = _interaction->hotspotName(h);
+				marker.hotspot = h;
+				marker.object = name;
+				marker.offset = p - _scene->objectPosition(name);
+				marker.label = label.substr(label.findFirstOf('*') + 1);
+			}
 			done[h] = true;
-			const Common::String &label = _interaction->hotspotName(h);
-			_hotspots.push_back(Graphics::HotspotInfo(_renderer->toWindow(s), label.substr(label.findFirstOf('*') + 1)));
+			_markers.push_back(marker);
 		}
 	}
 	// Every object a pick takes to a marked hotspot (its name or an ancestor's), for the outline
@@ -1013,7 +1070,7 @@ void X3DEngine::findHotspots() {
 bool X3DEngine::hotspotDirty() const {
 	// Again when the view moves, and a few times a second for animations and state
 	const uint32 age = _system->getMillis() - _hotspotTime;
-	return (age >= 50 && memcmp(&_camera, &_hotspotCamera, sizeof(Camera))) || age >= 250;
+	return (age >= 100 && memcmp(&_camera, &_hotspotCamera, sizeof(Camera))) || age >= 250;
 }
 
 Common::String X3DEngine::command(const Common::String &line) {
