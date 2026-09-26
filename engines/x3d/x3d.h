@@ -28,6 +28,7 @@
 #include "common/scummsys.h"
 #include "common/str.h"
 #include "engines/engine.h"
+#include "graphics/hotspot_renderer.h"
 
 #include "x3d/detection.h"
 #include "x3d/player.h"
@@ -105,8 +106,10 @@ public:
 	Graphics::Surface *thumbnail(int width, int height);
 	// ScummVM's hotspot overlay (an enhancement): in free play, the hotspots a click would
 	// reach, at a point of each that the pick finds
+	void drawHotspots() override;
 	void getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) override;
 	bool hotspotDirty() const override;
+	void findHotspots(); // the markers and the objects to outline
 	// The object's first surface point on screen that a pick takes to hotspot target (hit),
 	// else its first on screen; false when none is. tries: surface points picked at most
 	bool aimAt(const Common::String &object, int target, Common::Point &point, bool &hit, uint tries = 1000);
@@ -255,7 +258,7 @@ private:
 	float _fovExtra = 0; // the fov option's degrees beyond the original's 90
 	Camera _hotspotCamera; // the view of the last hotspot overlay
 	uint32 _hotspotTime = 0;
-	uint _hotspotCount = 0; // markers in it
+	Common::Array<Graphics::HotspotInfo> _hotspots; // its markers, in window pixels
 	Common::Array<Common::Pair<const Scene::Model *, uint> > _highlight; // their objects, outlined
 	Common::String _menuText; // the text edit of the last menu
 	bool _escapeNow = false, _escapeBlocked = false;
