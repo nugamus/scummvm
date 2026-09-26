@@ -3,6 +3,7 @@ MODULE := engines/peintre
 MODULE_OBJS = \
 	bfg.o \
 	metaengine.o \
+	movie.o \
 	obj3d.o \
 	peintre.o
 
