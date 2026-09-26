@@ -81,6 +81,7 @@ public:
 	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave = false) override;
 	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
 	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
+	Common::Error loadGameState(int slot) override;
 	// A game over (u01.md caught, u02.md): the load screen, else the Option menu
 	void gameOver();
 	// The scene gauge (u01.md): a bar that empties over ms while visible; expired() is
