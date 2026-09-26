@@ -82,6 +82,7 @@ public:
 		tglEnable(TGL_ALPHA_TEST);
 		tglAlphaFunc(TGL_GREATER, 0.5f);
 		_texture = ~0u;
+		_blend = -1;
 	}
 
 	void setTexture(uint32 texture) override {
@@ -90,6 +91,7 @@ public:
 		if (texture) {
 			tglEnable(TGL_TEXTURE_2D);
 			tglBindTexture(TGL_TEXTURE_2D, texture);
+			_clamp = -1; // wrapping is per texture
 		} else {
 			tglDisable(TGL_TEXTURE_2D);
 		}
@@ -97,12 +99,19 @@ public:
 	}
 
 	void setClamp(bool clamp) override {
+		if (clamp == _clamp)
+			return;
+		_clamp = clamp;
 		const int mode = clamp ? TGL_CLAMP_TO_EDGE : TGL_REPEAT;
 		tglTexParameteri(TGL_TEXTURE_2D, TGL_TEXTURE_WRAP_S, mode);
 		tglTexParameteri(TGL_TEXTURE_2D, TGL_TEXTURE_WRAP_T, mode);
 	}
 
 	void setBlend(Blend blend, bool keyed) override {
+		const int state = blend * 2 + keyed;
+		if (state == _blend)
+			return;
+		_blend = state;
 		if (blend == kOpaque) {
 			tglDisable(TGL_BLEND);
 			tglDepthMask(TGL_TRUE);
@@ -139,8 +148,9 @@ public:
 
 	void drawImage(const Graphics::Surface &image, int x, int y, bool keyed) override {
 		Image i;
-		i.surface.copyFrom(image);
-		i.surface.convertToInPlace(g_system->getScreenFormat());
+		Graphics::Surface *converted = image.convertTo(g_system->getScreenFormat());
+		i.surface = *converted;
+		delete converted;
 		i.x = x;
 		i.y = y;
 		i.keyed = keyed;
@@ -156,17 +166,16 @@ public:
 		TinyGL::presentBuffer();
 		Graphics::Surface frame;
 		TinyGL::getSurfaceRef(frame);
+		const uint32 white = frame.format.RGBToColor(255, 255, 255);
 		for (Image &i : _images) {
-			const uint32 white = frame.format.RGBToColor(255, 255, 255);
-			for (int y = 0; y < i.surface.h; y++) {
-				for (int x = 0; x < i.surface.w; x++) {
-					const int fx = i.x + x, fy = i.y + y;
-					if (fx < 0 || fy < 0 || fx >= frame.w || fy >= frame.h)
-						continue;
-					const uint32 c = i.surface.getPixel(x, y);
-					if (!i.keyed || c != white)
-						frame.setPixel(fx, fy, c);
-				}
+			Common::Rect r(i.x, i.y, i.x + i.surface.w, i.y + i.surface.h);
+			r.clip(Common::Rect(frame.w, frame.h));
+			if (!r.isEmpty()) {
+				const Common::Rect src(r.left - i.x, r.top - i.y, r.right - i.x, r.bottom - i.y);
+				if (i.keyed)
+					frame.copyRectToSurfaceWithKey(i.surface, r.left, r.top, src, white);
+				else
+					frame.copyRectToSurface(i.surface, r.left, r.top, src);
 			}
 			i.surface.free();
 		}
@@ -191,6 +200,7 @@ private:
 
 	Common::Array<Image> _images;
 	uint32 _texture = ~0u;
+	int _blend = -1, _clamp = -1; // the last setBlend (blend * 2 + keyed) and setClamp; -1: unknown
 };
 
 Renderer *createTinyGLRenderer(int width, int height) {
