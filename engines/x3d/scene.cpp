@@ -322,7 +322,7 @@ void Scene::animate(const A3DFile &file, uint animation, Model &m, uint object, 
 	}
 }
 
-void Scene::update(float dt) {
+void Scene::advance(float dt) {
 	for (AnimNode &n : _nodes) {
 		if (!n.enabled)
 			continue;
@@ -337,7 +337,9 @@ void Scene::update(float dt) {
 		p.advance(dt);
 		animate(*p.file, p.animation, *n.model, p.object >= 0 ? p.object : n.object, p.frame);
 	}
+}
 
+void Scene::poseAll() {
 	// ponytail: re-poses every animated file each step; track dirty objects if it shows up in profiles
 	for (Model *m : _models) {
 		if (m->animated) {
@@ -607,7 +609,8 @@ void Scene::loadClip(const Common::String &name, const Common::String &path, flo
 	}
 }
 
-void Scene::setClip(const Common::String &name, const Common::String &path, const Common::String &subAnimation) {
+void Scene::setClip(const Common::String &name, const Common::String &path, const Common::String &subAnimation,
+                    int slot, bool activate) {
 	AnimNode *n = findNode(name);
 	const A3DFile *file = n ? clipFile(path) : nullptr;
 	if (!file)
@@ -626,16 +629,91 @@ void Scene::setClip(const Common::String &name, const Common::String &path, cons
 			return;
 		}
 	}
-	n->clip = Playback();
-	n->clip.file = file;
-	n->clip.path = path;
-	n->clip.animation = animation;
-	n->clip.object = object;
-	n->clip.fps = n->base.fps;
-	n->clip.frame = file->animations[animation].firstFrame;
-	n->clip.running = false;
-	n->clip.loop = false;
+	Playback p;
+	p.file = file;
+	p.path = path;
+	p.animation = animation;
+	p.object = object;
+	p.fps = n->base.fps;
+	p.frame = file->animations[animation].firstFrame;
+	p.running = false;
+	p.loop = false;
+	slot = CLIP(slot, 1, 15);
+	if (!activate && !(n->clipActive && n->slot == slot)) {
+		n->slots[slot] = p;
+		return;
+	}
+	if (n->slot != slot) {
+		n->slots[n->slot] = n->clip;
+		n->slot = slot;
+	}
+	n->clip = p;
 	n->clipActive = true;
+}
+
+void Scene::activateSlot(const Common::String &name, int slot) {
+	AnimNode *n = findNode(name);
+	if (!n)
+		return;
+	if (slot <= 0) {
+		n->clipActive = false;
+		return;
+	}
+	slot = MIN(slot, 15);
+	if (n->slot != slot) {
+		n->slots[n->slot] = n->clip;
+		n->clip = n->slots[slot];
+		n->slot = slot;
+	}
+	n->clipActive = n->clip.file != nullptr;
+}
+
+int Scene::activeSlot(const Common::String &name) {
+	AnimNode *n = findNode(name);
+	return n && n->clipActive ? n->slot : 0;
+}
+
+O3DObject *Scene::object(const Common::String &name) {
+	Model *m;
+	uint o;
+	return findObject(name, m, o) ? &m->file.objects[o] : nullptr;
+}
+
+Scene::Model *Scene::addModel(const Common::String &path, const Common::String &animation, float fps) {
+	Model *m = loadModel(path);
+	if (!m)
+		return nullptr;
+	m->lit = !_lights.empty();
+	for (O3DObject &o : m->file.objects) {
+		o.cameraType = o.name.contains("$XYZ$") ? 1 : o.name.contains("$Z$") ? 2 : o.name.contains("$XZ$") ? 3 : 0;
+		const size_t star = o.name.findFirstOf('*');
+		if (o.cameraType && star != Common::String::npos)
+			o.name = o.name.substr(star);
+	}
+	_models.push_back(m);
+	if (!animation.empty())
+		bindAnimation(animation, fps);
+	return m;
+}
+
+void Scene::nameNodes(Model *m, const Common::String &name) {
+	for (AnimNode &n : _nodes)
+		if (n.model == m)
+			n.name = name;
+}
+
+void Scene::removeModel(Model *m) {
+	for (uint i = 0; i < _nodes.size();)
+		if (_nodes[i].model == m)
+			_nodes.remove_at(i);
+		else
+			i++;
+	for (uint i = 0; i < _models.size(); i++)
+		if (_models[i] == m) {
+			_models.remove_at(i);
+			delete m;
+			return;
+		}
 }
 
 void Scene::endClip(const Common::String &name) {
@@ -728,7 +806,9 @@ int Scene::addFaceClip(const Common::String &faceObject, const Common::String &p
 	Model *model = nullptr;
 	uint object = 0;
 	bool owned = false;
-	for (Model *m : _models)
+	// Newest file first: a model loaded at run time replaces an older one (U03's clown)
+	for (int mi = _models.size() - 1; mi >= 0; mi--) {
+		Model *m = _models[mi];
 		for (uint i = 0; i < m->file.objects.size() && !owned; i++)
 			if (m->file.objects[i].name.equalsIgnoreCase(faceObject)) {
 				bool below = false;
@@ -740,6 +820,8 @@ int Scene::addFaceClip(const Common::String &faceObject, const Common::String &p
 					owned = below;
 				}
 			}
+	}
+
 	Common::File f;
 	A3DFile *file = new A3DFile();
 	if (!model || !f.open(Common::Path(_dir + path)) || !file->load(f)) {
@@ -916,6 +998,17 @@ void Scene::syncState(Common::Serializer &s) {
 			}
 		}
 		syncPlayback(s, n.clip);
+		s.syncAsSint32LE(n.slot, 2);
+		for (int k = 1; k < 16; k++) {
+			Common::String extra = n.slots[k].path;
+			s.syncString(extra, 2);
+			if (s.isLoading())
+				n.slots[k].file = extra.empty() ? nullptr : clipFile(extra);
+			if (s.isLoading())
+				n.slots[k].path = extra;
+			if (!extra.empty())
+				syncPlayback(s, n.slots[k]);
+		}
 	}
 }
 
