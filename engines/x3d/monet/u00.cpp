@@ -145,6 +145,9 @@ void U00::say(const char *line, bool cut) {
 		player.fov = 90;
 	}
 	_vm->scene()->startAnimation("*U04_03");
+	// One tick first: the voice starts at Monet's face, which must be posed (the first
+	// frame of Practice has run no logic step yet)
+	_vm->runFor(0);
 	_vm->talk()->say("U04_03", line);
 	do
 		_vm->runFor(0);
