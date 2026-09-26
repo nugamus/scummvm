@@ -100,6 +100,14 @@ void U01::start(bool newGame, bool video) {
 	_vm->talk()->addTalker("U01_02", "$$$DUMMY.*02SParle");
 
 	_switchThrown = scene->nodeFrame("*U01_21") >= 2;
+	// A restore on the train stands on it at once (E-0081)
+	Scene::Model *m;
+	uint o;
+	if (_onTrain && scene->findObject("*U01_20", m, o)) {
+		player.groundObject = "*U01_20";
+		player.groundModel = m;
+		player.groundIndex = o;
+	}
 	_vm->collision()->setEnabled("*Ernest", false, true);
 	_vm->collision()->setEnabled("Box203", false);
 	scene->setPickable("Tapiroug", false);
@@ -338,23 +346,26 @@ bool U01::input(float dt) {
 	// The input hook: riding the train (u01.md, E-0083)
 	Player &player = _vm->player();
 	Collision &collision = *_vm->collision();
-	_onTrain = player.standsOn(*_vm->scene(), "*U01_20");
-	if (!_onTrain) {
-		player.collide = true;
-		return false;
+	Scene &scene = *_vm->scene();
+	const Keys &keys = _vm->keys();
+	// Collision is only written in train mode (E-0615)
+	_onTrain = player.standsOn(scene, "*U01_20");
+	if (_onTrain) {
+		player.collide = false;
+		if (keys.up)
+			ride(dt);
+		else
+			player.tick(dt, keys, collision);
+		player.probeGround(collision);
+		if (!player.standsOn(scene, "*U01_20"))
+			player.collide = true;
 	}
-	player.collide = false;
-	if (_vm->keys().up)
-		ride(dt);
-	else
-		player.tick(dt, _vm->keys(), collision);
-	player.probeGround(collision);
-	// The generic camera input runs as well: on the train the keys act twice
-	player.tick(dt, _vm->keys(), collision);
-	if (!_vm->keys().up)
+	// The generic camera input runs in every case: on the train the keys act twice
+	if (player.tick(dt, keys, collision))
+		_vm->sound()->emit(Sound::kEffectsEmitter, "SAUT.WAV", player.eye, false);
+	// The ground is read again after the generic input (E-0615)
+	if (!keys.up && player.standsOn(scene, "*U01_20"))
 		_vm->sound()->stopGroup(Sound::kEffects);
-	if (!player.standsOn(*_vm->scene(), "*U01_20"))
-		player.collide = true;
 	return true;
 }
 
