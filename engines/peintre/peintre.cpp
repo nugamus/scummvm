@@ -22,6 +22,7 @@
 #include "common/config-manager.h"
 #include "common/endian.h"
 #include "common/events.h"
+#include "common/file.h"
 #include "common/system.h"
 #include "common/tokenizer.h"
 
@@ -29,7 +30,10 @@
 
 #include "graphics/pixelformat.h"
 
+#include "image/png.h"
+
 #include "peintre/bfg.h"
+#include "peintre/detection.h"
 #include "peintre/gfx.h"
 #include "peintre/movie.h"
 #include "peintre/obj3d.h"
@@ -55,7 +59,101 @@ void PeintreEngine::present() {
 	_system->updateScreen();
 }
 
+static Common::KeyCode devKey(const Common::String &name, char &ascii) {
+	static const struct {
+		const char *name;
+		Common::KeyCode code;
+		char ascii;
+	} kKeys[] = {
+		{ "space", Common::KEYCODE_SPACE, ' ' }, { "esc", Common::KEYCODE_ESCAPE, 27 },
+		{ "backspace", Common::KEYCODE_BACKSPACE, 8 }, { "enter", Common::KEYCODE_RETURN, 13 },
+		{ "up", Common::KEYCODE_UP, 0 }, { "down", Common::KEYCODE_DOWN, 0 },
+		{ "left", Common::KEYCODE_LEFT, 0 }, { "right", Common::KEYCODE_RIGHT, 0 },
+		{ "pageup", Common::KEYCODE_PAGEUP, 0 }, { "pagedown", Common::KEYCODE_PAGEDOWN, 0 }
+	};
+	for (const auto &k : kKeys) {
+		if (name.equalsIgnoreCase(k.name)) {
+			ascii = k.ascii;
+			return k.code;
+		}
+	}
+	ascii = name.empty() ? 0 : name[0];
+	return name.empty() ? Common::KEYCODE_INVALID : (Common::KeyCode)tolower(name[0]);
+}
+
+void PeintreEngine::devStep() {
+	if (_devCommands.empty())
+		return;
+	const uint32 now = _system->getMillis() - _devStart;
+	while (!_devCommands.empty() && _devCommands[0].time <= now) {
+		const Common::String c = _devCommands[0].command;
+		_devCommands.remove_at(0);
+		Common::Array<Common::String> w;
+		Common::String cur;
+		for (uint i = 0; i <= c.size(); i++) {
+			if (i == c.size() || c[i] == ' ') {
+				if (!cur.empty())
+					w.push_back(cur);
+				cur.clear();
+			} else {
+				cur += c[i];
+			}
+		}
+		if (w.empty())
+			continue;
+		debugC(1, kDebugInput, "dev_commands: %s", c.c_str());
+		Common::EventManager *em = _system->getEventManager();
+		Common::Event e;
+		if ((w[0] == "click" || w[0] == "move") && w.size() >= 3) {
+			e.type = Common::EVENT_MOUSEMOVE;
+			e.mouse = Common::Point(atoi(w[1].c_str()), atoi(w[2].c_str()));
+			_system->warpMouse(e.mouse.x, e.mouse.y);
+			em->pushEvent(e);
+			if (w[0] == "click") {
+				e.type = Common::EVENT_LBUTTONDOWN;
+				em->pushEvent(e);
+				DevCommand up = { now + 150, Common::String::format("release %d %d", e.mouse.x, e.mouse.y) };
+				_devCommands.insert_at(0, up);
+			}
+		} else if (w[0] == "release" && w.size() >= 3) {
+			e.type = Common::EVENT_LBUTTONUP;
+			e.mouse = Common::Point(atoi(w[1].c_str()), atoi(w[2].c_str()));
+			em->pushEvent(e);
+		} else if ((w[0] == "key" || w[0] == "hold" || w[0] == "keyup") && w.size() >= 2) {
+			char ascii;
+			e.kbd.keycode = devKey(w[1], ascii);
+			e.kbd.ascii = ascii;
+			e.type = w[0] == "keyup" ? Common::EVENT_KEYUP : Common::EVENT_KEYDOWN;
+			em->pushEvent(e);
+			if (w[0] != "keyup") {
+				const uint32 hold = w[0] == "hold" && w.size() >= 3 ? atoi(w[2].c_str()) : 100;
+				DevCommand up = { now + hold, "keyup " + w[1] };
+				uint at = 0;
+				while (at < _devCommands.size() && _devCommands[at].time <= up.time)
+					at++;
+				_devCommands.insert_at(at, up);
+			}
+		} else if (w[0] == "type" && w.size() >= 2) {
+			for (uint i = 0; i < w[1].size(); i++) {
+				e.type = Common::EVENT_KEYDOWN;
+				e.kbd.ascii = w[1][i];
+				e.kbd.keycode = (Common::KeyCode)tolower(w[1][i]);
+				em->pushEvent(e);
+				e.type = Common::EVENT_KEYUP;
+				em->pushEvent(e);
+			}
+		} else if (w[0] == "snap" && w.size() >= 2) {
+			Common::DumpFile out;
+			if (out.open(Common::Path(w[1], '/')))
+				Image::writePNG(out, _screen);
+		} else if (w[0] == "quit") {
+			quitGame();
+		}
+	}
+}
+
 void PeintreEngine::pollInput() {
+	devStep();
 	_keysFired.clear();
 	_typed.clear();
 	Common::Event event;
@@ -114,6 +212,25 @@ Common::Error PeintreEngine::run() {
 	if (ConfMan.getBool("dev_load_all"))
 		loadAllScenes();
 
+	_devStart = _system->getMillis();
+	if (ConfMan.hasKey("dev_commands")) {
+		// ms:command;ms:command... (peintre.h devStep)
+		const Common::String all = ConfMan.get("dev_commands");
+		Common::String item;
+		for (uint i = 0; i <= all.size(); i++) {
+			if (i == all.size() || all[i] == ';') {
+				const int colon = item.findFirstOf(':');
+				if (colon > 0) {
+					DevCommand d = { (uint32)atoi(item.substr(0, colon).c_str()), item.substr(colon + 1) };
+					d.command.trim();
+					_devCommands.push_back(d);
+				}
+				item.clear();
+			} else {
+				item += all[i];
+			}
+		}
+	}
 	_sound = new Sound(_mixer);
 	_movies = new MoviePlayer(this);
 	if (!_movies->loadTable())
