@@ -47,6 +47,7 @@ private:
 	float facing(const Math::Vector3d &target, const Math::Vector3d &from) const;
 	Math::Vector3d at(const char *object) const;
 	void waitVoice(bool enterSkips = true);
+	void transition(int n);
 
 	void clownTrick();
 	void salute();

@@ -41,7 +41,6 @@ public:
 	void start(bool newGame, bool video) override;
 	bool handle(const Common::String &action) override;
 	void afterFrame() override;
-	void draw() override; // Mazout's gauge
 
 private:
 	void run(uint32 id);
@@ -68,8 +67,6 @@ private:
 	Common::RandomSource _random;
 	uint32 _timer = 0;   // the dog's wait, then the station master's chatter (logic ms)
 	bool _leaving = false;
-	bool _gauge = false; // Mazout's 15-s gauge
-	uint32 _gaugeStart = 0;
 };
 
 } // End of namespace X3D

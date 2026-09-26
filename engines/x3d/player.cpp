@@ -58,6 +58,7 @@ Vector3d Player::slide(const Vector3d &from, const Vector3d &velocity, const Col
 
 bool Player::ground(const Collision &collision) {
 	float t;
+	groundObject.clear(); // nothing below: no ground object (U07's water check)
 	if (!collision.cast(eye, eye - Vector3d(0, 0, 10000), t, &groundObject))
 		return false;
 	const float g = eye.z() - 10000 * t;

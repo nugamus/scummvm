@@ -238,10 +238,10 @@ void U03::clownTrick() {
 	if (sound->isGroupPlaying(Sound::kVoice))
 		_vm->runFor(7000);
 
-	// He walks off. ponytail: the 10-frame blend from magie into marche is a cut
-	// (U03::AnimateTransition, rotation rule Q-0143)
+	// He walks off, after the transition from magie
 	scene->setClip(kClown, "Anim/U03_02/marche.A3D");
 	scene->setNodeFps(kClown, 15);
+	transition(10);
 	scene->runNodeTo(kClown, -1, false);
 	while (scene->nodeRunning(kClown) && !_vm->shouldQuit()) {
 		// One extra frame per logic step, on top of the clip's own advance
@@ -255,6 +255,18 @@ void U03::clownTrick() {
 	_vm->suspend(false);
 }
 
+void U03::transition(int n) {
+	// U03::AnimateTransition as the player sees it (E-0501): n frames of one extra
+	// animation tick, then a tick and a render; the blended pose is never drawn
+	const float dt = 1.0f / X3DEngine::kStepsPerSecond;
+	for (int i = 0; i < n && !_vm->shouldQuit(); i++) {
+		_vm->scene()->advance(dt);
+		const uint32 t = _vm->logicMs();
+		while (_vm->logicMs() == t && !_vm->shouldQuit())
+			_vm->runFor(0);
+	}
+}
+
 void U03::salute() {
 	// FlicSalut (E-0304)
 	Scene *scene = _vm->scene();
@@ -264,12 +276,15 @@ void U03::salute() {
 	scene->setNodeLoop(kFlic, false);
 	const float to[3] = { p.x(), p.y(), p.z() };
 	_vm->moveTo(2000, to, facing(at(kFlic), p), kHalfPi);
-	scene->setClip(kFlic, "Anim/U03_09/salut.A3D", "", 2);
+	scene->setClip(kFlic, "Anim/U03_09/salut.A3D", "", 2, false);
+	transition(10); // AttenteHorloge to salut
+	scene->activateSlot(kFlic, 2);
 	scene->setNodeLoop(kFlic, false);
 	scene->setNodeFps(kFlic, 15);
 	scene->runNodeTo(kFlic, -1, false);
 	while (scene->nodeFrame(kFlic) < scene->nodeLastFrame(kFlic) - 10 && scene->nodeRunning(kFlic) && !_vm->shouldQuit())
 		_vm->runFor(0);
+	transition(10); // salut to AttenteHorloge
 	scene->activateSlot(kFlic, 1); // back to AttenteHorloge
 	scene->setNodeLoop(kFlic, true);
 	scene->runNodeTo(kFlic, -1, false);
@@ -334,6 +349,7 @@ void U03::cutscene() {
 	run(31);
 
 	scene->setClip(kFlic, "Anim/U03_09/REFLECTION.A3D", "", 3); // refelction
+	transition(10);
 	scene->setNodeLoop(kFlic, false);
 	scene->setNodeFps(kFlic, 15);
 	scene->runNodeTo(kFlic, -1, false);

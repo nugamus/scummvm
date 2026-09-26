@@ -174,9 +174,7 @@ bool U05::mazoutConfronts() {
 	while (_vm->sound()->isGroupPlaying(Sound::kVoice) && !_vm->enterHeld() && !_vm->shouldQuit())
 		_vm->runFor(0);
 	_vm->sound()->stopEmitter(Sound::kVoiceEmitter);
-	_gauge = true;
-	_gaugeStart = _vm->logicMs();
-	debug(1, "U05: Mazout's gauge starts at %u", _gaugeStart);
+	_vm->startGauge(kGaugeMs); // saved with the game (JAUGE)
 	_timer = 0;
 	_vm->suspend(false);
 	return true;
@@ -186,8 +184,7 @@ void U05::gaugeExpired() {
 	// Mazout catches the player: only he stays visible (E-0362)
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
-	debug(1, "U05: Mazout's gauge expires at %u", _vm->logicMs());
-	_gauge = false;
+	_vm->stopGauge();
 	_vm->suspend(true);
 	scene->setClip(kMazout, "Anim/U04_04/Action02.A3D"); // MazoutA03
 	scene->setNodeFps(kMazout, 15);
@@ -243,7 +240,7 @@ void U05::afterFrame() {
 	}
 	if (interaction->exhausted(11) && !interaction->exhausted(12) && mazoutConfronts())
 		interaction->exhaust(12);
-	if (interaction->exhausted(13) && !interaction->exhausted(14) && _gauge && _vm->logicMs() - _gaugeStart >= kGaugeMs) {
+	if (interaction->exhausted(13) && !interaction->exhausted(14) && _vm->gaugeExpired()) {
 		gaugeExpired();
 		return;
 	}
@@ -333,7 +330,7 @@ void U05::lampFalls() {
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	_vm->suspend(true);
-	_gauge = false;
+	_vm->stopGauge();
 	scene->setClip(kMazout, "Anim/U04_04/Action03.A3D");
 	scene->setNodeFps(kMazout, 15);
 	scene->runNodeTo(kMazout, -1, false);
@@ -394,9 +391,5 @@ bool U05::handle(const Common::String &action) {
 	return true;
 }
 
-void U05::draw() {
-	if (_gauge)
-		drawGauge(_vm->renderer(), MIN(1.0f, (_vm->logicMs() - _gaugeStart) / (float)kGaugeMs));
-}
 
 } // End of namespace X3D

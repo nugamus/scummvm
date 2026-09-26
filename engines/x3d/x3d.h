@@ -104,7 +104,11 @@ public:
 	// Suspend: no cursor, camera keys or clicks (u01.md)
 	void suspend(bool suspended);
 	bool suspended() const { return _suspended; }
-	void gotoScene(const Common::String &name) { _nextScene = name; }
+	// A pending load keeps its scene: a sequence that goes on after it cannot replace it
+	void gotoScene(const Common::String &name) {
+		if (_pendingLoad.empty())
+			_nextScene = name;
+	}
 	bool sceneChanging() const { return !_nextScene.empty(); }
 	void addUnitAction(const Common::String &name) { _unitActions.push_back(name); }
 	// Video/<name>.avi with its soundtrack Video/<wav>.wav (the video's name when empty).
@@ -210,6 +214,7 @@ private:
 	Camera _camera; // the last one drawn, for frames over a frozen scene
 	Common::String _menuText; // the text edit of the last menu
 	bool _escapeNow = false, _escapeBlocked = false;
+	int _frameDepth = 0; // frames nested in blocking sequences: no saving or loading there
 	bool _walk = false; // runFor with walking input
 	Gauge _gauge;
 	int _menuView = -1;  // the view index of the last frame click

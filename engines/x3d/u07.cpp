@@ -160,7 +160,16 @@ void U07::switchAndDescent() {
 		_vm->moveTo(1000, q, kKeep, kKeep);
 		_vm->runFor(300);
 	} while (heightAboveGround(player.eye) >= 1.8f * h && !_vm->shouldQuit());
-	player.ground(*_vm->collision());
+	// The snap is a fall done here, in the sequence (u07.md step 6)
+	if (player.ground(*_vm->collision())) {
+		const Keys none;
+		while (player.falling() && !_vm->shouldQuit()) {
+			player.tick(1.0f / X3DEngine::kStepsPerSecond, none, *_vm->collision());
+			const uint32 t = _vm->logicMs();
+			while (_vm->logicMs() == t && !_vm->shouldQuit())
+				_vm->runFor(0);
+		}
+	}
 	if (Common::File::exists("SAUT.WAV"))
 		sound->emit(Sound::kEffectsEmitter, "SAUT.WAV", player.eye, false);
 	_vm->moveTo(800, nullptr, kKeep, kHalfPi);
@@ -198,7 +207,7 @@ void U07::fallInWater() {
 	effect("eau", player.eye);
 	const Vector3d d(cosf(player.yaw) * sinf(player.pitch), -sinf(player.yaw) * sinf(player.pitch), -cosf(player.pitch));
 	const float p[3] = { player.eye.x() + s * d.x(), player.eye.y() + s * d.y(), player.eye.z() - h + 10 };
-	const float drop = (Vector3d(p[0], p[1], p[2]) - player.eye).getMagnitude();
+	const float drop = player.eye.z() - p[2]; // movement.md's fall is vertical
 	player.collide = false;
 	const float z0 = player.eye.z();
 	const uint32 t0 = _vm->logicMs();

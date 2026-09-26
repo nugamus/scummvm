@@ -115,11 +115,12 @@ Common::Error X3DEngine::run() {
 static const uint32 kSaveVersion = 3; // 2: numbered clip slots; 3: the scene gauge
 
 bool X3DEngine::canSaveGameStateCurrently(Common::U32String *msg) {
-	return _scene && _unit && _unit->gameStarted() && !_suspended;
+	// Only between the unit's sequences: a save inside one could not replay its end
+	return _scene && _unit && _unit->gameStarted() && !_suspended && _frameDepth <= 1;
 }
 
 bool X3DEngine::canLoadGameStateCurrently(Common::U32String *msg) {
-	return true;
+	return _frameDepth <= 1;
 }
 
 Common::Error X3DEngine::saveGameStream(Common::WriteStream *stream, bool isAutosave) {
@@ -445,6 +446,11 @@ void X3DEngine::logicStep(bool input) {
 }
 
 void X3DEngine::frame(bool input) {
+	struct Depth {
+		int &d;
+		explicit Depth(int &depth) : d(depth) { d++; }
+		~Depth() { d--; }
+	} nesting(_frameDepth);
 	if (!_devClicks.empty() && _system->getMillis() - _devStart >= (uint32)_devClicks[2]) {
 		_mouse = Common::Point(_devClicks[0], _devClicks[1]);
 		_clickNow = true;
@@ -691,8 +697,10 @@ void X3DEngine::lookAt(uint32 ms, const Math::Vector3d &target) {
 	// The yaw and pitch whose view direction points at the target (E-0040)
 	const Math::Vector3d d = target - _player.eye;
 	const float len = d.getMagnitude();
-	if (len == 0)
+	if (len == 0) {
+		runFor(0); // still one frame: callers loop on it
 		return;
+	}
 	const float yaw = atan2f(-d.y(), d.x());
 	const float pitch = acosf(CLIP(-d.z() / len, -1.0f, 1.0f));
 	if (ms == 0) {
@@ -1214,7 +1222,7 @@ void X3DEngine::fadeToBlack(uint32 ms) {
 	const byte start[3] = { _scene->ambient[0], _scene->ambient[1], _scene->ambient[2] };
 	for (uint i = 0; i < n && !shouldQuit(); i++) {
 		for (int k = 0; k < 3; k++)
-			_scene->ambient[k] = MAX(0, (int)_scene->ambient[k] - start[k] / (int)n);
+			_scene->ambient[k] = start[k] * (n - 1 - i) / n; // black at the last step
 		runFor(10);
 	}
 }
