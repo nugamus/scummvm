@@ -334,7 +334,7 @@ void Scene::animate(const A3DFile &file, uint animation, Model &m, uint object, 
 
 void Scene::advance(float dt) {
 	for (AnimNode &n : _nodes) {
-		if (!n.enabled)
+		if (!n.enabled || !n.model)
 			continue;
 		// A rewound clip hands back to the node's own animation at frame 1 (E-0057)
 		if (n.clipActive && n.clip.backward && !n.clip.running) {
@@ -766,11 +766,13 @@ void Scene::nameNodes(Model *m, const Common::String &name) {
 }
 
 void Scene::removeModel(Model *m) {
-	for (uint i = 0; i < _nodes.size();)
-		if (_nodes[i].model == m)
-			_nodes.remove_at(i);
-		else
-			i++;
+	// Its nodes stay as disabled tombstones: talkers keep node indices
+	for (AnimNode &n : _nodes)
+		if (n.model == m) {
+			n.model = nullptr;
+			n.enabled = false;
+			n.name.clear();
+		}
 	for (uint i = 0; i < _models.size(); i++)
 		if (_models[i] == m) {
 			_models.remove_at(i);
@@ -905,7 +907,7 @@ int Scene::addFaceClip(const Common::String &faceObject, const Common::String &p
 }
 
 void Scene::setNode(int node, bool enabled, bool running) {
-	_nodes[node].enabled = enabled;
+	_nodes[node].enabled = enabled && _nodes[node].model;
 	_nodes[node].base.running = running;
 }
 

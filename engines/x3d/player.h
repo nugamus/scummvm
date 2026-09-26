@@ -63,6 +63,7 @@ public:
 	// The downward probe alone: updates groundObject, not the position
 	void probeGround(const Collision &collision);
 	bool ground(const Collision &collision); // snaps eye to the ground or starts a fall
+	bool falling() const { return _falling; }
 
 private:
 	Math::Vector3d slide(const Math::Vector3d &eye, const Math::Vector3d &velocity, const Collision &collision) const;
