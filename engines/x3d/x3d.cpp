@@ -164,7 +164,7 @@ Common::Error X3DEngine::loadGameStream(Common::SeekableReadStream *stream) {
 	s.syncAsByte(_practice);
 	_pendingLoad.resize(stream->size() - stream->pos());
 	stream->read(_pendingLoad.data(), _pendingLoad.size());
-	gotoScene(scene);
+	_nextScene = scene; // not gotoScene: the pending load keeps this scene
 	return Common::kNoError;
 }
 
