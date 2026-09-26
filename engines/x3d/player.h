@@ -54,7 +54,7 @@ public:
 	float yaw = 0, pitch = M_PI / 2, fov = 90, roll = 0;
 	float sphereOffset = 0; // eye minus collision sphere centre, along Z
 	bool canMove = true, canTurn = true;
-	bool runAllowed = false, jumpAllowed = false; // Ctrl runs, Shift jumps (U33 turns them on)
+	bool runAllowed = true, jumpAllowed = true; // Ctrl runs, Shift jumps (never unset: on; U33's caravan turns them off)
 	void setEyeHeight(float h) { _eyeHeight = h; }
 	float eyeHeight() const { return _eyeHeight; }
 	bool collide = true;           // collision and ground snapping (U01's train turns it off)
