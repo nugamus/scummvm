@@ -220,7 +220,7 @@ void Interaction::hover(int hotspot, uint32 millis) {
 		}
 		return;
 	}
-	setCursor(hotspot >= 0 ? _hotspots[hotspot].cursor : 0);
+	setCursor(hotspot >= 0 && actionsEnabled ? _hotspots[hotspot].cursor : 0);
 }
 
 void Interaction::showCursor(uint kind) {

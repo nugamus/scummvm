@@ -44,6 +44,7 @@
 #include "x3d/collision.h"
 #include "x3d/console.h"
 #include "x3d/frame.h"
+#include "x3d/gallery3d.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
 #include "x3d/player.h"
@@ -307,9 +308,13 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	U04 unit04(this);
 	U05 unit05(this);
 	U06 unit06(this);
+	Gallery3D gallery3d(this, _gallery3D);
 	U07 unit07(this);
 	U33 unit33(this);
-	_unit = sceneName.hasPrefixIgnoreCase("U00") ? (Unit *)&unit00 :
+	const bool view3d = !_gallery3D.empty() && sceneName.equalsIgnoreCase(Gallery3D::sceneFor(_gallery3D));
+	_gallery3D.clear();
+	_unit = view3d ? (Unit *)&gallery3d :
+	        sceneName.hasPrefixIgnoreCase("U00") ? (Unit *)&unit00 :
 	        sceneName.hasPrefixIgnoreCase("U01") ? (Unit *)&unit01 :
 	        sceneName.hasPrefixIgnoreCase("U02") ? (Unit *)&unit02 :
 	        sceneName.hasPrefixIgnoreCase("U03") ? (Unit *)&unit03 :
@@ -603,7 +608,9 @@ void X3DEngine::frame(bool input) {
 		// cursor (E-0210)
 		if (!_unit || _unit->gameStarted())
 			storeHeldItem();
-		if (_unit && !_unit->gameStarted()) {
+		if (_unit && _unit->escape()) {
+			// The unit's own Escape (the gallery's 3D view)
+		} else if (_unit && !_unit->gameStarted()) {
 			// No game yet (U00): the Option menu at once, the ambient stopped (ui.md, Escape)
 			_sound->stopGroup(Sound::kAmbient);
 			afterOptionMenu(optionMenu());
@@ -936,9 +943,22 @@ bool X3DEngine::paintingScreens(uint index, uint count) {
 			screen = "Tableau";
 		else if (c == "GoLoupe")
 			magnifier(p);
-		else if (c == "GotoScene3D")
-			warning("The painting's 3D scene is not implemented (Q-0192)");
+		else if (c == "GotoScene3D" && !Gallery3D::sceneFor(p).empty()) {
+			_gallery3D = p; // the Option menu hands over to the scene
+			return false;
+		}
 	}
+}
+
+void X3DEngine::returnToPainting(const Common::String &painting) {
+	// The painting's Tableau, then the gallery and the Option menu as the player leaves
+	const uint count = unlockedPaintings(playerUnit());
+	uint index = 0;
+	while (index < ARRAYSIZE(kPaintings) && painting != kPaintings[index])
+		index++;
+	if (index >= count || paintingScreens(index, count))
+		gallery();
+	afterOptionMenu(_gallery3D.empty() ? optionMenu() : Common::String("Gallery3D"));
 }
 
 void X3DEngine::magnifier(const Common::String &painting) {
@@ -1051,6 +1071,8 @@ Common::String X3DEngine::optionMenu() {
 			settings();
 		} else if (c == "OptionGalerie") {
 			gallery();
+			if (!_gallery3D.empty())
+				return "Gallery3D";
 		} else if (!c.empty() && c != "escape" && c != "enter" && c != "key") {
 			warning("Menu command %s is not implemented", c.c_str());
 		}
@@ -1071,6 +1093,8 @@ void X3DEngine::afterOptionMenu(const Common::String &command) {
 			_interaction->holdItem("");
 		_inventory->clear();
 		gotoScene(scene);
+	} else if (command == "Gallery3D") {
+		gotoScene(Gallery3D::sceneFor(_gallery3D));
 	} else if (command == "OptionEntrenement") {
 		// Practice keeps the bar (E-0212); a held item is stored by the scene switch
 		_practice = true;
@@ -1155,6 +1179,13 @@ Common::String X3DEngine::command(const Common::String &line) {
 	}
 	if (c == "loadmenu")
 		return loadMenu() ? "loaded" : "no load";
+	if (c == "view3d" && a.size() >= 2) {
+		if (Gallery3D::sceneFor(a[1]).empty())
+			return "no 3D scene";
+		_gallery3D = a[1];
+		gotoScene(Gallery3D::sceneFor(a[1]));
+		return "ok";
+	}
 	if (c == "exhaust" && a.size() >= 2) {
 		_interaction->exhaust(atoi(a[1].c_str()));
 		return "ok";

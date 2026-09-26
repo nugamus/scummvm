@@ -140,6 +140,7 @@ public:
 	void gallery();
 	bool paintingScreens(uint index, uint count);
 	void magnifier(const Common::String &painting);
+	void returnToPainting(const Common::String &painting); // Escape in the 3D view
 	int playerUnit() const; // the unit of the player's last save (ui.md Gallery)
 	bool loadMenu();
 	// Players (ui.md SelectUser): true when the name is new, which is then added
@@ -152,7 +153,7 @@ public:
 	const Common::String &menuText() const { return _menuText; }
 
 	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold, pos, act,
-	// save <slot>, load <slot>, savemenu, loadmenu, page <credits|settings|gallery|loupe p|painting>, exhaust <id>
+	// save <slot>, load <slot>, savemenu, loadmenu, page <credits|settings|gallery|loupe p|painting>, exhaust <id>, view3d <painting>
 	Common::String command(const Common::String &line);
 
 	static constexpr float kKeep = 100.0f;
@@ -220,6 +221,7 @@ private:
 	int _menuView = -1;  // the view index of the last frame click
 	int _musicVolume = 85; // group 1 in play (Settings)
 	Common::String _playerName;
+	Common::String _gallery3D; // the painting whose 3D scene the next scene is
 };
 
 } // End of namespace X3D
