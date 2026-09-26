@@ -34,6 +34,7 @@
 #include "peintre/obj3d.h"
 #include "peintre/peintre.h"
 #include "peintre/sound.h"
+#include "peintre/world.h"
 
 namespace Peintre {
 
@@ -92,6 +93,10 @@ void PeintreEngine::pollInput() {
 	}
 }
 
+bool PeintreEngine::keyHeld(Common::KeyCode key) const {
+	return Common::find(_keysDown.begin(), _keysDown.end(), key) != _keysDown.end();
+}
+
 bool PeintreEngine::keyFired(Common::KeyCode key) const {
 	return Common::find(_keysFired.begin(), _keysFired.end(), key) != _keysFired.end();
 }
@@ -118,6 +123,12 @@ Common::Error PeintreEngine::run() {
 		warning("Cannot read the movie table from mission.___");
 	if (ConfMan.hasKey("dev_movie")) {
 		_movies->play(ConfMan.get("dev_movie"));
+		return Common::kNoError;
+	}
+
+	if (ConfMan.hasKey("dev_scene")) {
+		// Dev harness: straight into a 3D scene (from dev_prev_scene, default 0).
+		runWorld(ConfMan.getInt("dev_scene"), ConfMan.hasKey("dev_prev_scene") ? ConfMan.getInt("dev_prev_scene") : 0);
 		return Common::kNoError;
 	}
 
@@ -148,13 +159,27 @@ Common::Error PeintreEngine::run() {
 	}
 	_movies->play("intro");
 
-	// Not specced into the engine yet: the 3D world and the 2D zones.
+	if (in2d) {
+		// boot.md step 9: resume inside the saved zone.
+		enterZone(_state.currentZone());
+	}
+	runWorld(_state.block3D[0x3C], _state.block3D[0x3D]);
+	return Common::kNoError;
+}
+
+void PeintreEngine::runWorld(int scene, int prevScene) {
+	World world(this);
+	if (!world.load(scene, prevScene, false))
+		return;
+	// movement.md "The tick": 66 ms.
 	while (!shouldQuit()) {
 		pollInput();
+		const WorldExit exit = world.tick();
 		present();
-		waitTick(40);
+		if (exit == kExitOptions && runOptionMenu(true) == -2)
+			break;
+		waitTick(66);
 	}
-	return Common::kNoError;
 }
 
 void PeintreEngine::loadAllScenes() {
