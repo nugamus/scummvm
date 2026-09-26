@@ -120,6 +120,10 @@ static const struct {
 		GAMEOPTION_TURN_SPEED, "turn_speed", _s("Turn speed:"), _s("How fast the arrow keys turn the view and look up or down"), 100,
 		{ { _s("Slow"), 50 }, { _s("Original"), 100 }, { _s("Fast"), 150 }, { _s("Very fast"), 200 }, { nullptr, 0 } }
 	},
+	{
+		GAMEOPTION_FOV, "fov", _s("Field of view:"), _s("Horizontal field of view while walking around (the scripted views keep theirs)"), 90,
+		{ { _s("90 degrees (original)"), 90 }, { _s("100 degrees"), 100 }, { _s("110 degrees"), 110 }, { nullptr, 0 } }
+	},
 };
 
 class X3DOptionsWidget : public GUI::ExtraGuiOptionsWidget {
