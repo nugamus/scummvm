@@ -70,6 +70,7 @@ public:
 	void probeGround(const Collision &collision);
 	bool ground(const Collision &collision); // snaps eye to the ground or starts a fall
 	bool falling() const { return _falling; }
+	bool jumping() const { return _jumping; }
 
 private:
 	Math::Vector3d slide(const Math::Vector3d &eye, const Math::Vector3d &velocity, const Collision &collision) const;

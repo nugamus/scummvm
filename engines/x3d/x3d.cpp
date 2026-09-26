@@ -148,8 +148,11 @@ void X3DEngine::actionToKey(Common::Event &e) {
 static const uint32 kSaveVersion = 4; // 2: numbered clip slots; 3: the scene gauge; 4: U01 on it
 
 bool X3DEngine::canSaveGameStateCurrently(Common::U32String *msg) {
-	// Only between the unit's sequences: a save inside one could not replay its end
-	return _scene && _unit && _unit->gameStarted() && !_suspended && _frameDepth <= 1;
+	// Only between the unit's sequences: a save inside one could not replay its end. Not
+	// in the air or during a game over either: ScummVM autosaves before every load, and a
+	// save of the fall would replay the death on each load
+	return _scene && _unit && _unit->gameStarted() && !_suspended && _frameDepth <= 1 &&
+	       !_inGameOver && !_player.falling() && !_player.jumping();
 }
 
 bool X3DEngine::canLoadGameStateCurrently(Common::U32String *msg) {
@@ -260,6 +263,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_last = _fpsStart = _sceneStart = _system->getMillis();
 	_pending = _logicMs = _lastClick = _frames = 0;
 	_gauge = Gauge();
+	_inGameOver = false;
 
 	// Development shortcut: dev_click=x,y,ms[;x,y,ms...] clicks at game pixel (x, y) ms
 	// after the first scene starts, for testing without focus (SDL takes click positions

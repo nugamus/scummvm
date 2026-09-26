@@ -195,6 +195,7 @@ Common::Error X3DEngine::saveGameState(int slot, const Common::String &desc, boo
 }
 
 void X3DEngine::gameOver() {
+	_inGameOver = true; // cleared when the next scene starts
 	_sound->stopAll();
 	storeHeldItem(); // the caught path stores it (E-0210)
 	if (!loadMenu())
