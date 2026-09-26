@@ -106,6 +106,9 @@ bool U07::input(float dt) {
 	Player &player = _vm->player();
 	const Keys &keys = _vm->keys();
 	const float s = _vm->scene()->scale, h = 1.5f * s;
+	// The generic input first: the tests below see this step's ground (movement.md)
+	if (player.tick(dt, keys, *_vm->collision()))
+		_vm->sound()->emit(Sound::kEffectsEmitter, "SAUT.WAV", player.eye, false);
 	if (!_vm->interaction()->exhausted(1)) {
 		// One 20-unit rung per key press
 		if (keys.up && !_upWas) {
@@ -124,19 +127,14 @@ bool U07::input(float dt) {
 		}
 		_upWas = keys.up;
 		_downWas = keys.down;
-		return false;
+		return true;
 	}
 	// Both tests compare the ground object's name, not its identity (E-0619)
-	bool handled = false;
-	if (!_plankTipped && player.groundObject.equalsIgnoreCase("Planch01")) {
+	if (!_plankTipped && player.groundObject.equalsIgnoreCase("Planch01"))
 		tipPlank(); // then the water test, in the same call
-		handled = true;
-	}
-	if (player.groundObject.empty() || player.groundObject.hasPrefixIgnoreCase("*eau")) {
+	if (player.groundObject.empty() || player.groundObject.hasPrefixIgnoreCase("*eau"))
 		fallInWater();
-		handled = true;
-	}
-	return handled;
+	return true;
 }
 
 void U07::switchAndDescent() {
