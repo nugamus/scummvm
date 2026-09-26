@@ -148,9 +148,9 @@ public:
 	Math::Vector3d objectPosition(const Common::String &name) const;
 	// The centre of what the object draws (its origin when it draws nothing)
 	Math::Vector3d objectCenter(const Common::String &name) const;
-	// The centre of the object's face nearest to eye, for aiming at thin objects; its
-	// centre when it has no faces
-	Math::Vector3d surfacePoint(const Common::String &name, const Math::Vector3d &eye) const;
+	// The centres of the object's faces, nearest to eye first, then its centre: points to
+	// aim at, for thin or partly covered objects
+	Common::Array<Math::Vector3d> surfacePoints(const Common::String &name, const Math::Vector3d &eye) const;
 	// An object by name in X3D's lookup order (newest file first), or false
 	bool findObject(const Common::String &name, Model *&model, uint &object) const;
 	void renameObject(const Common::String &from, const Common::String &to);

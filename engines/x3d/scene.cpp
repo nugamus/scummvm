@@ -919,37 +919,34 @@ void Scene::setNodeFps(int node, float fps) {
 	_nodes[node].base.fps = fps;
 }
 
-Math::Vector3d Scene::surfacePoint(const Common::String &name, const Math::Vector3d &eye) const {
+Common::Array<Math::Vector3d> Scene::surfacePoints(const Common::String &name, const Math::Vector3d &eye) const {
+	Common::Array<Math::Vector3d> points;
 	Model *m;
 	uint o;
 	if (!findObject(name, m, o))
-		return Math::Vector3d();
+		return points;
 	int owner = o;
 	while (owner >= 0 && m->file.objects[owner].vertices.empty())
 		owner = m->file.objects[owner].parent;
-	Math::Vector3d best = objectCenter(name);
-	float bestDistance = -1;
-	if (owner < 0)
-		return best;
-	const Common::Array<float> &v = m->worldVertices[owner];
-	for (const O3DFace &face : m->file.objects[o].faces) {
-		Math::Vector3d c;
-		uint n = 0;
-		for (uint32 index : face.indices)
-			if (index * 3 + 2 < v.size()) {
-				c += Math::Vector3d(v[index * 3], v[index * 3 + 1], v[index * 3 + 2]);
-				n++;
-			}
-		if (!n)
-			continue;
-		c /= (float)n;
-		const float d = (c - eye).getSquareMagnitude();
-		if (bestDistance < 0 || d < bestDistance) {
-			best = c;
-			bestDistance = d;
+	if (owner >= 0) {
+		const Common::Array<float> &v = m->worldVertices[owner];
+		for (const O3DFace &face : m->file.objects[o].faces) {
+			Math::Vector3d c;
+			uint n = 0;
+			for (uint32 index : face.indices)
+				if (index * 3 + 2 < v.size()) {
+					c += Math::Vector3d(v[index * 3], v[index * 3 + 1], v[index * 3 + 2]);
+					n++;
+				}
+			if (n)
+				points.push_back(c / (float)n);
 		}
 	}
-	return best;
+	Common::sort(points.begin(), points.end(), [&](const Math::Vector3d &a, const Math::Vector3d &b) {
+		return (a - eye).getSquareMagnitude() < (b - eye).getSquareMagnitude();
+	});
+	points.push_back(objectCenter(name));
+	return points;
 }
 
 Math::Vector3d Scene::objectCenter(const Common::String &name) const {
