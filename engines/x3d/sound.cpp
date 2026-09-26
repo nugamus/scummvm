@@ -35,6 +35,8 @@ Sound::Sound(Audio::Mixer *mixer) : _mixer(mixer) {
 	_emitters[kVoiceEmitter].group = kVoice;
 	_emitters[kEffectsEmitter].group = kEffects;
 	_emitters[kPhoneEmitter].group = 4;
+	_emitters[kUnitEmitter1].group = 5;
+	_emitters[kUnitEmitter2].group = 6;
 }
 
 Sound::~Sound() {
@@ -115,6 +117,11 @@ void Sound::setScale(float scale) {
 	_emitters[kVoiceEmitter].range = 50 * scale;
 	_emitters[kEffectsEmitter].range = 60 * scale;
 	_emitters[kPhoneEmitter].range = 50 * scale;
+}
+
+void Sound::setEmitter(Emitter e, int group, float range) {
+	_emitters[e].group = group;
+	_emitters[e].range = range;
 }
 
 bool Sound::emit(Emitter e, const Common::Path &path, const Math::Vector3d &position, bool loop) {

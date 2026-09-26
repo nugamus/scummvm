@@ -64,8 +64,19 @@ public:
 	// Loads a unit from its .X3D script name, e.g. "U01.X3D"
 	bool load(const Common::String &scriptName);
 
-	// One logic step of dt seconds: animation playback, then the posed vertices
-	void update(float dt);
+	// One logic step of dt seconds: animation playback, then the posed vertices. Split in
+	// two so unit code can move objects after the animation (U03's policeman).
+	void update(float dt) { advance(dt); poseAll(); }
+	void advance(float dt);
+	void poseAll();
+
+	struct Model;
+	// Models added and removed by unit code (U03's clown and cutscene): the file, with an
+	// optional .A3D bound as the script's animation= would; not in collision
+	Model *addModel(const Common::String &path, const Common::String &animation = "", float fps = 15);
+	void removeModel(Model *m);
+	void nameNodes(Model *m, const Common::String &name); // its nodes answer to name
+	O3DObject *object(const Common::String &name); // newest file first
 	void draw(const Camera &cam, int width, int height);
 
 	Camera camera; // #CAMERA# values; position and angles are set by the unit
@@ -155,7 +166,10 @@ public:
 	// A clip made the node's active slot, paused at its first frame, not looping; with a
 	// sub-animation name, only that animation plays, on the object of the same name
 	// (u02.md). The node* controls above then act on it; endClip goes back to slot 0.
-	void setClip(const Common::String &name, const Common::String &path, const Common::String &subAnimation = "");
+	void setClip(const Common::String &name, const Common::String &path, const Common::String &subAnimation = "",
+	             int slot = 1, bool activate = true);
+	void activateSlot(const Common::String &name, int slot); // 0: the node's own animation
+	int activeSlot(const Common::String &name);
 	void endClip(const Common::String &name);
 	void setNodePingPong(const Common::String &name, bool pingPong);
 	void enableNode(const Common::String &name, bool enabled);
@@ -200,6 +214,10 @@ private:
 		uint object;
 		Playback base, clip;
 		bool clipActive = false;
+		// Numbered clip slots (animation.md "Sub-slots"): clip is slot `slot`; the others
+		// wait in slots[] until made active
+		int slot = 1;
+		Playback slots[16];
 		bool enabled = true; // disabled nodes are neither advanced nor applied
 	};
 

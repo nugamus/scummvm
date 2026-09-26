@@ -180,6 +180,7 @@ private:
 	bool _devParsed = false;
 	Common::String _nextScene, _sceneName;
 	Common::Array<byte> _pendingLoad; // a save's scene state, restored by playScene
+	uint32 _pendingVersion = 1;
 	Common::StringArray _unitActions;
 	Common::String _clickedHotspot; // the hotspot of this frame's click, for Unit::afterClick
 	Camera _camera; // the last one drawn, for frames over a frozen scene

@@ -42,6 +42,7 @@ public:
 	virtual bool input(float dt) { return false; }    // the input hook; false: normal camera keys
 	virtual bool handle(const Common::String &action) { return false; } // a queued click action
 	virtual void afterFrame() {}                     // per-frame checks after rendering
+	virtual void afterAnimate() {}                   // each logic step, before the pose
 	virtual void afterClick(const Common::String &hotspot) {} // after a click's queued actions
 	virtual void draw() {}                           // 2D drawn over the frame
 	virtual bool gameStarted() const { return true; } // false: Escape opens the Option menu

@@ -54,6 +54,7 @@
 #include "x3d/u00.h"
 #include "x3d/u01.h"
 #include "x3d/u02.h"
+#include "x3d/u03.h"
 #include "x3d/u05.h"
 #include "x3d/x3d.h"
 
@@ -107,7 +108,7 @@ Common::Error X3DEngine::run() {
 	return Common::kNoError;
 }
 
-static const uint32 kSaveVersion = 1;
+static const uint32 kSaveVersion = 2; // 2: numbered clip slots
 
 bool X3DEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 	return _scene && _unit && _unit->gameStarted() && !_suspended;
@@ -124,6 +125,7 @@ Common::Error X3DEngine::saveGameStream(Common::WriteStream *stream, bool isAuto
 	Common::Serializer s(nullptr, stream);
 	uint32 version = kSaveVersion;
 	s.syncAsUint32LE(version);
+	s.setVersion(kSaveVersion);
 	s.syncString(_sceneName);
 	s.syncAsByte(_practice);
 	// The player's unit number follows every save: it unlocks the gallery (ui.md)
@@ -147,8 +149,9 @@ Common::Error X3DEngine::loadGameStream(Common::SeekableReadStream *stream) {
 	Common::Serializer s(stream, nullptr);
 	uint32 version = 0;
 	s.syncAsUint32LE(version);
-	if (version != kSaveVersion)
+	if (version < 1 || version > kSaveVersion)
 		return Common::kReadingFailed;
+	_pendingVersion = version;
 	Common::String scene;
 	s.syncString(scene);
 	s.syncAsByte(_practice);
@@ -294,10 +297,12 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	U00 unit00(this, _practice);
 	U01 unit01(this);
 	U02 unit02(this);
+	U03 unit03(this);
 	U05 unit05(this);
 	_unit = sceneName.hasPrefixIgnoreCase("U00") ? (Unit *)&unit00 :
 	        sceneName.hasPrefixIgnoreCase("U01") ? (Unit *)&unit01 :
 	        sceneName.hasPrefixIgnoreCase("U02") ? (Unit *)&unit02 :
+	        sceneName.hasPrefixIgnoreCase("U03") ? (Unit *)&unit03 :
 	        sceneName.hasPrefixIgnoreCase("U05") ? (Unit *)&unit05 : nullptr;
 	if (_unit)
 		_unit->afterLoad();
@@ -366,6 +371,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 		// start without its entry (save.md, Loading)
 		Common::MemoryReadStream stream(_pendingLoad.data(), _pendingLoad.size());
 		Common::Serializer s(&stream, nullptr);
+		s.setVersion(_pendingVersion);
 		scene.syncState(s);
 		interaction.syncState(s);
 		collision.syncState(s);
@@ -414,7 +420,10 @@ void X3DEngine::logicStep(bool input) {
 	_logicMs += stepMs;
 	_inventory->tick(_logicMs);
 	_talk->tick(_logicMs);
-	_scene->update(stepMs / 1000.0f);
+	_scene->advance(stepMs / 1000.0f);
+	if (_unit)
+		_unit->afterAnimate();
+	_scene->poseAll();
 	_collision->refresh();
 	_sound->updateVolumes(_player.eye);
 	_interaction->eye = _player.eye;
