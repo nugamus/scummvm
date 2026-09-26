@@ -13,11 +13,15 @@ MODULE_OBJS = \
 	shell.o \
 	sound.o \
 	world.o \
+	scenes/auberge.o \
 	scenes/cafe.o \
+	scenes/champ.o \
 	scenes/chambreb.o \
 	scenes/chambrev.o \
+	scenes/eglise.o \
 	scenes/hopiext.o \
 	scenes/hopiint.o \
+	scenes/jardin.o \
 	scenes/maisonet.o \
 	scenes/maisonj.o \
 	scenes/mangeurs.o \
