@@ -70,7 +70,9 @@ void fixU04Names(Scene *scene) {
 				break;
 			}
 	}
-	// ponytail: *U04_26's animation binding is U04's; the object is absent in U00
+	// *U04_26's own track as a node after the chest's (absent in U00): it poses the lid
+	// over the xxxBox03 node's pose, so INFOOBJ's paused frame 1 keeps it shut until M25
+	scene->addTrackNode("*U04_26");
 	for (int i = 0; scene->findObject("Box36", m, o); i++) {
 		m->file.objects[o].name = Common::String::format("Box36_%d", i);
 		m->unpickable[o] = true;
