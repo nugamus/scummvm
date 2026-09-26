@@ -97,7 +97,7 @@ public:
 				break;
 			_drag = false;
 			_s.setCursor(kCursorDefault);
-			if (kPotArea.contains(_s.mouse())) {
+			if (kPotArea.contains(Common::Point(132 + _s.mouse().x - _grab.x, 295 + _s.mouse().y - _grab.y))) {
 				_s.counter(0) = 1;
 				_s.movie(34, true);
 				go(7);
@@ -124,7 +124,7 @@ public:
 	}
 
 	void draw(Graphics::Surface &dst) override {
-		// TOURN1 centred on (132, 295) moved with the cursor (Q-0353).
+		// TOURN1 centred on (132, 295) moved with the cursor (E-0442).
 		if (_drag)
 			_tourn.draw(dst, 0, 132 + _s.mouse().x - _grab.x, 295 + _s.mouse().y - _grab.y);
 	}

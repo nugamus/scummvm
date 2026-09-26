@@ -42,8 +42,8 @@ static void drawBackground(Graphics::Surface &dst, const char *name) {
 
 int PeintreEngine::runOptionMenu(bool from3D) {
 	enum Page { kMain, kVolume, kSize, kKeyboard, kCredits, kQuit, kLoad };
-	// Buttons 0..5 (0x4a65c0); `options` frame b is drawn at the button's top-left while
-	// pressed, except frames 1..3 (the whole Options panel), Q-0354.
+	// Buttons 0..5 (0x4a65c0); `options` frame b is drawn while pressed at 0x4a6620[b]: the
+	// button's top-left, or (187, 154) for frames 1..3, the whole Options panel (E-0443).
 	static const Common::Rect kButtons[6] = {
 		rect(186, 66, 268, 85), rect(325, 166, 128, 19), rect(325, 186, 128, 19),
 		rect(325, 206, 128, 19), rect(187, 243, 268, 85), rect(187, 331, 268, 83)
@@ -85,6 +85,7 @@ int PeintreEngine::runOptionMenu(bool from3D) {
 	Page page = kMain;
 	drawBackground(bg, "option");
 	int pressed = -1;
+	bool quitYes = false, quitClicked = false;
 	bool knob = false, wasDown = buttonDown();
 	int result = -3;   // none yet
 	uint first = 0, credit = 0, creditTicks = 0;
@@ -137,11 +138,9 @@ int PeintreEngine::runOptionMenu(bool from3D) {
 					knob = false;
 			}
 			if (released && pressed >= 0) {
-				// Q-0354: a button acts when released over it.
+				// A pressed button acts when the mouse button is released, wherever (E-0443).
 				const int b = pressed;
 				pressed = -1;
-				if (!kButtons[b].contains(m))
-					break;
 				switch (b) {
 				case 0:
 					first = 0;
@@ -162,6 +161,7 @@ int PeintreEngine::runOptionMenu(bool from3D) {
 					setPage(kCredits, "Credit00");
 					break;
 				default:
+					quitYes = false;
 					setPage(kQuit, "quit");
 					break;
 				}
@@ -195,10 +195,17 @@ int PeintreEngine::runOptionMenu(bool from3D) {
 		case kQuit:
 			if (kYes.contains(m) || kNo.contains(m))
 				cursor = kCursorButton;
-			if (clicked && kNo.contains(m)) {
+			// A click selects Yes or No (No is preselected); its release acts (E-0443).
+			if (clicked && (kYes.contains(m) || kNo.contains(m))) {
+				quitYes = kYes.contains(m);
+				quitClicked = true;
+			}
+			if (!released || !quitClicked)
+				break;
+			quitClicked = false;
+			if (!quitYes) {
 				setPage(kMain, "option");
-			} else if (clicked && kYes.contains(m)) {
-				pressed = 11;   // shows Yes for the last frame
+			} else {
 				player.volume = (v * 100 / 211 - 100) * 50;
 				player.viewSize = viewSize;
 				writeResume(from3D ? 0 : 1);
@@ -243,8 +250,7 @@ int PeintreEngine::runOptionMenu(bool from3D) {
 			options.draw(_screen, 7 + viewSize, kSizeMarks[viewSize].x, kSizeMarks[viewSize].y);
 			break;
 		case kQuit:
-			// No is preselected (frame 12).
-			if (pressed == 11)
+			if (quitYes)
 				options.draw(_screen, 11, 255, 281);
 			else
 				options.draw(_screen, 12, 357, 281);
