@@ -43,6 +43,17 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 			0
 		}
 	},
+	{
+		GAMEOPTION_MAX_DETAIL,
+		{
+			_s("Full detail at any distance"),
+			_s("Always draw the most detailed version of each object, never the simpler distant ones"),
+			"max_detail",
+			false,
+			0,
+			0
+		}
+	},
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 

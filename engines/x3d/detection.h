@@ -40,6 +40,7 @@ extern const PlainGameDescriptor monetGames[];
 extern const ADGameDescription gameDescriptions[];
 
 #define GAMEOPTION_WIDESCREEN GUIO_GAMEOPTIONS1
+#define GAMEOPTION_MAX_DETAIL GUIO_GAMEOPTIONS2
 
 } // End of namespace X3D
 

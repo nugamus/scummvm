@@ -88,6 +88,7 @@ public:
 	void draw(const Camera &cam, int width, int height);
 
 	Camera camera; // #CAMERA# values; position and angles are set by the unit
+	bool maxDetail = false; // enhancement: never switch to a distant level of detail
 	float scale = 1; // #SCENE# unit length (eye height and collision sphere derive from it)
 
 	// A lower-detail stand-in for a base object (docs/engine-spec/scene.md, Levels of detail)
