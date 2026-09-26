@@ -117,6 +117,10 @@ static const struct {
 	} entries[5];
 } popUpList[] = {
 	{
+		GAMEOPTION_MOUSE_SENSITIVITY, "mouse_sensitivity", _s("Mouse look speed:"), _s("How fast the mouse turns the view with modern controls"), 100,
+		{ { _s("Slow"), 50 }, { _s("Medium slow"), 75 }, { _s("Normal"), 100 }, { _s("Fast"), 150 }, { _s("Very fast"), 200 } }
+	},
+	{
 		GAMEOPTION_TURN_SPEED, "turn_speed", _s("Turn speed:"), _s("How fast the arrow keys turn the view and look up or down"), 100,
 		{ { _s("Slow"), 50 }, { _s("Original"), 100 }, { _s("Fast"), 150 }, { _s("Very fast"), 200 }, { nullptr, 0 } }
 	},
