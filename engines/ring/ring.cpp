@@ -60,9 +60,15 @@ void RingEngine::present() {
 void RingEngine::pollEvents(uint32 ms) {
 	Common::Event event;
 	while (g_system->getEventManager()->pollEvent(event)) {
-		if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE)
-			_escapeDown = true;
-		else if (event.type == Common::EVENT_KEYUP && event.kbd.keycode == Common::KEYCODE_ESCAPE)
+		if (event.type == Common::EVENT_KEYDOWN) {
+			// WM_CHAR characters and Delete reach 0x40b060 (spec/events.md, "Keys").
+			if (event.kbd.keycode == Common::KEYCODE_ESCAPE)
+				_escapeDown = true;
+			if (event.kbd.keycode == Common::KEYCODE_DELETE)
+				_keys.push_back(0x2e);
+			else if (event.kbd.ascii && event.kbd.ascii < 256)
+				_keys.push_back(event.kbd.ascii);
+		} else if (event.type == Common::EVENT_KEYUP && event.kbd.keycode == Common::KEYCODE_ESCAPE)
 			_escapeDown = false;
 		else if (event.type == Common::EVENT_MOUSEMOVE)
 			_mouse = event.mouse;
@@ -204,7 +210,7 @@ Common::Error RingEngine::run() {
 
 	startMenu(false);
 	_clicked = false;
-	// Development: dev_input="ms:move x y;ms:click x y;..." replays mouse input at ms after the menu opens.
+	// Development: dev_input="ms:move x y;ms:click x y;ms:key code 0;..." replays input at ms after the menu opens.
 	Common::StringArray script;
 	for (const Common::String &step : Common::StringTokenizer(ConfMan.get("dev_input"), ";").split())
 		script.push_back(step);
@@ -220,10 +226,18 @@ Common::Error RingEngine::run() {
 			}
 			if (g_system->getMillis() - menuStart < ms)
 				break;
-			_mouse = Common::Point(x, y);
-			if (!strcmp(what, "click"))
-				click(x, y);
+			if (!strcmp(what, "key")) {
+				key(x);
+			} else {
+				_mouse = Common::Point(x, y);
+				if (!strcmp(what, "click"))
+					click(x, y);
+			}
 			script.remove_at(0);
+		}
+		while (!_keys.empty()) {
+			int k = _keys.remove_at(0);
+			key(k);
 		}
 		if (_clicked) {
 			_clicked = false;
@@ -233,6 +247,22 @@ Common::Error RingEngine::run() {
 		g_system->delayMillis(10);
 	}
 	return Common::kNoError;
+}
+
+void RingEngine::key(int code) {
+	// ponytail: Escape's end of a playing dialogue, the visual object lists and SY's key
+	// handler (the save name) come with dialogues and the save screens (spec/events.md).
+	Puzzle *p1 = _world->puzzle(1);
+	Puzzle *p = p1 && p1->mode == 2 ? p1 : _world->puzzle(_puzzle);
+	if (!p)
+		return;
+	for (const auto &acc : p->accessibilities) {
+		const HotSpot &h = acc->hotSpot;
+		if (h.enabled && h.key == code) {
+			click((h.rect.left + h.rect.right) / 2, (h.rect.top + h.rect.bottom) / 2);
+			return;
+		}
+	}
 }
 
 void RingEngine::message(const char *key) {
