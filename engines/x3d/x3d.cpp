@@ -171,6 +171,22 @@ void X3DEngine::actionToKey(Common::Event &e) {
 	e.type = down ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
 }
 
+Common::Error X3DEngine::loadGameState(int slot) {
+	// The base class autosaves before every load, into the autosave slot: loading that
+	// slot would first overwrite it with the current position
+	if (slot != getAutosaveSlot())
+		return Engine::loadGameState(slot);
+	Common::InSaveFile *file = _saveFileMan->openForLoading(getSaveStateName(slot));
+	if (!file)
+		return Common::kReadingFailed;
+	Common::Error result = loadGameStream(file);
+	ExtendedSavegameHeader header;
+	if (result.getCode() == Common::kNoError && MetaEngine::readSavegameHeader(file, &header))
+		setTotalPlayTime(header.playtime);
+	delete file;
+	return result;
+}
+
 static const uint32 kSaveVersion = 5; // 2: numbered clip slots; 3: the scene gauge; 4: U01 on it; 5: U05/U33 clocks
 
 bool X3DEngine::canSaveGameStateCurrently(Common::U32String *msg) {
