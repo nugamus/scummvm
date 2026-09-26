@@ -955,7 +955,6 @@ int Scene::addFaceClip(const Common::String &faceObject, const Common::String &p
 void Scene::setNode(int node, bool enabled, bool running) {
 	_nodes[node].enabled = enabled && _nodes[node].model;
 	_nodes[node].base.running = running;
-	if (enabled) debug("LIPDBG setNode %d frame %f fps %f", node, _nodes[node].base.frame, _nodes[node].base.fps);
 }
 
 void Scene::setNodeFrame(int node, float frame) {
