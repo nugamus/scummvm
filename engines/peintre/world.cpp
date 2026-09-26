@@ -24,26 +24,49 @@
 #include "common/system.h"
 
 #include "peintre/detection.h"
+#include "peintre/gfx.h"
 #include "peintre/peintre.h"
+#include "peintre/sound.h"
 #include "peintre/world.h"
 
 namespace Peintre {
 
-// scene.md "The scene table": bundle per scene (scene 6 picks chambreb/chambrev).
-static const char *const kBundles[kNumScenes] = {
-	"musee", "auberge", "hopiext", "maisonet", "mangeurs", "cafe", nullptr,
-	"maisonj", "hopiint", "pont", "terrasse", "jardin", "champ", "eglise"
+// ---------------------------------------------------------------------------------------
+// Tables of scene.md
+
+struct SceneInfo {
+	const char *bundle;       ///< nullptr for scene 6 (chambreb / chambrev)
+	const char *entryMovie;
+	const char *returnMovie;
+	int zones[6];             ///< zones that complete the scene, -1 terminated; empty = never
+};
+
+static const SceneInfo kScenes[kNumScenes] = {
+	{ "musee", nullptr, nullptr, { -1 } },
+	{ "auberge", nullptr, nullptr, { -1 } },
+	{ "hopiext", nullptr, nullptr, { -1 } },
+	{ "maisonet", "maisa", "maisr", { 1, -1 } },
+	{ "mangeurs", "mangeurs", "mangeurr", { 2, 3, -1 } },
+	{ "cafe", "cafe", "cafer", { 4, 5, 6, -1 } },
+	{ nullptr, "chamba", "chambr", { 7, 8, 9, 10, 11, -1 } },
+	{ "maisonj", "maisonj", "maisonjr", { 12, -1 } },
+	{ "hopiint", "hopi", "hopir", { 13, 14, 15, -1 } },
+	{ "pont", "pont", "pontr", { 18, -1 } },
+	{ "terrasse", "terrasse", "terr", { 16, 17, -1 } },
+	{ "jardin", "jardin", nullptr, { -1 } },
+	{ "champ", "champ", "champr", { 22, 24, -1 } },
+	{ "eglise", "eglise", "eglr", { 23, -1 } }
 };
 
 struct StartPos {
 	int32 x, y, z, pitch, yaw;
 };
 
-// scene.md "Start positions", case A: the scene's own start (roll 0).
+// "Start positions", case A: the scene's own start (roll 0). Scene 2 has none.
 static const StartPos kOwnStart[kNumScenes] = {
-	{ -39, -209, 361, 4066, 20 },       // 0 museum, game start
-	{ 0, 0, 0, 0, 0 },                  // 1 auberge
-	{ 0, 0, 0, 0, 0 },                  // 2 hopiext: no row (only entered from scenes)
+	{ -39, -209, 361, 4066, 20 },
+	{ 0, 0, 0, 0, 0 },
+	{ 0, 0, 0, 0, 0 },
 	{ 1149, 141, -1491, 0, 275 },
 	{ -106, 6, 100, 3946, 145 },
 	{ 393, -175, -136, 3976, 92 },
@@ -57,7 +80,7 @@ static const StartPos kOwnStart[kNumScenes] = {
 	{ -7189, 802, 102, 210, 3756 }
 };
 
-// The museum spot in front of the painting of prevScene (and the flight's targets).
+// The museum spot in front of each scene's painting; the flight's targets.
 static const StartPos kMuseumSpot[kNumScenes] = {
 	{ -39, -209, 361, 4066, 20 },
 	{ 3230, -297, 5166, 4036, 3073 },
@@ -67,13 +90,15 @@ static const StartPos kMuseumSpot[kNumScenes] = {
 	{ -562, -296, 6923, 4036, 2355 },
 	{ -909, -297, 7462, 4066, 3062 },
 	{ -466, -297, 8184, 4066, 3788 },
-	{ 538, -297, 8256, 4036, 290 },     // 8 as 2
+	{ 538, -297, 8256, 4036, 290 },
 	{ 703, -297, 6902, 4036, 1782 },
 	{ 933, -297, 7535, 0, 988 },
-	{ 3230, -297, 5166, 4036, 3073 },   // 11 as 1
+	{ 3230, -297, 5166, 4036, 3073 },
 	{ 4403, -297, 5867, 4006, 339 },
 	{ 4524, -297, 4758, 4006, 1791 }
 };
+
+static const StartPos kMuseumAfterEnd = { 1232, -208, 4207, 0, 3410 };
 
 // Case B: walking from one scene to another.
 struct Doorway {
@@ -108,28 +133,92 @@ static const Doorway kDoorways[] = {
 	{ 13, 11, { 6743, 235, -1283, 4006, 3036 } }
 };
 
-// Viewer body (movement.md "Collision", "Floor").
+// Cursor files (interaction.md "Cursors"), indices 35..65; 0..34 are op_0..op_34.
+static const char *const kCursorFiles[] = {
+	"def_0", "def_1", "fleche", "main", "curza", "curferme", "sablier",
+	"Ct0", "Ct1", "Ct2", "Ct3", "Ct4", "Ct5", "Ct6", "Ct7", "Ct8", "Ct9", "Ct10", "Ct11",
+	"Ct12", "Ct13", "Ct14", "Ct15",
+	"curdoigt", "acces", "deja_vu", "buche", "fagot", "cle", "manivel", "retour"
+};
+
+// Bar item x centres (table 0x4acfa8).
+static const int kBarItemX[6] = { 100, 170, 250, 310, 380, 450 };
+
+// The 3D block lives at 0x4aba40 in the original (save.md).
+static const uint32 kBlockBase = 0x4aba40;
+static const uint32 kChambrebFlag = 0x4abd14;
+static const uint32 kAfterEnd = 0x4aba5c;
+
 static const int32 kRadius = 250;
 static const int32 kEyeAboveFloor = 700;
 
-// The 3D block's bedroom flag (0x4abd14, block +0x2D4): chambreb instead of chambrev.
-static const uint kChambrebFlag = 0x2D4;
+// ---------------------------------------------------------------------------------------
 
 World::World(PeintreEngine *vm) : _vm(vm) {
+	loadCursors();
 }
 
 World::~World() {
 	unload();
+	for (Graphics::Surface &s : _cursors)
+		s.free();
+	_bar.free();
+}
+
+bool World::loadCursors() {
+	for (int i = 0; i < kNumCursors; i++) {
+		const Common::String name = i < 35 ? Common::String::format("op_%d", i) : Common::String(kCursorFiles[i - 35]);
+		if (!loadTga(name, _cursors[i])) {
+			// A missing file gives a 32x32 block of 0xFFFF (interaction.md).
+			_cursors[i].create(32, 32, Graphics::PixelFormat(2, 5, 6, 5, 0, 11, 5, 0, 0));
+			_cursors[i].fillRect(Common::Rect(32, 32), 0xFFFF);
+		}
+	}
+	return loadTga("Invent", _bar);
+}
+
+uint32 &World::var(uint32 address) {
+	static uint32 dummy;
+	const uint32 off = address - kBlockBase;
+	if (address < kBlockBase || off + 4 > k3DBlockSize) {
+		warning("World::var: 0x%x is outside the saved block", address);
+		return dummy;
+	}
+	return *(uint32 *)(_vm->state().block3D + off);
+}
+
+byte &World::varByte(uint32 address) {
+	static byte dummy;
+	const uint32 off = address - kBlockBase;
+	if (address < kBlockBase || off >= k3DBlockSize)
+		return dummy;
+	return _vm->state().block3D[off];
+}
+
+bool World::sceneComplete(int scene) {
+	if (scene < 0 || scene >= kNumScenes || kScenes[scene].zones[0] < 0)
+		return false;
+	for (int i = 0; kScenes[scene].zones[i] >= 0; i++)
+		if (!zoneSolved(kScenes[scene].zones[i]))
+			return false;
+	return true;
 }
 
 void World::unload() {
 	_script.reset();
+	stopAllSounds();
 	for (Texture3D *t : _textures)
 		delete t;
 	_textures.clear();
-	_materialTex.clear();
-	_boxes.clear();
+	_textureNames.clear();
+	_boxSets.clear();
+	_boxLoaded.clear();
+	_extraBox = 0;
+	objects.clear();
+	anims.clear();
 	_scene3D = Scene3D();
+	_carrying = false;
+	_carried = -1;
 }
 
 int World::findObject(const Common::String &name) const {
@@ -145,17 +234,159 @@ void World::setHidden(int node, bool hidden) {
 		_scene3D.nodes[node].flags &= ~1;
 }
 
+bool World::isHidden(int node) const {
+	return node >= 0 && (uint)node < _scene3D.nodes.size() && (_scene3D.nodes[node].flags & 1);
+}
+
+void World::resolveObjects() {
+	for (SceneObject &o : objects) {
+		o.node = findObject(o.name);
+		if (o.startHidden)
+			setHidden(o.node, true);
+	}
+}
+
+int World::objectIndex(int node) const {
+	if (node < 0)
+		return -1;
+	for (uint i = 0; i < objects.size(); i++)
+		if (objects[i].node == node)
+			return i;
+	return -1;
+}
+
+bool World::loadTexture(const Common::String &name, const Common::String &file) {
+	Common::Array<byte> data;
+	if (!_bfg.readEntry(file + ".3DM", data))
+		return false;
+	Texture3D *t = new Texture3D();
+	if (!t->load(data)) {
+		delete t;
+		return false;
+	}
+	_textures.push_back(t);
+	_textureNames.push_back(name);
+	return true;
+}
+
+void World::retexture(int node, const Common::String &from, const Common::String &to) {
+	if (node < 0 || (uint)node >= _scene3D.nodes.size())
+		return;
+	const Texture3D *tex = nullptr;
+	for (uint i = 0; i < _textureNames.size(); i++)
+		if (_textureNames[i].equalsIgnoreCase(to))
+			tex = _textures[i];
+	if (!tex)
+		return;
+	for (FaceGroup &g : _scene3D.nodes[node].faceGroups) {
+		if (g.textureName.equalsIgnoreCase(from)) {
+			g.textureName = to;
+			g.texture = tex;
+		}
+	}
+}
+
+bool World::loadBoxSet(uint slot, const Common::String &name) {
+	Common::Array<byte> data;
+	Boxes3D b;
+	if (!_bfg.readEntry(name, data) || !b.load(data)) {
+		warning("World: cannot load box set %s", name.c_str());
+		return false;
+	}
+	if (_boxSets.size() <= slot) {
+		_boxSets.resize(slot + 1);
+		_boxLoaded.resize(slot + 1);
+	}
+	_boxSets[slot] = b;
+	_boxLoaded[slot] = true;
+	return true;
+}
+
+void World::setBoxSet(uint slot) {
+	_extraBox = slot;
+}
+
+void World::loadAnims() {
+	for (AnimRecord &a : anims) {
+		Common::Array<byte> data;
+		if (!_bfg.readEntry(a.anim, data) || !a.data.load(data)) {
+			warning("LoadAnims::%s manque", a.anim.c_str());
+			continue;
+		}
+		// The length is the first word of the track data (0x437d90).
+		a.length = a.data.tracks.empty() ? 0 : a.data.tracks[0].unk0;
+		a.nodeIndex = findObject(a.node);
+	}
+}
+
+void World::pose(uint record, int32 frame) {
+	// Q-0004: the key order and time units are tentative; keys are sampled at `frame`,
+	// linearly between the surrounding keys.
+	if (record >= anims.size())
+		return;
+	AnimRecord &a = anims[record];
+	if (a.nodeIndex < 0 || a.data.tracks.empty())
+		return;
+	const AnimTrack &t = a.data.tracks[0];
+	Node &nd = _scene3D.nodes[a.nodeIndex];
+	if (!t.pos.empty()) {
+		uint k = 0;
+		while (k + 1 < t.pos.size() && (int32)t.pos[k + 1].time <= frame)
+			k++;
+		const AnimTrack::PosKey &p0 = t.pos[k];
+		const AnimTrack::PosKey &p1 = t.pos[MIN<uint>(k + 1, t.pos.size() - 1)];
+		const double span = (double)p1.time - p0.time;
+		const double f = span > 0 ? CLIP((frame - (double)p0.time) / span, 0.0, 1.0) : 0.0;
+		nd.position.x = (int32)(p0.pos.x + (p1.pos.x - p0.pos.x) * f);
+		nd.position.y = (int32)(p0.pos.y + (p1.pos.y - p0.pos.y) * f);
+		nd.position.z = (int32)(p0.pos.z + (p1.pos.z - p0.pos.z) * f);
+	}
+	if (!t.rot.empty()) {
+		uint k = 0;
+		while (k + 1 < t.rot.size() && (int32)t.rot[k + 1].time <= frame)
+			k++;
+		const AnimTrack::RotKey &r0 = t.rot[k];
+		const AnimTrack::RotKey &r1 = t.rot[MIN<uint>(k + 1, t.rot.size() - 1)];
+		const double span = (double)r1.time - r0.time;
+		const double f = span > 0 ? CLIP((frame - (double)r0.time) / span, 0.0, 1.0) : 0.0;
+		double q[4];
+		for (int c = 0; c < 4; c++)
+			q[c] = (r0.q[c] + (r1.q[c] - r0.q[c]) * f) / 32768.0;
+		const double len = sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+		if (len > 0)
+			for (double &c : q)
+				c /= len;
+		const double x = q[0], y = q[1], z = q[2], w = q[3];
+		const double m[9] = {
+			1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w),
+			2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w),
+			2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)
+		};
+		for (int c = 0; c < 9; c++)
+			nd.rotation[c] = (int32)(m[c] * 32768.0);
+	}
+}
+
+void World::advanceAnims() {
+	for (uint i = 0; i < anims.size(); i++) {
+		if (!anims[i].playing)
+			continue;
+		anims[i].frame += _elapsed;
+		pose(i, anims[i].frame);
+	}
+}
+
+// ---------------------------------------------------------------------------------------
+// Loading
+
 bool World::load(int scene, int prevScene, bool keepCamera) {
 	unload();
+	if (scene < 0 || scene >= kNumScenes)
+		return false;
 	_scene = scene;
 	_prevScene = prevScene;
-	Common::String bundle;
-	if (scene == kSceneChambre)
-		bundle = _vm->state().block3D[kChambrebFlag] ? "chambreb" : "chambrev";
-	else if (scene >= 0 && scene < kNumScenes)
-		bundle = kBundles[scene];
-	else
-		return false;
+	Common::String bundle = kScenes[scene].bundle ? kScenes[scene].bundle :
+		(var(kChambrebFlag) ? "chambreb" : "chambrev");
 
 	if (!_bfg.open(Common::Path("Scenes_3D/" + bundle + ".BFG"))) {
 		warning("World: cannot open %s.BFG", bundle.c_str());
@@ -166,37 +397,33 @@ bool World::load(int scene, int prevScene, bool keepCamera) {
 		warning("World: cannot load %s.3DC", bundle.c_str());
 		return false;
 	}
-	// Textures by material (E-0014: "<texture>.3DM" of the same bundle), shared by name.
-	Common::Array<Common::String> texNames;
+	// Textures by material name (E-0014), then bound to face groups by material.
 	for (const Material &m : _scene3D.materials) {
-		const Texture3D *tex = nullptr;
-		if (!m.texture.empty()) {
-			for (uint i = 0; i < texNames.size(); i++)
-				if (texNames[i].equalsIgnoreCase(m.texture))
-					tex = _textures[i];
-			if (!tex && _bfg.readEntry(m.texture + ".3DM", data)) {
-				Texture3D *t = new Texture3D();
-				if (t->load(data)) {
-					_textures.push_back(t);
-					texNames.push_back(m.texture);
-					tex = t;
-				} else {
-					delete t;
-				}
-			}
-		}
-		_materialTex.push_back(tex);
+		bool have = m.texture.empty();
+		for (const Common::String &n : _textureNames)
+			if (n.equalsIgnoreCase(m.texture))
+				have = true;
+		if (!have)
+			loadTexture(m.texture, m.texture);
 	}
-	// The collision faces (scene.md "What a scene is made of", step 3).
-	Boxes3D boxes;
-	if (_bfg.readEntry("BOX.3DI", data) && boxes.load(data))
-		_boxes.push_back(boxes);
+	for (Node &nd : _scene3D.nodes) {
+		for (FaceGroup &g : nd.faceGroups) {
+			if (g.materialIndex < 0)
+				continue;
+			g.textureName = _scene3D.materials[g.materialIndex].texture;
+			for (uint i = 0; i < _textureNames.size(); i++)
+				if (_textureNames[i].equalsIgnoreCase(g.textureName))
+					g.texture = _textures[i];
+		}
+	}
+	loadBoxSet(0, "BOX.3DI");
 
-	// Start position (scene.md "Start positions").
 	if (!keepCamera) {
 		StartPos s = kOwnStart[scene];
 		if (scene == kSceneMusee) {
 			s = kMuseumSpot[prevScene >= 0 && prevScene < kNumScenes ? prevScene : 0];
+			if (var(kAfterEnd))
+				s = kMuseumAfterEnd;
 		} else if (prevScene != 0 && prevScene != scene) {
 			for (const Doorway &d : kDoorways)
 				if (d.from == prevScene && d.to == scene)
@@ -210,11 +437,371 @@ bool World::load(int scene, int prevScene, bool keepCamera) {
 		_cam.roll = 0;
 	}
 	_v = _vy = _w = _p = 0;
-	debugC(1, kDebugLoad, "World: scene %d (%s) from %d, %d nodes, %d textures, %d box faces",
-		   scene, bundle.c_str(), prevScene, _scene3D.nodes.size(), _textures.size(),
-		   _boxes.empty() ? 0 : _boxes[0].faces.size());
+	_cursor = kCursorArrow;
+	_barState = 0;
+	_barY = 480;
+	_reload = false;
+	_exit = kExitNone;
+
+	_script.reset(createSceneScript(scene, bundle));
+	if (_script)
+		_script->init(*this);
+	debugC(1, kDebugLoad, "World: scene %d (%s) from %d, %d nodes, %d textures", scene,
+		   bundle.c_str(), prevScene, _scene3D.nodes.size(), _textures.size());
 	return true;
 }
+
+// ---------------------------------------------------------------------------------------
+// Requests (scene.md "Moving between the museum and the scenes", "3D <-> 2D")
+
+void World::requestScene(int target) {
+	_prevScene = _scene;
+	_scene = target;
+	_reload = true;
+}
+
+void World::requestMuseum() {
+	const int left = _scene;
+	_prevScene = _scene;
+	_scene = kSceneMusee;
+	if (sceneComplete(left) && kScenes[left].returnMovie) {
+		stopAllSounds();
+		int last = -1;
+		for (int i = 0; kScenes[left].zones[i] >= 0; i++)
+			last = kScenes[left].zones[i];
+		if (last >= 0)
+			var(0x4abb70 + 4 * last) = 1;
+		requestMovie(kScenes[left].returnMovie);
+	} else {
+		_reload = true;
+	}
+}
+
+void World::requestZone(int zone) {
+	_zone = zone;
+	_exit = kExitZone;
+	// The camera and the scene go into the block (0x42f755, save.md "3D block").
+	byte *b = _vm->state().block3D;
+	WRITE_LE_UINT32(b + 0x30, _cam.x);
+	WRITE_LE_UINT32(b + 0x34, _cam.y);
+	WRITE_LE_UINT32(b + 0x38, _cam.z);
+	WRITE_LE_UINT32(b + 0x24, _cam.pitch);
+	WRITE_LE_UINT32(b + 0x28, _cam.yaw);
+	WRITE_LE_UINT32(b + 0x2C, _cam.roll);
+	b[0x3C] = _scene;
+	b[0x3D] = _prevScene;
+	b[0x3E] = zone;
+}
+
+void World::requestMovie(const Common::String &name) {
+	_movie = name;
+	_exit = kExitMovie;
+}
+
+void World::startFlight(int target) {
+	// Mode 4: 20 steps to the painting's spot, the short way round for angles.
+	_prevScene = kSceneMusee;
+	_scene = target;
+	const StartPos &t = kMuseumSpot[target];
+	const int32 cur[5] = { _cam.x, _cam.y, _cam.z, _cam.pitch, _cam.yaw };
+	const int32 dst[5] = { t.x, t.y, t.z, t.pitch, t.yaw };
+	for (int i = 0; i < 5; i++) {
+		int32 d = dst[i] - cur[i];
+		if (i >= 3) {
+			d &= 0xFFF;
+			if (d > 0x800)
+				d -= 0x1000;
+		}
+		d /= 20;
+		if (d == 0)
+			d = 1;
+		_flightDelta[i] = d;
+	}
+	_flying = true;
+	_flightStep = 0;
+	_flightTarget = target;
+}
+
+void World::flightStep() {
+	_cam.x += _flightDelta[0];
+	_cam.y += _flightDelta[1];
+	_cam.z += _flightDelta[2];
+	_cam.pitch = (_cam.pitch + _flightDelta[3]) & 0xFFF;
+	_cam.yaw = (_cam.yaw + _flightDelta[4]) & 0xFFF;
+	_flightStep += _elapsed >= 3 ? _elapsed / 2 : 1;
+	if (_flightStep > 20)
+		finishFlight();
+}
+
+void World::finishFlight() {
+	_flying = false;
+	stopAllSounds();
+	_vm->sound()->stopStream();
+	if (!sceneComplete(_flightTarget) && kScenes[_flightTarget].entryMovie)
+		requestMovie(kScenes[_flightTarget].entryMovie);
+	else
+		_reload = true;
+}
+
+void World::afterMovie() {
+	_exit = kExitNone;
+	_movie.clear();
+	load(_scene, _prevScene, false);
+}
+
+void World::afterZone(int code) {
+	_exit = kExitNone;
+	const int zone = _zone;
+	_zone = -1;
+	// A zone left with more sunflowers than on entry is solved (0x42f2c2).
+	if (_vm->zoneLeaveCount > sunflowers() && zone >= 0 && zone < 25)
+		var(0x4abb0c + 4 * zone) = 1;
+	sunflowers() = _vm->zoneLeaveCount;
+	switch (zone) {
+	case 0:
+		var(0x4aba48) = 1;
+		var(0x4aba4c) = 1;
+		break;
+	case 7:
+		var(0x4abd54) = 1;
+		var(0x4abd58) = 1;
+		break;
+	case 8:
+		var(0x4abd50) = 1;
+		break;
+	case 11:
+		var(0x4abd4c) = 1;
+		break;
+	case 21:
+		var(kAfterEnd) = 1;
+		requestMovie("cinefin");
+		return;
+	default:
+		break;
+	}
+	if (code == -3) {
+		_prevScene = _scene;
+		_scene = kSceneMusee;
+		load(_scene, _prevScene, false);
+		return;
+	}
+	// Back at the saved spot, pitch 0 (case C).
+	const byte *b = _vm->state().block3D;
+	load(b[0x3C], b[0x3D], true);
+	_cam.x = READ_LE_INT32(b + 0x30);
+	_cam.y = READ_LE_INT32(b + 0x34);
+	_cam.z = READ_LE_INT32(b + 0x38);
+	_cam.pitch = 0;
+	_cam.yaw = READ_LE_INT32(b + 0x28) & 0xFFF;
+	_cam.roll = READ_LE_INT32(b + 0x2C) & 0xFFF;
+}
+
+// ---------------------------------------------------------------------------------------
+// Sounds (static sounds are freed with the scene)
+
+void World::playSound(const Common::String &name, bool loop) {
+	_vm->sound()->playStatic(name, loop);
+	_sounds.push_back(name);
+}
+
+void World::stopSound(const Common::String &name) {
+	_vm->sound()->stopStatic(name);
+}
+
+void World::stopAllSounds() {
+	for (const Common::String &s : _sounds)
+		_vm->sound()->stopStatic(s);
+	_sounds.clear();
+}
+
+void World::setAmbience(const Common::String &name) {
+	_ambience = name;
+	playSound(name, true);
+}
+
+// ---------------------------------------------------------------------------------------
+// Mouse, cursors, bar
+
+void World::mouse() {
+	_mousePos = _vm->mouse();
+	_click = _vm->buttonDown(); // the button's level, no edge (interaction.md)
+}
+
+int World::pick() {
+	Common::Point p = _mousePos;
+	if (_carrying) {
+		const Graphics::Surface &c = _cursors[_cursor];
+		p.x += c.w / 2;
+		p.y += c.h / 2;
+	}
+	return _renderer.pick(p.x, p.y);
+}
+
+void World::applyHover(int objIndex) {
+	if (_cursor == kCursorHand || _cursor == kCursorZone || _cursor == kCursorFinger ||
+		_cursor == kCursorAccess || _cursor == kCursorDejaVu)
+		_cursor = kCursorArrow;
+	if (objIndex < 0 || _cursor != kCursorArrow)
+		return;
+	switch (objects[objIndex].cursorType) {
+	case 2: _cursor = kCursorHand; break;
+	case 3: _cursor = kCursorZone; break;
+	case 4: _cursor = kCursorFinger; break;
+	case 6: _cursor = kCursorAccess; break;
+	case 0x3C: _cursor = kCursorDejaVu; break;
+	default: break;
+	}
+}
+
+int32 World::distance(int node) const {
+	int32 x, y, z;
+	if (!_renderer.nodeViewPosition(node, x, y, z))
+		return 0x7FFFFFFF;
+	return (int32)sqrt((double)x * x + (double)z * z);
+}
+
+void World::openBar() {
+	if (_barState == 0 || _barState == 3) {
+		_barState = 2;
+		_barSoundPlayed = false;
+	}
+}
+
+void World::takeItem(int node, int object) {
+	setHidden(node, true);
+	_cursor = object;
+	openBar();
+}
+
+void World::carry(int node) {
+	setHidden(node, true);
+	_carrying = true;
+	_carried = node;
+}
+
+void World::dropCarried() {
+	_carrying = false;
+	_carried = -1;
+	_cursor = kCursorArrow;
+}
+
+void World::drawImage(const Graphics::Surface &img, int x, int y, bool keyed) {
+	Graphics::Surface &dst = _vm->screen();
+	if (keyed) {
+		blitKeyed(dst, img, x, y);
+		return;
+	}
+	Common::Rect r(x, y, x + img.w, y + img.h);
+	r.clip(Common::Rect(dst.w, dst.h));
+	if (r.isEmpty())
+		return;
+	dst.copyRectToSurface(img, r.left, r.top, Common::Rect(r.left - x, r.top - y, r.right - x, r.bottom - y));
+}
+
+void World::drawBar() {
+	// interaction.md "Inventory bar": move, draw, clicks, items, sunflowers.
+	const int barH = _bar.h;
+	if (_barState == 2) {
+		if (!_barSoundPlayed) {
+			_vm->sound()->playStatic("bar_obj");
+			_barSoundPlayed = true;
+		}
+		_barY -= 8;
+		if (_barY <= 480 - barH) {
+			_barY = 480 - barH;
+			_barState = 1;
+		}
+	} else if (_barState == 3) {
+		_barY += 8;
+		if (_barY >= 480) {
+			_barY = 480;
+			_barState = 0;
+			_vm->writeResume(0); // autosave (0x42f873)
+		}
+	}
+	if (_barState != 0)
+		drawImage(_bar, 0, _barY, false);
+	// Clicks while shown.
+	if (_barState == 1 && _click) {
+		const Common::Point m = _mousePos;
+		int held = 0;
+		for (uint i = 0; i < kNumObjects; i++)
+			held += _vm->state().held(i) ? 1 : 0;
+		if (_cursor == kCursorArrow) {
+			if (m.x >= 12 && m.x <= 44 && m.y >= _barY + 15 && m.y <= _barY + 47) {
+				drawImage(_cursors[kCursorDef0], 10, _barY + 13, true);
+				if (_barFirst > 0)
+					_barFirst--;
+			} else if (m.x >= 500 && m.x <= 532 && m.y >= _barY + 15 && m.y <= _barY + 47) {
+				drawImage(_cursors[kCursorDef1], 503, _barY + 13, true);
+				_barFirst++;
+				if (held < _barFirst + 6)
+					_barFirst--;
+			}
+		} else if (_cursor < kNumObjects && m.y >= _barY - 30 && m.y <= _barY + 70) {
+			if (_cursor == 0)
+				var(0x4abbd8) = 1;
+			_vm->sound()->playStatic("cf_clic3");
+			_vm->state().setHeld(_cursor, 1);
+			_cursor = kCursorArrow;
+			held++;
+			if (held > 6)
+				_barFirst = held - 7;
+			_barState = 3;
+		}
+	}
+	// Held objects and the sunflower counter.
+	int skipped = 0, drawn = 0;
+	for (uint i = 0; i < kNumObjects && drawn < 6; i++) {
+		if (!_vm->state().held(i))
+			continue;
+		if (skipped < _barFirst) {
+			skipped++;
+			continue;
+		}
+		const Graphics::Surface &img = _cursors[i];
+		drawImage(img, kBarItemX[drawn] - img.w / 2, _barY + 30 - img.h / 2, true);
+		drawn++;
+	}
+	const int n = MIN<int>(sunflowers(), 15);
+	const Graphics::Surface &ct = _cursors[kCursorCounter + n];
+	drawImage(ct, 556, _barY + 31 - ct.h / 2, true);
+}
+
+void World::drawFrame(bool hourglass) {
+	Graphics::Surface &dst = _vm->screen();
+	_renderer.draw(dst, Common::Rect(0, 0, 640, 480), _scene3D, _cam);
+	drawBar();
+	// The return icon (interaction.md "The return icon and the ways out").
+	const Graphics::Surface &ret = _cursors[kCursorRetour];
+	if (!hourglass && _scene != kSceneMusee && _barState == 0 &&
+		_mousePos.x < ret.w + 10 && _mousePos.y > 474 - ret.h) {
+		drawImage(ret, 10, 474 - ret.h, true);
+		_cursor = kCursorFinger;
+		if (_click)
+			requestMuseum();
+	}
+	if (_carrying && _carried >= 0) {
+		const Common::String &n = _scene3D.nodes[_carried].name;
+		if (n.equalsIgnoreCase("fagot"))
+			_cursor = kCursorFagot;
+		else if (n.equalsIgnoreCase("buche"))
+			_cursor = kCursorBuche;
+		else if (n.equalsIgnoreCase("poignee04"))
+			_cursor = kCursorManivel;
+		else if (n.equalsIgnoreCase("clef"))
+			_cursor = kCursorCle;
+	}
+	if (hourglass) {
+		const Graphics::Surface &h = _cursors[kCursorHourglass];
+		drawImage(h, 320 - h.w / 2, 240 - h.h / 2, true);
+	} else {
+		drawImage(_cursors[_cursor], _mousePos.x, _mousePos.y, true);
+	}
+}
+
+// ---------------------------------------------------------------------------------------
+// The tick
 
 void World::move() {
 	// movement.md "Walking and turning", once per handled tick.
@@ -258,78 +845,85 @@ void World::move() {
 
 namespace {
 
-struct Vec3f {
+struct Vec3d {
 	double x, y, z;
 };
 
-Vec3f closestOnSegment(const Vec3f &p, const Vec3f &a, const Vec3f &b) {
-	const Vec3f ab = { b.x - a.x, b.y - a.y, b.z - a.z };
+Vec3d closestOnSegment(const Vec3d &p, const Vec3d &a, const Vec3d &b) {
+	const Vec3d ab = { b.x - a.x, b.y - a.y, b.z - a.z };
 	const double len2 = ab.x * ab.x + ab.y * ab.y + ab.z * ab.z;
 	double t = len2 > 0 ? ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y + (p.z - a.z) * ab.z) / len2 : 0;
 	t = CLIP(t, 0.0, 1.0);
-	const Vec3f r = { a.x + ab.x * t, a.y + ab.y * t, a.z + ab.z * t };
+	const Vec3d r = { a.x + ab.x * t, a.y + ab.y * t, a.z + ab.z * t };
 	return r;
+}
+
+/** A .3DI face resolved: its vertices and normal (movement.md "Collision"). */
+bool faceData(const Boxes3D &bs, const Boxes3D::Face &f, Vec3d v[3], Vec3i &n) {
+	const int ni = (f.ref[3] - (int32)bs.itemBase) / 12;
+	if (f.ref[3] < 0 || ni < 0 || (uint)ni >= bs.items.size())
+		return false;
+	n = bs.items[ni];
+	for (int k = 0; k < 3; k++) {
+		const int vi = (f.ref[k] - (int32)bs.vertexBase) / 12;
+		if (f.ref[k] < 0 || vi < 0 || (uint)vi >= bs.vertices.size())
+			return false;
+		v[k].x = bs.vertices[vi].x;
+		v[k].y = bs.vertices[vi].y;
+		v[k].z = bs.vertices[vi].z;
+	}
+	return true;
 }
 
 } // End of anonymous namespace
 
 void World::collide() {
-	// movement.md "Collision" and "Floor": a sphere of radius 250 against the registered
-	// box sets' faces; one push-out pass, then the eye 700 above the nearest floor below.
-	const Vec3f c = { (double)_cam.x, (double)_cam.y, (double)_cam.z };
+	// movement.md "Collision": a sphere of radius 250 against BOX.3DI and the current extra
+	// set; one push-out pass per frame.
+	Common::Array<const Boxes3D *> sets;
+	if (!_boxLoaded.empty() && _boxLoaded[0])
+		sets.push_back(&_boxSets[0]);
+	if (_extraBox > 0 && (uint)_extraBox < _boxSets.size() && _boxLoaded[_extraBox])
+		sets.push_back(&_boxSets[_extraBox]);
+
+	const Vec3d c = { (double)_cam.x, (double)_cam.y, (double)_cam.z };
 	double F[3] = { 0, 0, 0 }, N[3] = { 0, 0, 0 }, E[3] = { 0, 0, 0 };
 	int nf = 0, ne = 0;
-	for (const Boxes3D &bs : _boxes) {
-		for (const Boxes3D::Face &f : bs.faces) {
+	for (const Boxes3D *bs : sets) {
+		for (const Boxes3D::Face &f : bs->faces) {
 			const byte *r = f.raw;
-			const int32 minX = READ_LE_INT32(r + 0x48), minY = READ_LE_INT32(r + 0x4C), minZ = READ_LE_INT32(r + 0x50);
-			const int32 maxX = READ_LE_INT32(r + 0x54), maxY = READ_LE_INT32(r + 0x58), maxZ = READ_LE_INT32(r + 0x5C);
-			if (c.x + kRadius < minX || c.x - kRadius > maxX || c.y + kRadius < minY || c.y - kRadius > maxY ||
-				c.z + kRadius < minZ || c.z - kRadius > maxZ)
+			if (c.x + kRadius < READ_LE_INT32(r + 0x48) || c.x - kRadius > READ_LE_INT32(r + 0x54) ||
+				c.y + kRadius < READ_LE_INT32(r + 0x4C) || c.y - kRadius > READ_LE_INT32(r + 0x58) ||
+				c.z + kRadius < READ_LE_INT32(r + 0x50) || c.z - kRadius > READ_LE_INT32(r + 0x5C))
 				continue;
-			const int ni = (f.ref[3] - (int32)bs.itemBase) / 12;
-			if (f.ref[3] < 0 || ni < 0 || (uint)ni >= bs.items.size())
+			Vec3d v[3];
+			Vec3i n;
+			if (!faceData(*bs, f, v, n))
 				continue;
-			const Vec3i &n = bs.items[ni];
 			const double D = READ_LE_INT32(r + 0x10);
 			const double d = (n.x * c.x + n.y * c.y + n.z * c.z) / 32768.0 - D;
 			if (!(d > -kRadius && d < kRadius) || d < 0)
-				continue; // behind the plane: ignored
+				continue; // no contact, or behind the face (ignored)
 			double e[3];
 			bool far = false;
 			for (int k = 0; k < 3; k++) {
-				const int32 ex = READ_LE_INT32(r + 0x14 + 12 * k), ey = READ_LE_INT32(r + 0x18 + 12 * k), ez = READ_LE_INT32(r + 0x1C + 12 * k);
-				e[k] = (ex * c.x + ey * c.y + ez * c.z) / 32768.0 - READ_LE_INT32(r + 0x38 + 4 * k);
+				e[k] = (READ_LE_INT32(r + 0x14 + 12 * k) * c.x + READ_LE_INT32(r + 0x18 + 12 * k) * c.y +
+						READ_LE_INT32(r + 0x1C + 12 * k) * c.z) / 32768.0 - READ_LE_INT32(r + 0x38 + 4 * k);
 				if (e[k] < -kRadius)
 					far = true;
 			}
 			if (far)
 				continue;
-			Vec3f v[3];
-			bool okv = true;
-			for (int k = 0; k < 3; k++) {
-				const int vi = (f.ref[k] - (int32)bs.vertexBase) / 12;
-				if (f.ref[k] < 0 || vi < 0 || (uint)vi >= bs.vertices.size()) {
-					okv = false;
-					break;
-				}
-				v[k].x = bs.vertices[vi].x;
-				v[k].y = bs.vertices[vi].y;
-				v[k].z = bs.vertices[vi].z;
-			}
-			if (!okv)
-				continue;
 			const bool inside = e[0] >= 0 && e[1] >= 0 && e[2] >= 0;
-			Vec3f p = c;
+			Vec3d p = c;
 			if (inside) {
 				p.x = c.x - n.x / 32768.0 * d;
 				p.y = c.y - n.y / 32768.0 * d;
 				p.z = c.z - n.z / 32768.0 * d;
 			} else {
-				// The nearest point of the triangle's edges.
 				double best = 1e30;
 				for (int k = 0; k < 3; k++) {
-					const Vec3f q = closestOnSegment(c, v[k], v[(k + 1) % 3]);
+					const Vec3d q = closestOnSegment(c, v[k], v[(k + 1) % 3]);
 					const double dd = (q.x - c.x) * (q.x - c.x) + (q.y - c.y) * (q.y - c.y) + (q.z - c.z) * (q.z - c.z);
 					if (dd < best) {
 						best = dd;
@@ -357,22 +951,15 @@ void World::collide() {
 		}
 	}
 	if (nf > 0) {
-		double n[3], f[3], o[3];
-		for (int k = 0; k < 3; k++) {
-			n[k] = trunc(N[k] / nf);
-			f[k] = F[k] / nf;
-			o[k] = trunc(trunc(n[k] * kRadius / 32768.0) + f[k]);
-		}
+		double o[3];
+		for (int k = 0; k < 3; k++)
+			o[k] = trunc(trunc(trunc(N[k] / nf) * kRadius / 32768.0) + F[k] / nf);
 		_cam.x = (int32)o[0];
 		_cam.y = (int32)o[1];
 		_cam.z = (int32)o[2];
 	} else if (ne > 0) {
-		double e[3], d[3];
-		for (int k = 0; k < 3; k++)
-			e[k] = E[k] / ne;
-		d[0] = trunc(c.x - e[0]);
-		d[1] = trunc(c.y - e[1]);
-		d[2] = trunc(c.z - e[2]);
+		const double e[3] = { E[0] / ne, E[1] / ne, E[2] / ne };
+		const double d[3] = { trunc(c.x - e[0]), trunc(c.y - e[1]), trunc(c.z - e[2]) };
 		const double len = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
 		if (len > 0) {
 			_cam.x = (int32)trunc(trunc(d[0] * kRadius / len) + e[0]);
@@ -381,48 +968,30 @@ void World::collide() {
 		}
 	}
 
-	// Floor: the smallest plane height below the camera (larger y) among the faces whose
-	// (x, z) projection holds the camera, on their front side.
+	// movement.md "Floor": the eye 700 above the nearest floor below.
 	const double cx = _cam.x, cy = _cam.y, cz = _cam.z;
 	bool found = false;
 	double floorY = 0;
-	for (const Boxes3D &bs : _boxes) {
-		for (const Boxes3D::Face &f : bs.faces) {
+	for (const Boxes3D *bs : sets) {
+		for (const Boxes3D::Face &f : bs->faces) {
 			const byte *r = f.raw;
 			if (cx + kRadius < READ_LE_INT32(r + 0x48) || cx - kRadius > READ_LE_INT32(r + 0x54) ||
 				cz + kRadius < READ_LE_INT32(r + 0x50) || cz - kRadius > READ_LE_INT32(r + 0x5C))
 				continue;
-			const int ni = (f.ref[3] - (int32)bs.itemBase) / 12;
-			if (f.ref[3] < 0 || ni < 0 || (uint)ni >= bs.items.size())
+			Vec3d v[3];
+			Vec3i n;
+			if (!faceData(*bs, f, v, n) || n.y == 0)
 				continue;
-			const Vec3i &n = bs.items[ni];
-			if (n.y == 0)
-				continue;
-			Vec3f v[3];
-			bool okv = true;
-			for (int k = 0; k < 3; k++) {
-				const int vi = (f.ref[k] - (int32)bs.vertexBase) / 12;
-				if (f.ref[k] < 0 || vi < 0 || (uint)vi >= bs.vertices.size()) {
-					okv = false;
-					break;
-				}
-				v[k].x = bs.vertices[vi].x;
-				v[k].y = bs.vertices[vi].y;
-				v[k].z = bs.vertices[vi].z;
-			}
-			if (!okv)
-				continue;
-			// Inside the (x, z) triangle: same sign of the three edge cross products.
 			double s[3];
 			for (int k = 0; k < 3; k++) {
-				const Vec3f &a = v[k], &b = v[(k + 1) % 3];
+				const Vec3d &a = v[k], &b = v[(k + 1) % 3];
 				s[k] = (b.x - a.x) * (cz - a.z) - (b.z - a.z) * (cx - a.x);
 			}
 			if (!((s[0] >= 0 && s[1] >= 0 && s[2] >= 0) || (s[0] <= 0 && s[1] <= 0 && s[2] <= 0)))
 				continue;
 			const double D = READ_LE_INT32(r + 0x10);
 			if ((n.x * cx + n.y * cy + n.z * cz) / 32768.0 - D < 0)
-				continue; // behind the face
+				continue;
 			const double yf = (D * 32768.0 - n.x * cx - n.z * cz) / n.y;
 			if (yf > cy && (!found || yf < floorY)) {
 				floorY = yf;
@@ -434,24 +1003,44 @@ void World::collide() {
 		_cam.y = (int32)(floorY - kEyeAboveFloor);
 }
 
-void World::drawFrame() {
-	Graphics::Surface &dst = _vm->screen();
-	const Common::Rect viewport(0, 0, 640, 480);
-	_renderer.draw(dst, viewport, _scene3D, _materialTex, _cam);
-}
-
 WorldExit World::tick() {
+	const uint32 now = g_system->getMillis() / 66;
+	_elapsed = _lastTickCount ? CLIP<uint32>(now - _lastTickCount, 1, 10) : 1;
+	_lastTickCount = now;
+
+	if (_reload) {
+		_reload = false;
+		load(_scene, _prevScene, false);
+	}
+	if (_flying) {
+		mouse();
+		flightStep();
+		drawFrame(true);
+		return _exit;
+	}
+	// One frame (movement.md, 0x4223e8).
 	move();
 	collide();
-	drawFrame();
+	mouse();
+	drawFrame(false);
+	if (_vm->keyFired(Common::KEYCODE_BACKSPACE) && _scene != kSceneMusee)
+		requestMuseum();
+	if (_vm->keyFired(Common::KEYCODE_SPACE)) {
+		if (_barState == 0)
+			openBar();
+		else if (_barState == 1)
+			_barState = 3;
+	}
+	if (_vm->keyFired(Common::KEYCODE_ESCAPE) && _exit == kExitNone)
+		_exit = kExitOptions;
 	if (_script)
 		_script->frame(*this);
-	if (_vm->keyFired(Common::KEYCODE_ESCAPE))
-		return kExitOptions;
-	return kExitNone;
-}
-
-void World::resume() {
+	else
+		advanceAnims();
+	const WorldExit e = _exit;
+	if (e == kExitOptions)
+		_exit = kExitNone;
+	return e;
 }
 
 } // End of namespace Peintre

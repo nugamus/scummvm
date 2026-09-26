@@ -12,7 +12,8 @@ MODULE_OBJS = \
 	render3d.o \
 	shell.o \
 	sound.o \
-	world.o
+	world.o \
+	scenes/scenes.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_PEINTRE), DYNAMIC_PLUGIN)

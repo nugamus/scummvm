@@ -29,6 +29,8 @@
 
 namespace Peintre {
 
+struct Texture3D;
+
 // The 3D objects inside a BFG (docs/formats/obj3d.ksy, README "objects inside a BFG").
 
 struct Vec3i {
@@ -48,6 +50,9 @@ struct FaceGroup {
 	Common::String material;
 	int materialIndex;     ///< into Scene3D::materials, -1 when no material matches
 	Common::Array<Poly> polys;
+	// Runtime: the texture drawn, bound by name like the original's slots (0x4338d0).
+	Common::String textureName;
+	const Texture3D *texture = nullptr;
 };
 
 struct Node {

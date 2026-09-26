@@ -22,6 +22,7 @@
 #ifndef PEINTRE_PEINTRE_H
 #define PEINTRE_PEINTRE_H
 
+#include "common/algorithm.h"
 #include "common/array.h"
 #include "common/keyboard.h"
 #include "common/rect.h"
@@ -81,10 +82,12 @@ public:
 	void pollInput();
 	Common::Point mouse() const { return _mouse; }
 	bool buttonDown() const { return _button; }
-	/** True while a key is down. */
-	bool keyHeld(Common::KeyCode key) const;
 	/** True on the tick a key is released (the original's "fires"). */
 	bool keyFired(Common::KeyCode key) const;
+	/** True while a key is down (the panorama reads the arrows held, ui.md "Views"). */
+	bool keyHeld(Common::KeyCode key) const {
+		return Common::find(_keysDown.begin(), _keysDown.end(), key) != _keysDown.end();
+	}
 	/** Characters typed since the last poll. */
 	const Common::String &typed() const { return _typed; }
 	/** Waits until `ms` after the previous tick. */
@@ -104,6 +107,9 @@ public:
 	bool readGame(uint player, uint slot);
 	bool readResume(uint player, uint32 &in2d);
 	bool gameExists(uint player, uint slot) const;
+
+	/** The zone's sunflower count when the 2D side left it (passed to 0x42f2c2). */
+	uint32 zoneLeaveCount = 0;
 
 	MoviePlayer *movies() { return _movies; }
 	Sound *sound() { return _sound; }

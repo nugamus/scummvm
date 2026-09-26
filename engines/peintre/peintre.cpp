@@ -93,10 +93,6 @@ void PeintreEngine::pollInput() {
 	}
 }
 
-bool PeintreEngine::keyHeld(Common::KeyCode key) const {
-	return Common::find(_keysDown.begin(), _keysDown.end(), key) != _keysDown.end();
-}
-
 bool PeintreEngine::keyFired(Common::KeyCode key) const {
 	return Common::find(_keysFired.begin(), _keysFired.end(), key) != _keysFired.end();
 }
@@ -176,8 +172,49 @@ void PeintreEngine::runWorld(int scene, int prevScene) {
 		pollInput();
 		const WorldExit exit = world.tick();
 		present();
-		if (exit == kExitOptions && runOptionMenu(true) == -2)
+		switch (exit) {
+		case kExitMovie: {
+			const Common::String name = world.movieRequest();
+			_movies->play(name);
+			if (name.equalsIgnoreCase("cinefin")) {
+				// The end (boot.md "End of the game"): cinefin2, the credits, quit.
+				_movies->play("cinefin2");
+				runEndCredits();
+				return;
+			}
+			world.afterMovie();
 			break;
+		}
+		case kExitZone: {
+			const int code = enterZone(world.zoneRequest());
+			if (code == -2)
+				return;
+			if (code >= 0) {
+				// Load game n: always resumes inside its saved zone (save.md).
+				if (readGame(code / 100, code % 100)) {
+					const int again = enterZone(_state.currentZone());
+					if (again == -2)
+						return;
+				}
+			}
+			world.afterZone(code >= 0 ? -1 : code);
+			break;
+		}
+		case kExitOptions: {
+			const int code = runOptionMenu(true);
+			if (code == -2)
+				return;
+			if (code >= 0 && readGame(code / 100, code % 100)) {
+				const int again = enterZone(_state.currentZone());
+				if (again == -2)
+					return;
+				world.afterZone(-1);
+			}
+			break;
+		}
+		default:
+			break;
+		}
 		waitTick(66);
 	}
 }
