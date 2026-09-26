@@ -118,11 +118,18 @@ void Collision::fill(Object &obj) const {
 		}
 		if (face.vertices.size() < 3)
 			continue;
-		// The stored normal is object-local; rotate it with the object (row vectors)
-		const float *n = f.normal;
-		face.normal.set(n[0] * w[0] + n[1] * w[4] + n[2] * w[8],
-		                n[0] * w[1] + n[1] * w[5] + n[2] * w[9],
-		                n[0] * w[2] + n[1] * w[6] + n[2] * w[10]);
+		if (owner != (int)obj.object) {
+			// A welded object's normal comes from its world vertices (movement.md, E-0543):
+			// its own matrix, not the top's, turns them
+			const Common::Array<Vector3d> &v = face.vertices;
+			face.normal = Vector3d::crossProduct(v[2] - v[1], v[0] - v[1]);
+		} else {
+			// The stored normal is object-local; rotate it with the object (row vectors)
+			const float *n = f.normal;
+			face.normal.set(n[0] * w[0] + n[1] * w[4] + n[2] * w[8],
+			                n[0] * w[1] + n[1] * w[5] + n[2] * w[9],
+			                n[0] * w[2] + n[1] * w[6] + n[2] * w[10]);
+		}
 		face.normal.normalize();
 		obj.faces.push_back(face);
 	}
