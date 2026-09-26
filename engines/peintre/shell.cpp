@@ -84,7 +84,7 @@ static const Common::Rect kTournRects[3] = {
 	Common::Rect(127, 313, 127 + 30, 313 + 26), Common::Rect(111, 244, 111 + 24, 244 + 32),
 	Common::Rect(148, 290, 148 + 30, 290 + 26)
 };
-// Q-0353: where TOURN is drawn while dragged: centred on this point moved with the cursor.
+// Where TOURN rests: dragged, it is centred on this point moved with the cursor (0x410ce4, E-0442).
 static const Common::Point kTournGrab[3] = {
 	Common::Point(122, 344), Common::Point(132, 295), Common::Point(166, 333)
 };
@@ -243,7 +243,7 @@ void Shell::drawBar(Graphics::Surface &dst) {
 	_invent.draw(dst, _arrowHeld == 0 ? 3 : 1, 13, y);
 	_invent.draw(dst, _arrowHeld == 1 ? 4 : 2, 504, y);
 	for (uint i = 0; i < 6 && _first + i < _list.size(); i++)
-		if ((int)(_first + i) != _dragIndex || _dragObject < 0)
+		if (((int)(_first + i) != _dragIndex || _dragObject < 0) && !(_flying && _first + i == _placedIndex))
 			_opi.draw(dst, _list[_first + i], 67 + 70 * i, y);
 	_pot.pos = Common::Point(558, y + 2);
 	_pot.draw(dst);
@@ -267,11 +267,18 @@ int Shell::slotOf(uint object) const {
 	return -1;
 }
 
-void Shell::startCaps(uint slot, const SpriteBank *bank, bool evenTicks) {
+void Shell::startCaps(uint slot, const SpriteBank *bank, int rate) {
 	_capsBank = bank;
 	_capsSlot = slot;
 	_capsFrame = 0;
-	_capsEven = evenTicks;
+	_capsRate = rate;
+}
+
+void Shell::startRetour() {
+	// The Retour buttons are drawn; they animate only under the cursor (E-0440).
+	_retourOn = true;
+	_retour.draw(_page, _retourFrame, 600, 435);
+	_retourM.draw(_page, 0, 8, 432);
 }
 
 void Shell::place(uint index) {
@@ -284,7 +291,7 @@ void Shell::place(uint index) {
 	_vm->state().placed[_object] = 1;
 	_justPlaced = true;
 	_retourOn = false;
-	startCaps(_slot, &_capsOP[_slot], false); // Q-0351: CapsOP on odd ticks
+	startCaps(_slot, &_capsOP[_slot], 0); // CapsOP every tick (E-0440)
 	closeBar();
 	sound(objectSound(_object));
 	_state = kPlacing;
@@ -499,8 +506,9 @@ int Shell::run(uint zone) {
 				_movieOn = false;
 			}
 		}
-		// The slot animation (CapsOP / CapsAO on even ticks / CapsAC on odd ticks).
-		if (_capsBank && _capsFrame < (int)_capsBank->frameCount() && odd() != _capsEven)
+		// The slot animation (CapsOP every tick, CapsAO on even ticks, CapsAC on odd ticks).
+		if (_capsBank && _capsFrame < (int)_capsBank->frameCount() &&
+			(_capsRate == 0 || (_capsRate == 1) == odd()))
 			_capsBank->draw(_page, _capsFrame++, 0, kSlotDrawY[_capsSlot]);
 
 		step();
@@ -517,11 +525,10 @@ int Shell::run(uint zone) {
 				_mag = _mag == kMagOpening ? kMagOpen : kMagClosed;
 			}
 		}
-		// Q-0351: the Retour button loops one frame per odd tick.
-		if (_retourOn && odd()) {
+		// Retour loops on odd ticks while the cursor is over it, idle with the bar closed (E-0440).
+		if (_retourOn && odd() && _state == kIdle && barClosed() && kRetourRect.contains(_mouse)) {
 			_retourFrame = (_retourFrame + 1) % MAX<uint>(1, _retour.frameCount());
 			_retour.draw(_page, _retourFrame, 600, 435);
-			_retourM.draw(_page, 0, 8, 432);
 		}
 		moveBar();
 		compose();
@@ -563,17 +570,25 @@ void Shell::compose() {
 }
 
 void Shell::step() {
+	// The shell's own states show the busy cursor (0x40e25a(0, 9) in MainWndProc).
+	switch (_state) {
+	case kIdle: case kRun: case kSunGrab: case kSunDrag: case kDragOwn: case kDragOther:
+	case kEnding: case kViewARun: case kViewBRun: case kMenu:
+		break;
+	default:
+		setCursor(kCursorBusy);
+		break;
+	}
 	switch (_state) {
 	case kInit:
+		// The slots and the open magnifier; the first zone then opens the bar (E-0440).
 		drawSlots();
+		drawMagnifierOpen();
 		if (_zone == 0) {
-			// The first zone opens the bar at once (a14.md "Zone 0").
-			drawMagnifierOpen();
 			closeMagnifier();
 			_state = kBarOpen;
 		} else {
-			openMagnifier();
-			_retourOn = true;
+			startRetour();
 			_state = kIdle;
 		}
 		if (ConfMan.hasKey("dev_place")) {
@@ -601,7 +616,7 @@ void Shell::step() {
 	case kViewARun:
 		if (viewStep()) {
 			redrawZone();
-			_retourOn = true;
+			startRetour();
 			setCursor(kCursorDefault);
 			_state = kIdle;
 		}
@@ -610,7 +625,7 @@ void Shell::step() {
 	case kBarClose:
 		if (barClosed()) {
 			openMagnifier();
-			_retourOn = true;
+			startRetour();
 			_state = kIdle;
 		}
 		break;
@@ -660,9 +675,10 @@ void Shell::step() {
 		if (_run) {
 			_state = kRun;
 		} else {
-			startCaps(_slot, &_capsAC[_slot], false);
+			startCaps(_slot, &_capsAC[_slot], 1);
 			sound("fermcaps");
-			openMagnifier();
+			if (_mag == kMagClosed)
+				openMagnifier();
 			_state = kCapsClose;
 		}
 		break;
@@ -680,71 +696,81 @@ void Shell::step() {
 	case kResult:
 		_vm->movies()->close();
 		_movieOn = false;
-		setCursor(kCursorDefault);
-		if (_result == 0 && _justPlaced) {
-			// Back to the bar: it flies from the slot to its old place in the list.
-			_vm->state().placed[_object] = 0;
-			_runSlot = -1;
-			_justPlaced = false;
-			if (_zone != 0)
-				background(_def->background);
-			drawSlots();
-			openBar();
-			sound("bar_obj");
-			sound("cf_clic3");
-			const int i = CLIP<int>((int)_placedIndex - (int)_first, 0, 5);
-			_flyFrom = Common::Point(40, kFlyFromY[_slot]);
-			_flyTo = Common::Point(101 + 70 * i, 450);
-			_flyN = 0;
-			_flying = true;
-			_state = kFlyBack;
-			break;
-		}
+		// The end of the run redraws the zone with the magnifier closed (0x411807(-1, slot, 0)).
 		if (_zone != 0) {
 			background(_def->background);
 			drawSlots();
+			_mag = kMagClosed;
 		}
-		startCaps(_slot, &_capsAC[_slot], false);
+		if (_result == 0 && _justPlaced) {
+			// Back to the bar: the bar opens, then the object flies to its old place (E-0441).
+			_vm->state().placed[_object] = 0;
+			_runSlot = -1;
+			_justPlaced = false;
+			drawSlots();
+			openBar();
+			sound("bar_obj");
+			_state = kFlyWait;
+			break;
+		}
+		startCaps(_slot, &_capsAC[_slot], 1);
 		sound("fermcaps");
-		openMagnifier();
-		_state = kCapsClose;
 		if (_zone != 0 && !_vm->state().zoneDone[_zone]) {
 			bool all = true;
 			for (uint s = 0; s < _def->count; s++)
 				all = all && _vm->state().placed[_def->objects[s]];
 			if (all) {
+				// The sunflower; the magnifier reopens only after the autosave.
 				_vm->state().zoneDone[_zone] = 1;
 				_state = kSunStart;
+				break;
 			}
 		}
+		if (_mag == kMagClosed)
+			openMagnifier();
+		_state = kCapsClose;
+		break;
+
+	case kFlyWait:
+		if (barMoving())
+			break;
+		// Back in the list at its old index, scrolled into view; cf_clic3; the flight starts.
+		_list.insert_at(MIN<uint>(_placedIndex, _list.size()), _object);
+		_placedIndex = MIN<uint>(_placedIndex, _list.size() - 1);
+		if (_placedIndex > _first + 5)
+			_first = _placedIndex - 5;
+		sound("cf_clic3");
+		_flyFrom = Common::Point(40, kFlyFromY[_slot]);
+		_flyTo = Common::Point(101 + 70 * (MIN<int>(_placedIndex, _first + 5) - (int)_first), 450);
+		_flyN = 0;
+		_flying = true;
+		_state = kFlyBack;
 		break;
 
 	case kFlyBack:
-		if (++_flyN >= 32) {
+		if (++_flyN > 32) {
 			_flying = false;
-			_list.insert_at(MIN<uint>(_placedIndex, _list.size()), _object);
+			closeBar();
 			_state = kBackIdle;
 		}
 		break;
 
 	case kBackIdle:
-		// Q-0352: the bar opened for the fly-back stays open; only a closed bar reopens the magnifier.
 		if (barClosed()) {
 			openMagnifier();
-			_retourOn = true;
-			_state = kIdle;
-		} else if (barOpen()) {
+			startRetour();
 			_state = kIdle;
 		}
 		break;
 
 	case kCapsClose:
-		if (capsDone() && _mag == kMagOpen) {
+		// Zone 0 saves as soon as CapsAC ends; the others wait for the open magnifier (E-0441).
+		if (capsDone() && (_zone == 0 || _mag == kMagOpen)) {
 			_runSlot = -1;
 			if (_justPlaced) {
 				_state = kSave;
 			} else {
-				_retourOn = true;
+				startRetour();
 				_state = kIdle;
 			}
 		}
@@ -759,7 +785,9 @@ void Shell::step() {
 		if (_zone == 0) {
 			leave(-1);
 		} else {
-			_retourOn = true;
+			startRetour();
+			if (_mag == kMagClosed)
+				openMagnifier();
 			_state = kIdle;
 		}
 		break;
@@ -888,7 +916,7 @@ void Shell::stepIdle() {
 			_slot = s;
 			_justPlaced = false;
 			_retourOn = false;
-			startCaps(s, &_capsAO[s], true);
+			startCaps(s, &_capsAO[s], 2);
 			sound("ouvrcaps");
 			closeBar();
 			closeMagnifier();
@@ -946,12 +974,13 @@ void Shell::stepSunflower() {
 		if (_down)
 			break;
 		_tournDrag = false;
-		if (kPotArea.contains(_mouse)) {
+		// The dragged sprite's point is tested, not the cursor (0x410dfa, E-0442).
+		if (kPotArea.contains(Common::Point(_tournPos.x + _mouse.x - _grab.x, _tournPos.y + _mouse.y - _grab.y))) {
 			_pot.play();
 			sound("vase");
 			_state = kSunPot;
 		} else {
-			// Q-0353: Van Gogh holds the sunflower again (PA..a's last frame).
+			// Van Gogh holds the sunflower again: PA..a's last frame (E-0442).
 			sound("cf_clic3");
 			_pa.load(pa + "a");
 			_pa.show(_pa.last());
@@ -961,7 +990,7 @@ void Shell::stepSunflower() {
 		break;
 
 	case kSunPot:
-		if (odd()) // Q-0351: POT on odd ticks
+		if (odd()) // POT on odd ticks (E-0440)
 			_pot.step();
 		if (!_pot.playing) {
 			counter(_def->counter)++;

@@ -110,6 +110,7 @@ public:
 			if (_seen[0] && _seen[1] && _seen[2]) {
 				const Common::String name = Common::String::format("A03_012%c", 'e' + _h);
 				_s.background(name);
+				_s.drawSlots();
 				_target.load(name);
 				_target.play(true);
 				_s.sound("A03_012e", true);
@@ -117,6 +118,7 @@ public:
 			} else {
 				_s.voice("A03_012c");
 				_s.background("a03_012a");
+				_s.drawSlots();
 				go(2);
 			}
 			break;

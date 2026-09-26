@@ -150,7 +150,7 @@ protected:
 	bool after(uint ticks) { return ++_count >= ticks; }
 
 	Shell &_s;
-	bool _aborted = false;   // Q-0350: the puzzles test it where their spec says Backspace ends them
+	bool _aborted = false;   // latched by onAbort, tested by the puzzle steps that end on Backspace (E-0444)
 	uint _step = 0;
 	uint _count = 0;
 };
@@ -232,7 +232,7 @@ private:
 	enum State {
 		kInit = 0, kViewBRun = 1, kViewB = 2, kViewARun = 3, kViewA = 4, kIdle = 5,
 		kBarClose = 6, kBarOpen = 7, kDragOwn = 8, kPlacing = 10, kReplay = 0xB,
-		kCapsClose = 0xC, kRun = 0xD, kPlace = 0xE, kResult = 0xF, kFlyBack = 0x11,
+		kCapsClose = 0xC, kRun = 0xD, kPlace = 0xE, kResult = 0xF, kFlyWait = 0x10, kFlyBack = 0x11,
 		kBackIdle = 0x12, kDragOther = 0x15, kSunWalk = 0x16, kSunGrab = 0x17,
 		kSunDrag = 0x18, kSunLeave = 0x19, kSunStart = 0x1A, kSunFree = 0x1B,
 		kSunPot = 0x1C, kMenu = 0x1F, kLeave = 0x20, kSave = 0x21, kMenuWait = 0x22,
@@ -263,7 +263,9 @@ private:
 	int slotOf(uint object) const;
 	/** Places the object at `index` of the list in its slot. */
 	void place(uint index);
-	void startCaps(uint slot, const SpriteBank *bank, bool evenTicks);
+	/** rate: 0 every tick, 1 odd ticks, 2 even ticks. */
+	void startCaps(uint slot, const SpriteBank *bank, int rate);
+	void startRetour();
 	bool capsDone() const { return !_capsBank || _capsFrame >= (int)_capsBank->frameCount(); }
 	void leave(int code);
 
@@ -287,7 +289,7 @@ private:
 	const SpriteBank *_capsBank = nullptr;   // the slot animation playing, drawn on the page
 	int _capsFrame = 0;
 	uint _capsSlot = 0;
-	bool _capsEven = false;
+	int _capsRate = 0;
 	int _runSlot = -1;      // the slot being run (CapsAC frame 0)
 	Common::Array<uint> _list;
 	uint _first = 0;
