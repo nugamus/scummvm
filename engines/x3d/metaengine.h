@@ -33,6 +33,7 @@ public:
 	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override;
 	void getSavegameThumbnail(Graphics::Surface &thumb) override;
 	Common::KeymapArray initKeymaps(const char *target) const override;
+	GUI::OptionsContainerWidget *buildEngineOptionsWidget(GUI::GuiObject *boss, const Common::String &name, const Common::String &target) const override;
 };
 
 #endif // X3D_METAENGINE_H

@@ -19,13 +19,19 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/translation.h"
 
 #include "backends/keymapper/action.h"
 #include "backends/keymapper/keymap.h"
 #include "backends/keymapper/standard-actions.h"
 
+#include "engines/dialogs.h"
+
 #include "graphics/surface.h"
+
+#include "gui/ThemeEval.h"
+#include "gui/widgets/popup.h"
 
 #include "x3d/metaengine.h"
 #include "x3d/detection.h"
@@ -100,6 +106,81 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 	},
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
+
+// Options with several values, as popups under the checkboxes
+static const struct {
+	const char *guioFlag, *configOption, *label, *tooltip;
+	int defaultValue;
+	struct {
+		const char *label;
+		int value;
+	} entries[5];
+} popUpList[] = {
+	{
+		GAMEOPTION_TURN_SPEED, "turn_speed", _s("Turn speed:"), _s("How fast the arrow keys turn the view and look up or down"), 100,
+		{ { _s("Slow"), 50 }, { _s("Original"), 100 }, { _s("Fast"), 150 }, { _s("Very fast"), 200 }, { nullptr, 0 } }
+	},
+};
+
+class X3DOptionsWidget : public GUI::ExtraGuiOptionsWidget {
+public:
+	X3DOptionsWidget(GuiObject *boss, const Common::String &name, const Common::String &domain, const ExtraGuiOptions &options) :
+		ExtraGuiOptionsWidget(boss, name, domain, options), _checkboxes(options.size()) {
+		const Common::String guiOptions = ConfMan.get("guioptions", domain);
+		for (uint i = 0; i < ARRAYSIZE(popUpList); i++) {
+			_popUps[i] = nullptr;
+			if (!checkGameGUIOption(popUpList[i].guioFlag, guiOptions))
+				continue;
+			const Common::String id = _dialogLayout + "." + popUpList[i].configOption;
+			new GUI::StaticTextWidget(widgetsBoss(), id + "_desc", _(popUpList[i].label), _(popUpList[i].tooltip));
+			_popUps[i] = new GUI::PopUpWidget(widgetsBoss(), id);
+			for (const auto &e : popUpList[i].entries)
+				if (e.label)
+					_popUps[i]->appendEntry(_(e.label), e.value);
+		}
+	}
+
+	void load() override {
+		ExtraGuiOptionsWidget::load();
+		for (uint i = 0; i < ARRAYSIZE(popUpList); i++)
+			if (_popUps[i])
+				_popUps[i]->setSelectedTag(ConfMan.hasKey(popUpList[i].configOption, _domain) ?
+				                           ConfMan.getInt(popUpList[i].configOption, _domain) : popUpList[i].defaultValue);
+	}
+
+	bool save() override {
+		ExtraGuiOptionsWidget::save();
+		for (uint i = 0; i < ARRAYSIZE(popUpList); i++)
+			if (_popUps[i])
+				ConfMan.setInt(popUpList[i].configOption, _popUps[i]->getSelectedTag(), _domain);
+		return true;
+	}
+
+protected:
+	// The base class's checkboxes, then a label and popup per row
+	void defineLayout(GUI::ThemeEval &layouts, const Common::String &layoutName, const Common::String &overlayedLayout) const override {
+		layouts.addDialog(layoutName, overlayedLayout);
+		layouts.addLayout(GUI::ThemeLayout::kLayoutVertical).addPadding(0, 0, 0, 0);
+		for (uint i = 0; i < _checkboxes; i++)
+			layouts.addWidget(Common::String::format("customOption%dCheckbox", i + 1), "Checkbox");
+		for (uint i = 0; i < ARRAYSIZE(popUpList); i++) {
+			if (!_popUps[i])
+				continue;
+			layouts.addLayout(GUI::ThemeLayout::kLayoutHorizontal).addPadding(0, 0, 0, 0);
+			layouts.addWidget(Common::String(popUpList[i].configOption) + "_desc", "OptionsLabel");
+			layouts.addWidget(popUpList[i].configOption, "PopUp").closeLayout();
+		}
+		layouts.closeLayout().closeDialog();
+	}
+
+private:
+	uint _checkboxes;
+	GUI::PopUpWidget *_popUps[ARRAYSIZE(popUpList)];
+};
+
+GUI::OptionsContainerWidget *X3DMetaEngine::buildEngineOptionsWidget(GUI::GuiObject *boss, const Common::String &name, const Common::String &target) const {
+	return new X3DOptionsWidget(boss, name, target, getExtraGuiOptions(target));
+}
 
 const ADExtraGuiOptionsMap *X3DMetaEngine::getAdvancedExtraGuiOptions() const {
 	return optionsList;
