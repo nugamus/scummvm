@@ -86,6 +86,7 @@ Common::Error X3DEngine::run() {
 	// The original frames every mode as 4:3 (E-0040); widescreen keeps its height and view
 	// and shows more to the sides. 2D images stay 640x480, centred.
 	ConfMan.registerDefault("widescreen", false);
+	ConfMan.registerDefault("max_detail", false);
 	_renderer = Renderer::create(ConfMan.getBool("widescreen") ? 854 : 640, 480);
 	_sound = new Sound(_mixer);
 	_inventory = new Inventory();
@@ -364,6 +365,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_sceneName = sceneName;
 
 	Scene scene(_renderer);
+	scene.maxDetail = ConfMan.getBool("max_detail");
 	if (!scene.load(sceneName))
 		error("Unable to load scene %s", sceneName.c_str());
 	_scene = &scene;

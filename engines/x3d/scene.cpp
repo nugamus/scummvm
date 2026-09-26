@@ -243,11 +243,6 @@ void Scene::pose(Model &m) {
 
 	for (uint32 &state : m.colorFrame)
 		state = 0; // lit colours follow the new pose
-	if (!objects.empty() && objects[0].name == "*U01_02" && m.worldVertices[0].size() > 349 * 3 + 2) {
-		static uint32 cnt = 0;
-		if ((cnt++ % 30) == 0)
-			debug("LIPDBG v349 %f %f %f lods %d", m.worldVertices[0][349 * 3], m.worldVertices[0][349 * 3 + 1], m.worldVertices[0][349 * 3 + 2], m.lods[18].size());
-	}
 
 	// Bounding spheres of what each object draws, for view culling
 	for (uint i = 0; i < objects.size(); i++) {
@@ -365,15 +360,19 @@ void Scene::advance(float dt) {
 bool Scene::interpolate(float alpha) {
 	bool moved = false;
 	for (AnimNode &n : _nodes) {
-		if (!n.enabled || !n.model || n.prevFrame < 0 || n.prevClip != n.clipActive)
+		if (!n.enabled || !n.model)
 			continue;
 		const Playback &p = n.clipActive ? n.clip : n.base;
+		float frame = p.frame;
 		const float d = p.frame - n.prevFrame;
 		// Not across a loop wrap, a turn or a jump the unit made
-		if (d == 0 || fabsf(d) > 1.5f * _stepDt * p.fps)
-			continue;
-		animate(*p.file, p.animation, *n.model, p.object >= 0 ? p.object : n.object, n.prevFrame + d * alpha);
-		moved = true;
+		if (n.prevFrame >= 0 && n.prevClip == n.clipActive && d != 0 && fabsf(d) <= 1.5f * _stepDt * p.fps) {
+			frame = n.prevFrame + d * alpha;
+			moved = true;
+		}
+		// Every node is applied again in list order, so later nodes still override earlier
+		// ones (a talker's mouth over the body, E-0606)
+		animate(*p.file, p.animation, *n.model, p.object >= 0 ? p.object : n.object, frame);
 	}
 	return moved;
 }
@@ -956,6 +955,7 @@ int Scene::addFaceClip(const Common::String &faceObject, const Common::String &p
 void Scene::setNode(int node, bool enabled, bool running) {
 	_nodes[node].enabled = enabled && _nodes[node].model;
 	_nodes[node].base.running = running;
+	if (enabled) debug("LIPDBG setNode %d frame %f fps %f", node, _nodes[node].base.frame, _nodes[node].base.fps);
 }
 
 void Scene::setNodeFrame(int node, float frame) {
@@ -1255,7 +1255,7 @@ void Scene::draw(const Camera &cam, int width, int height) {
 			const Model *drawn = m;
 			uint object = i;
 			for (const Lod &lod : m->lods[i]) {
-				if (lod.threshold <= s) {
+				if (!maxDetail && lod.threshold <= s) {
 					drawn = lod.model;
 					object = lod.object;
 				}
@@ -1420,7 +1420,7 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 			for (int k = 0; k < 3; k++)
 				s2 += (objects[i].world[12 + k] - cam.position[k]) * (objects[i].world[12 + k] - cam.position[k]);
 			for (const Lod &lod : m->lods[i])
-				if (lod.threshold <= s2) {
+				if (!maxDetail && lod.threshold <= s2) {
 					drawn = lod.model;
 					top = lod.object;
 				}
