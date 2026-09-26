@@ -84,6 +84,7 @@ Common::Error X3DEngine::run() {
 	ConfMan.registerDefault("max_detail", false);
 	ConfMan.registerDefault("filter_textures", false);
 	ConfMan.registerDefault("run_toggle", false);
+	ConfMan.registerDefault("crouch_toggle", false);
 	ConfMan.registerDefault("turn_speed", 100);
 	ConfMan.registerDefault("fov", 90);
 	// Modern controls; mouse_sensitivity is a percent of the default look speed
@@ -431,7 +432,9 @@ void X3DEngine::frame(bool input) {
 			    (e.relMouse.x || e.relMouse.y)) {
 				const float dYaw = e.relMouse.x * _lookScale;
 				const float pitch = _player.pitch - (_invertY ? -1 : 1) * e.relMouse.y * _lookScale;
-				const float dPitch = CLIP(pitch, MIN(_player.pitch, 0.6f), MAX(_player.pitch, 2.7f)) - _player.pitch;
+				// Nearly straight down or up: the original's 0.6..2.7 keeps items at the
+				// feet out of reach of a crosshair
+				const float dPitch = CLIP(pitch, MIN(_player.pitch, 0.05f), MAX(_player.pitch, (float)M_PI - 0.05f)) - _player.pitch;
 				_player.yaw += dYaw;
 				_previous.yaw += dYaw;
 				_player.pitch += dPitch;
