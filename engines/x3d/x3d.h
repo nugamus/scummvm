@@ -48,6 +48,13 @@ class Sound;
 class Talk;
 class Unit;
 
+// Keymapper actions (metaengine.cpp); each stands for the original's key
+enum Action {
+	kActionNone,
+	kActionForward, kActionBackward, kActionTurnLeft, kActionTurnRight, kActionLookUp,
+	kActionLookDown, kActionRun, kActionJump, kActionInventory, kActionMenu, kActionSkip
+};
+
 class X3DEngine : public Engine {
 public:
 	X3DEngine(OSystem *syst, const ADGameDescription *gameDesc);

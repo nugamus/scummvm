@@ -21,6 +21,10 @@
 
 #include "common/translation.h"
 
+#include "backends/keymapper/action.h"
+#include "backends/keymapper/keymap.h"
+#include "backends/keymapper/standard-actions.h"
+
 #include "graphics/surface.h"
 
 #include "x3d/metaengine.h"
@@ -59,6 +63,41 @@ void X3DMetaEngine::getSavegameThumbnail(Graphics::Surface &thumb) {
 			delete small;
 		}
 	}
+}
+
+Common::KeymapArray X3DMetaEngine::initKeymaps(const char *target) const {
+	// The original's keys (movement.md, ui.md) as remappable actions
+	using namespace Common;
+	Keymap *keymap = new Keymap(Keymap::kKeymapTypeGame, "x3d-default", _("Default keymappings"));
+	static const struct {
+		const char *id, *label, *key, *joy;
+		X3D::Action action;
+	} actions[] = {
+		{ "FORWARD", _s("Walk forward"), "UP", "JOY_UP", X3D::kActionForward },
+		{ "BACKWARD", _s("Walk backward"), "DOWN", "JOY_DOWN", X3D::kActionBackward },
+		{ "LEFT", _s("Turn left"), "LEFT", "JOY_LEFT", X3D::kActionTurnLeft },
+		{ "RIGHT", _s("Turn right"), "RIGHT", "JOY_RIGHT", X3D::kActionTurnRight },
+		{ "LOOKUP", _s("Look up"), "PAGEUP", "JOY_LEFT_SHOULDER", X3D::kActionLookUp },
+		{ "LOOKDOWN", _s("Look down"), "PAGEDOWN", "JOY_RIGHT_SHOULDER", X3D::kActionLookDown },
+		{ "RUN", _s("Run"), "LCTRL", "JOY_B", X3D::kActionRun },
+		{ "JUMP", _s("Jump"), "LSHIFT", "JOY_Y", X3D::kActionJump },
+		{ "INVENTORY", _s("Inventory"), "SPACE", "JOY_X", X3D::kActionInventory },
+		{ "MENU", _s("Menu"), "ESCAPE", "JOY_START", X3D::kActionMenu },
+		{ "SKIP", _s("Skip"), "RETURN", "JOY_BACK", X3D::kActionSkip },
+	};
+	for (const auto &a : actions) {
+		Action *act = new Action(a.id, _(a.label));
+		act->setCustomEngineActionEvent(a.action);
+		act->addDefaultInputMapping(a.key);
+		act->addDefaultInputMapping(a.joy);
+		keymap->addAction(act);
+	}
+	Action *click = new Action(kStandardActionLeftClick, _("Click"));
+	click->setLeftClickEvent();
+	click->addDefaultInputMapping("MOUSE_LEFT");
+	click->addDefaultInputMapping("JOY_A");
+	keymap->addAction(click);
+	return Keymap::arrayOf(keymap);
 }
 
 Common::Error X3DMetaEngine::createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const {
