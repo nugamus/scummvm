@@ -104,12 +104,16 @@ void PeintreEngine::devStep() {
 		debugC(1, kDebugInput, "dev_commands: %s", c.c_str());
 		Common::EventManager *em = _system->getEventManager();
 		Common::Event e;
-		if ((w[0] == "click" || w[0] == "move") && w.size() >= 3) {
+		if ((w[0] == "click" || w[0] == "press" || w[0] == "move") && w.size() >= 3) {
 			e.type = Common::EVENT_MOUSEMOVE;
 			e.mouse = Common::Point(atoi(w[1].c_str()), atoi(w[2].c_str()));
 			_system->warpMouse(e.mouse.x, e.mouse.y);
 			em->pushEvent(e);
-			if (w[0] == "click") {
+			if (w[0] == "press") {
+				// The button stays down until "release x y" (drags).
+				e.type = Common::EVENT_LBUTTONDOWN;
+				em->pushEvent(e);
+			} else if (w[0] == "click") {
 				e.type = Common::EVENT_LBUTTONDOWN;
 				em->pushEvent(e);
 				DevCommand up = { now + 150, Common::String::format("release %d %d", e.mouse.x, e.mouse.y) };
