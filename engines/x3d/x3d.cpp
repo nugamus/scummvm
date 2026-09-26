@@ -1289,8 +1289,8 @@ void X3DEngine::wait(uint32 ms) {
 	const uint32 start = _system->getMillis();
 	while (!shouldQuit() && _system->getMillis() - start < ms) {
 		Common::Event e;
-		while (_system->getEventManager()->pollEvent(e)) {
-		}
+		while (_system->getEventManager()->pollEvent(e))
+			actionToKey(e); // a resized window still resizes the frame
 		_system->delayMillis(10);
 	}
 }
@@ -1356,6 +1356,7 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 		delete file;
 	}
 
+	debugC(1, kDebugGraphics, "video %s", name.c_str());
 	_video = &video; // paused with the engine
 	captureMouse(false);
 	bool skip = false;
@@ -1382,6 +1383,7 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 		_system->delayMillis(5);
 	}
 
+	debugC(1, kDebugGraphics, "video %s done", name.c_str());
 	_video = nullptr;
 	_mixer->stopHandle(sound);
 }
