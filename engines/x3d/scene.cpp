@@ -1454,10 +1454,12 @@ void Scene::drawFace(const Deferred &f) {
 	}
 }
 
-void Scene::drawHighlight(const Common::Array<Common::Pair<const Model *, uint> > &objects) {
+void Scene::drawHighlight(const Common::Array<Highlight> &objects) {
 	// The faces again, tinted and blended over the frame, and their
 	// edges collected by position: those between a front and a back face, or of one front
-	// face only, outline the object
+	// face only, outline the object. A lone colour-keyed face (spectacles on a face) is not
+	// boxed when its hotspot has other faces; keyed meshes (some characters) and keyed-only
+	// hotspots (the glasses to take) are outlined like the rest.
 	byte tint[3 * 64];
 	for (uint k = 0; k < 64; k++) {
 		tint[k * 3] = 255;
@@ -1468,14 +1470,18 @@ void Scene::drawHighlight(const Common::Array<Common::Pair<const Model *, uint> 
 	_edges.resize(0);
 	_renderer->setTexture(0);
 	_renderer->setBlend(Renderer::kTint, false);
-	for (const Common::Pair<const Model *, uint> &p : objects) {
-		const Model *m = p.first;
-		if (Common::find(_models.begin(), _models.end(), m) == _models.end() || p.second >= m->file.objects.size() ||
-		    m->hidden || m->hiddenObjects[p.second] || !inView(&m->bounds[p.second * 4]))
+	Common::Array<bool> &opaque = _groupOpaque; // groups with an unkeyed face
+	opaque.resize(0);
+	for (const Highlight &p : objects) {
+		const Model *m = p.model;
+		if (Common::find(_models.begin(), _models.end(), m) == _models.end() || p.object >= m->file.objects.size() ||
+		    m->hidden || m->hiddenObjects[p.object] || !inView(&m->bounds[p.object * 4]))
 			continue;
+		if ((uint)p.group >= opaque.size())
+			opaque.resize(p.group + 1);
 		const Model *drawn;
 		uint object;
-		drawnLod(m, p.second, drawn, object);
+		drawnLod(m, p.object, drawn, object);
 		const Common::Array<float> *v = drawnVertices(*drawn, object);
 		if (!v)
 			continue;
@@ -1485,19 +1491,20 @@ void Scene::drawHighlight(const Common::Array<Common::Pair<const Model *, uint> 
 				memcpy(&xyz[n * 3], &(*v)[face.indices[k] * 3], 3 * sizeof(float));
 			if (n < 3)
 				continue;
-			// Colour-keyed faces (spectacles, foliage) tint only their kept texels and get
-			// no outline
+			// Colour-keyed faces tint only their kept texels
 			const O3DMaterial &mat = drawn->file.materials[face.material];
-			if (mat.mode >= 1 && mat.mode <= 3 && !mat.textureMap.empty() && !face.uvs.empty()) {
+			const bool keyed = mat.mode >= 1 && mat.mode <= 3 && !mat.textureMap.empty() && !face.uvs.empty();
+			if (keyed) {
 				_renderer->setTexture(texture(mat.textureMap));
 				_renderer->setClamp(!mat.wrap);
 				_renderer->setBlend(Renderer::kTint, true);
 				_renderer->drawFan(xyz, face.uvs.begin(), tint, n, 72);
 				_renderer->setTexture(0);
 				_renderer->setBlend(Renderer::kTint, false);
-				continue;
+			} else {
+				_renderer->drawFan(xyz, nullptr, tint, n, 72);
+				opaque[p.group] = true;
 			}
-			_renderer->drawFan(xyz, nullptr, tint, n, 72);
 			// Newell's normal; faces wound against it toward the eye are drawn (CCW in GL)
 			float nrm[3] = { 0, 0, 0 };
 			for (uint k = 0; k < n; k++) {
@@ -1515,6 +1522,8 @@ void Scene::drawHighlight(const Common::Array<Common::Pair<const Model *, uint> 
 				memcpy(e.a, a, sizeof(e.a));
 				memcpy(e.b, b, sizeof(e.b));
 				e.front = front;
+				e.keyed = keyed;
+				e.group = p.group;
 				_edges.push_back(e);
 			}
 		}
@@ -1528,7 +1537,8 @@ void Scene::drawHighlight(const Common::Array<Common::Pair<const Model *, uint> 
 		uint j = i, front = 0;
 		for (; j < _edges.size() && !memcmp(_edges[i].a, _edges[j].a, sizeof(Edge::a) + sizeof(Edge::b)); j++)
 			front += _edges[j].front;
-		if (front && (front < j - i || j - i == 1))
+		const bool boxed = j - i == 1 && _edges[i].keyed && opaque[_edges[i].group];
+		if (front && (front < j - i || j - i == 1) && !boxed)
 			for (const float *q : { _edges[i].a, _edges[i].b })
 				for (int k = 0; k < 3; k++)
 					_lines.push_back(_eye[k] + (q[k] - _eye[k]) * 0.995f);

@@ -210,8 +210,14 @@ public:
 	          const Model *&model, uint &object, float &depth);
 
 	// Enhancement (hotspot overlay): a tint over the drawn faces of these objects, then
-	// their outline; after draw(), with its view
-	void drawHighlight(const Common::Array<Common::Pair<const Model *, uint> > &objects);
+	// their outline; after draw(), with its view. Objects of one hotspot share a group.
+	struct Highlight {
+		const Model *model;
+		uint object;
+		int group;
+		Highlight(const Model *m, uint o, int g) : model(m), object(o), group(g) {}
+	};
+	void drawHighlight(const Common::Array<Highlight> &objects);
 
 private:
 	// An animation being played (animation.md, Per-frame playback)
@@ -325,8 +331,11 @@ private:
 	struct Edge {
 		float a[3], b[3]; // ends in memcmp order
 		bool front;
+		bool keyed; // of a colour-keyed face
+		int group;
 	};
 	Common::Array<Edge> _edges; // drawHighlight's
+	Common::Array<bool> _groupOpaque;
 	Common::Array<float> _lines;
 	Renderer *_renderer;
 	Common::HashMap<Common::String, uint32, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _textures;
