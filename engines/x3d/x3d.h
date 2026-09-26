@@ -104,6 +104,8 @@ public:
 	// Suspend: no cursor, camera keys or clicks (u01.md)
 	void suspend(bool suspended);
 	bool suspended() const { return _suspended; }
+	// The unit's start runs for a load: the saved state is already in place (save.md)
+	bool restoring() const { return _restoring; }
 	// A pending load keeps its scene: a sequence that goes on after it cannot replace it
 	void gotoScene(const Common::String &name) {
 		if (_pendingLoad.empty())
@@ -205,6 +207,7 @@ private:
 	uint32 _last = 0, _pending = 0, _logicMs = 0, _lastClick = 0, _frames = 0, _fpsStart = 0;
 	Common::Array<int> _devClicks;
 	Common::StringArray _devCommands; // "ms:command", from dev_commands
+	bool _restoring = false;
 	uint32 _devUp = 0, _devDown = 0, _devShift = 0; // console "press": held until these times (ms)
 	uint32 _sceneStart = 0, _devStart = 0;
 	bool _devParsed = false;

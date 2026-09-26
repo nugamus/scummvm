@@ -92,7 +92,10 @@ void U01::start(bool newGame, bool video) {
 	Interaction *interaction = _vm->interaction();
 	if (newGame && video)
 		_vm->playVideo("Prologue");
-	player.sphereOffset = 37.0f;
+	// Step 2 comes before the base start restores CAMERA, so a load keeps the saved
+	// offset (20 on the roof); here the restore has already run
+	if (!_vm->restoring())
+		player.sphereOffset = 37.0f;
 	_vm->talk()->addTalker("U01_01", "$$$DUMMY.*01SParle");
 	_vm->talk()->addTalker("U01_02", "$$$DUMMY.*02SParle");
 
