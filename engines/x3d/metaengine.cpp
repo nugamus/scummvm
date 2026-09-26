@@ -165,6 +165,10 @@ Common::KeymapArray X3DMetaEngine::initKeymaps(const char *target) const {
 		click->addDefaultInputMapping("MOUSE_LEFT");
 		click->addDefaultInputMapping("JOY_A");
 		k->addAction(click);
+		Action *hotspots = new Action(kStandardActionToggleHotspots, _("Show hotspots"));
+		hotspots->setEvent(EVENT_HOTSPOTS_SHOW);
+		hotspots->addDefaultInputMapping("h");
+		k->addAction(hotspots);
 	}
 	return keymaps;
 }

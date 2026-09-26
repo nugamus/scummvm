@@ -52,6 +52,7 @@ public:
 	// frame changed) and maps window pixels to the logical frame
 	virtual bool updateSize(bool widescreen) { return false; }
 	virtual Common::Point toLogical(const Common::Point &p) const { return p; }
+	virtual Common::Point toWindow(const Common::Point &p) const { return p; } // the reverse
 	virtual int pixelScale() const { return 1; } // window pixels per logical pixel, rounded
 
 	// Enhancement: mipmapped, anisotropic scene textures (created after it is set)
