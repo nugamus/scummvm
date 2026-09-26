@@ -89,10 +89,11 @@ public:
 
 	/**
 	 * Loads an image by name as a handle of `zone` would (spec/resources.md): from the
-	 * zone's archive (`\IMAGE\<name>`) when `fromArchive`, else `DATA/<zone>/IMAGE/<name>`.
-	 * Falls back to the loose file when the archive has no such member (Q-0007).
+	 * zone's archive (`\<folder>\<name>`) when `fromArchive`, else
+	 * `DATA/<zone>/<folder>/<name>`. Falls back to the loose file when the archive has no
+	 * such member (Q-0007). `name` may hold `\` separators (animation frames).
 	 */
-	Image *loadImage(int zone, const Common::String &name, bool fromArchive);
+	Image *loadImage(int zone, const Common::String &name, bool fromArchive, const char *folder = "IMAGE");
 
 	/** Decodes image bytes by the name's extension and source (the table in spec/resources.md). */
 	Image *decodeImage(Common::SeekableReadStream &stream, const Common::String &name, bool fromArchive);

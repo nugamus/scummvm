@@ -33,7 +33,9 @@
 
 namespace Ring {
 
+class Cursors;
 class Resources;
+class World;
 
 /**
  * The Ring engine (Arxel Tribe, 1999). Behaviour follows the specs in the research
@@ -50,6 +52,17 @@ public:
 
 	Graphics::ManagedSurface &screen() { return _screen; }
 	Resources &resources() { return *_resources; }
+	World &world() { return *_world; }
+	Cursors &cursors() { return *_cursors; }
+
+	/** `PuzSetAct` (games/ring/docs/sy.md): the puzzle becomes the current one. */
+	void puzSetAct(int puzzle);
+	/** `PuzSetMod`: refused (false) when mode 2 is asked of a puzzle already in mode 2. */
+	bool puzSetMod(int puzzle, int mode, int object);
+	/** `StartMenu` (sy.md, "Flow"). */
+	void startMenu(bool fromGame);
+	/** What `WM_CLOSE` does: the exit dialogue (spec/boot.md, "Input"). */
+	void requestClose();
 
 	/** Copies the screen to the backend and updates it. */
 	void present();
@@ -67,10 +80,25 @@ public:
 
 private:
 	void showStartupScreens();
+	void addCursors();
+	/** One idle-loop frame (spec/boot.md, "Frame"). */
+	void frame();
+	/** Hot-spot tracking, 0x408dd0 (spec/cursor.md). */
+	void track(int x, int y);
+	/** `MouseLeftEvent` (spec/cursor.md). */
+	void click(int x, int y);
 
 	const ADGameDescription *_gameDescription;
 	Graphics::ManagedSurface _screen;
 	Common::ScopedPtr<Resources> _resources;
+	Common::ScopedPtr<World> _world;
+	Common::ScopedPtr<Cursors> _cursors;
+	int _zone = 1;
+	int _menuZone = 0;   ///< app+0x6f: the zone the menu returns to, 0 when the menu is down
+	int _puzzle = 0;     ///< the current puzzle (app+0x81)
+	Common::Point _mouse;
+	bool _clicked = false; ///< a left button press at _clickPos not handled yet
+	Common::Point _clickPos;
 	Common::String _languageFolder;
 	bool _escapeDown = false;
 };

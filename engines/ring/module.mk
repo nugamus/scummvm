@@ -1,6 +1,15 @@
 MODULE := engines/ring
 
-MODULE_OBJS = 	codec.o 	metaengine.o 	movie.o 	resources.o 	ring.o
+MODULE_OBJS = \
+	codec.o \
+	cursor.o \
+	metaengine.o \
+	movie.o \
+	resources.o \
+	ring.o \
+	world.o \
+	ring/setup.o \
+	ring/sy.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_RING), DYNAMIC_PLUGIN)

@@ -87,15 +87,15 @@ bool Resources::openArchive(int zone) {
 	return true;
 }
 
-Image *Resources::loadImage(int zone, const Common::String &name, bool fromArchive) {
+Image *Resources::loadImage(int zone, const Common::String &name, bool fromArchive, const char *folder) {
 	if (fromArchive && openArchive(zone)) {
-		Common::ScopedPtr<Common::SeekableReadStream> s(_archives[zone]->member("\\IMAGE\\" + name));
+		Common::ScopedPtr<Common::SeekableReadStream> s(_archives[zone]->member(Common::String::format("\\%s\\%s", folder, name.c_str())));
 		if (s)
 			return decodeImage(*s, name, true);
 		debugC(1, kDebugLoad, "%s is not in the %s archive, trying the loose file", name.c_str(), zoneFolder(zone));
 	}
 	Common::File f;
-	Common::Path path = Common::Path("DATA").appendComponent(zoneFolder(zone)).appendComponent("IMAGE").appendComponent(name);
+	Common::Path path = Common::Path("DATA").appendComponent(zoneFolder(zone)).appendComponent(folder).join(Common::Path(name, '\\'));
 	if (!f.open(path)) {
 		warning("Ring: cannot open image %s", path.toString().c_str());
 		return nullptr;
