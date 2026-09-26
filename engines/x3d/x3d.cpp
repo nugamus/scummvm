@@ -29,6 +29,9 @@
 #include "common/file.h"
 #include "common/system.h"
 
+#include "backends/keymapper/keymap.h"
+#include "backends/keymapper/keymapper.h"
+
 #include "audio/audiostream.h"
 #include "audio/decoders/wave.h"
 #include "audio/mixer.h"
@@ -822,6 +825,11 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 	const int x2d = (_renderer->width() - 640) / 2;
 	uint32 lastPress = 0; // a second press on a players row within 500 ms and 4 px selects
 	Common::Point lastPoint;
+	// A text edit takes every key as typed (Space is the inventory action otherwise)
+	Common::Keymap *keymap = _system->getEventManager()->getKeymapper()->getKeymap("x3d-default");
+	const bool keymapOff = keymap && keymap->isEnabled() && frame.hasEdit();
+	if (keymapOff)
+		keymap->setEnabled(false);
 	CursorMan.showMouse(true);
 	const uint32 start = _system->getMillis();
 	_menuView = -1;
@@ -918,6 +926,8 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 		_renderer->present();
 		_system->delayMillis(10);
 	}
+	if (keymapOff)
+		keymap->setEnabled(true);
 	_menuText = frame.text();
 	if (list)
 		list->selected = frame.selectedRow();
