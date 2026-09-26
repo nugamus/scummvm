@@ -41,6 +41,7 @@
 #include "engines/util.h"
 
 #include "graphics/cursorman.h"
+#include "graphics/hotspot_renderer.h"
 
 #include "gui/message.h"
 
@@ -541,6 +542,7 @@ void X3DEngine::frame(bool input) {
 	// Hover and click (interaction.md): clicks closer together than one frame + 10 ms are
 	// ignored; nothing counts beyond 4 scene units of depth
 	const bool interactive = input && !_suspended;
+	_freePlay = interactive;
 	if (_clickNow && (!interactive || now - _lastClick < 1000 / kStepsPerSecond + 10))
 		_clickNow = false;
 	_interaction->setCursorScale(_renderer->pixelScale());
@@ -598,6 +600,9 @@ void X3DEngine::frame(bool input) {
 		_unit->draw();
 	if (_gauge.ms && _gauge.visible)
 		drawGauge(_renderer, MIN(1.0f, (_logicMs - _gauge.start) / (float)_gauge.ms));
+	drawHotspots();
+	if (_showHotspots && !_hotspotCount && _system->isOverlayVisible())
+		_system->hideOverlay(); // the base class keeps its last markers when there are none
 	_renderer->present();
 	_system->delayMillis(1);
 
@@ -863,6 +868,85 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 	return result;
 }
 
+bool X3DEngine::aimAt(const Common::String &object, int target, Common::Point &point, bool &hit, uint tries) {
+	// The object's surface points with the render projection, nearest first
+	const float yaw = _camera.yaw, pitch = _camera.pitch;
+	const Math::Vector3d eye(_camera.position[0], _camera.position[1], _camera.position[2]);
+	const Math::Vector3d right(-sinf(yaw), -cosf(yaw), 0);
+	const Math::Vector3d up(cosf(pitch) * cosf(yaw), -cosf(pitch) * sinf(yaw), sinf(pitch));
+	const Math::Vector3d fwd(sinf(pitch) * cosf(yaw), -sinf(pitch) * sinf(yaw), -cosf(pitch));
+	const float ky = (4.0f / 3.0f) / tan(_camera.fov * M_PI / 360.0), kx = ky * _renderer->height() / _renderer->width();
+	const float cx = _renderer->width() / 2.0f, cy = _renderer->height() / 2.0f;
+	bool found = false;
+	hit = false;
+	for (const Math::Vector3d &p : _scene->surfacePoints(object, eye)) {
+		const Math::Vector3d d = p - eye;
+		const float z = Math::Vector3d::dotProduct(d, fwd);
+		if (z <= 0)
+			continue;
+		const Common::Point s(cx + cx * Math::Vector3d::dotProduct(d, right) * kx / z,
+		                      cy - cy * Math::Vector3d::dotProduct(d, up) * ky / z);
+		if (s.x < 0 || s.y < 0 || s.x >= _renderer->width() || s.y >= _renderer->height())
+			continue;
+		if (!found)
+			point = s;
+		found = true;
+		const Scene::Model *model;
+		uint o;
+		float depth;
+		if (target < 0 || !tries-- || !_scene->pick(_camera, _renderer->width(), _renderer->height(), s.x, s.y, model, o, depth))
+			continue;
+		Common::StringArray names;
+		for (int k = o; k >= 0; k = model->file.objects[k].parent)
+			names.push_back(model->file.objects[k].name);
+		if (_interaction->hotspotFor(names) == target) {
+			point = s;
+			hit = true;
+			break;
+		}
+	}
+	return found;
+}
+
+void X3DEngine::getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) {
+	// Each clickable hotspot once, at a point where a click reaches it; its INFOOBJ name
+	// (the data has no other)
+	_hotspotCount = 0;
+	if (!_freePlay || !_scene)
+		return;
+	_hotspotCamera = _camera;
+	_hotspotTime = _system->getMillis();
+	Common::Array<bool> done;
+	for (const Scene::Model *m : _scene->models()) {
+		if (m->hidden)
+			continue;
+		for (uint o = 0; o < m->file.objects.size(); o++) {
+			const Common::String &name = m->file.objects[o].name;
+			if (!name.contains('*') || m->hiddenObjects[o] || m->unpickable[o])
+				continue;
+			const int h = _interaction->hotspotFor(Common::StringArray(1, name));
+			if (h < 0)
+				continue;
+			if ((uint)h >= done.size())
+				done.resize(h + 1);
+			Common::Point s;
+			bool hit;
+			// ponytail: 8 picks per hotspot; a mostly covered object may not get its marker
+			if (done[h] || !_interaction->clickable(h) || !aimAt(name, h, s, hit, 8) || !hit)
+				continue;
+			done[h] = true;
+			const Common::String &label = _interaction->hotspotName(h);
+			hotspots.push_back(Graphics::HotspotInfo(_renderer->toWindow(s), label.substr(label.findFirstOf('*') + 1)));
+			_hotspotCount++;
+		}
+	}
+}
+
+bool X3DEngine::hotspotDirty() const {
+	// Again when the view moves, and a few times a second for animations and state
+	return memcmp(&_camera, &_hotspotCamera, sizeof(Camera)) || _system->getMillis() - _hotspotTime >= 250;
+}
+
 Common::String X3DEngine::command(const Common::String &line) {
 	if (!_scene)
 		return "no scene";
@@ -900,44 +984,11 @@ Common::String X3DEngine::command(const Common::String &line) {
 		if (a.size() >= 3) {
 			_mouse = Common::Point(atoi(a[1].c_str()), atoi(a[2].c_str()));
 		} else if (a.size() == 2) {
-			// The first of the object's surface points that the pick reaches, else the first
-			// on screen, with the render projection
-			const float yaw = _player.yaw, pitch = _player.pitch;
-			const Math::Vector3d right(-sinf(yaw), -cosf(yaw), 0);
-			const Math::Vector3d up(cosf(pitch) * cosf(yaw), -cosf(pitch) * sinf(yaw), sinf(pitch));
-			const Math::Vector3d fwd(sinf(pitch) * cosf(yaw), -sinf(pitch) * sinf(yaw), -cosf(pitch));
-			const float ky = (4.0f / 3.0f) / tan(_player.fov * M_PI / 360.0), kx = ky * _renderer->height() / _renderer->width();
-			const float cx = _renderer->width() / 2.0f, cy = _renderer->height() / 2.0f;
-			const int target = _interaction->hotspotFor(Common::StringArray(1, a[1]));
-			bool found = false, hit = false;
-			for (const Math::Vector3d &p : _scene->surfacePoints(a[1], _player.eye)) {
-				const Math::Vector3d d = p - _player.eye;
-				const float z = Math::Vector3d::dotProduct(d, fwd);
-				if (z <= 0)
-					continue;
-				const Common::Point s(cx + cx * Math::Vector3d::dotProduct(d, right) * kx / z,
-				                      cy - cy * Math::Vector3d::dotProduct(d, up) * ky / z);
-				if (s.x < 0 || s.y < 0 || s.x >= _renderer->width() || s.y >= _renderer->height())
-					continue;
-				if (!found)
-					_mouse = s;
-				found = true;
-				const Scene::Model *model;
-				uint object;
-				float depth;
-				if (target < 0 || !_scene->pick(_camera, _renderer->width(), _renderer->height(), s.x, s.y, model, object, depth))
-					continue;
-				Common::StringArray names;
-				for (int o = object; o >= 0; o = model->file.objects[o].parent)
-					names.push_back(model->file.objects[o].name);
-				if (_interaction->hotspotFor(names) == target) {
-					_mouse = s;
-					hit = true;
-					break;
-				}
-			}
-			if (!found)
+			Common::Point s;
+			bool hit;
+			if (!aimAt(a[1], _interaction->hotspotFor(Common::StringArray(1, a[1])), s, hit))
 				return "behind the camera";
+			_mouse = s;
 			if (!hit)
 				debugC(1, kDebugScript, "click: no visible point of %s", a[1].c_str());
 		}

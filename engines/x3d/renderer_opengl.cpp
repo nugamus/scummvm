@@ -75,6 +75,13 @@ public:
 		                     (p.y - _viewport.top) * _height / _viewport.height());
 	}
 
+	Common::Point toWindow(const Common::Point &p) const override {
+		if (_viewport.isEmpty())
+			return p;
+		return Common::Point(_viewport.left + p.x * _viewport.width() / _width,
+		                     _viewport.top + p.y * _viewport.height() / _height);
+	}
+
 	int pixelScale() const override {
 		return MAX(1, (_viewport.height() + 240) / 480);
 	}

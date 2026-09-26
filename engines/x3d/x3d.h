@@ -103,6 +103,13 @@ public:
 	Unit *createUnit(const Common::String &sceneName); // the scene's unit code, or nullptr
 	// The last view redrawn at thumbnail size (save thumbnails in 3D mode), or nullptr
 	Graphics::Surface *thumbnail(int width, int height);
+	// ScummVM's hotspot overlay (an enhancement): in free play, the hotspots a click would
+	// reach, at a point of each that the pick finds
+	void getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) override;
+	bool hotspotDirty() const override;
+	// The object's first surface point on screen that a pick takes to hotspot target (hit),
+	// else its first on screen; false when none is. tries: surface points picked at most
+	bool aimAt(const Common::String &object, int target, Common::Point &point, bool &hit, uint tries = 1000);
 
 	// Script primitives for unit code (movement.md, "Scripted camera moves"; u01.md).
 	// They run frames until done, like the original's blocking loops: animation, sound
@@ -244,6 +251,10 @@ private:
 	Common::StringArray _unitActions;
 	Common::String _clickedHotspot; // the hotspot of this frame's click, for Unit::afterClick
 	Camera _camera; // the last one drawn, for frames over a frozen scene
+	bool _freePlay = false; // the last frame took clicks
+	Camera _hotspotCamera; // the view of the last hotspot overlay
+	uint32 _hotspotTime = 0;
+	uint _hotspotCount = 0; // markers in it
 	Common::String _menuText; // the text edit of the last menu
 	bool _escapeNow = false, _escapeBlocked = false;
 	int _frameDepth = 0; // frames nested in blocking sequences: no saving or loading there

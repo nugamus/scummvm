@@ -91,6 +91,8 @@ public:
 	const Common::String &hotspotObject(const Common::String &hotspot) const; // "U01_07" -> "*U01_07"
 	Common::StringArray hotspotNames() const;
 	const Common::String &hotspotName(int index) const { return _hotspots[index].name; }
+	// A click on it would do something: an action cursor, or a runnable action (E-0251)
+	bool clickable(int index) const;
 
 	bool actionsEnabled = true;
 

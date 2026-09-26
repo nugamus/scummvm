@@ -390,6 +390,19 @@ bool Interaction::runnable(const Action &a, uint32 trigger) const {
 	       (trigger != 7 || a.item.equalsIgnoreCase(_heldItem));
 }
 
+bool Interaction::clickable(int index) const {
+	if (!actionsEnabled)
+		return false;
+	const Hotspot &h = _hotspots[index];
+	if (h.cursor)
+		return true;
+	const uint32 trigger = _heldItem.empty() ? 8 : 7;
+	for (const Action &a : _actions)
+		if (a.hotspotType == h.type && findHotspot(a.hotspot) == index && runnable(a, trigger))
+			return true;
+	return false;
+}
+
 void Interaction::click(int hotspot, Common::StringArray &unitActions) {
 	if (hotspot < 0 || !actionsEnabled)
 		return;
