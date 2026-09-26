@@ -61,7 +61,8 @@ Vector3d Player::slide(const Vector3d &from, const Vector3d &velocity, const Col
 bool Player::ground(const Collision &collision) {
 	float t;
 	groundObject.clear(); // nothing below: no ground object (U07's water check)
-	if (!collision.cast(eye, eye - Vector3d(0, 0, 10000), t, &groundObject))
+	groundModel = nullptr;
+	if (!collision.cast(eye, eye - Vector3d(0, 0, 10000), t, &groundObject, &groundModel, &groundIndex))
 		return false;
 	const float g = eye.z() - 10000 * t;
 	if (eye.z() - g <= 1.3f * _eyeHeight) {
@@ -177,7 +178,15 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 void Player::probeGround(const Collision &collision) {
 	float t;
 	groundObject.clear();
-	collision.cast(eye, eye - Vector3d(0, 0, 10000), t, &groundObject);
+	groundModel = nullptr;
+	collision.cast(eye, eye - Vector3d(0, 0, 10000), t, &groundObject, &groundModel, &groundIndex);
+}
+
+bool Player::standsOn(Scene &scene, const Common::String &name) const {
+	// The object the name finds, not any object of that name (u01.md, E-0083)
+	Scene::Model *m;
+	uint o;
+	return groundModel && scene.findObject(name, m, o) && m == groundModel && o == groundIndex;
 }
 
 } // End of namespace X3D

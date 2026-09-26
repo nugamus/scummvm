@@ -208,7 +208,8 @@ Vector3d Collision::resolveSphere(Vector3d c, float r) const {
 	return c;
 }
 
-bool Collision::cast(const Vector3d &from, const Vector3d &to, float &t, Common::String *hitName) const {
+bool Collision::cast(const Vector3d &from, const Vector3d &to, float &t, Common::String *hitName,
+                     const Scene::Model **hitModel, uint *hitObject) const {
 	bool hit = false;
 	t = 1;
 	for (const Object &o : _objects) {
@@ -232,6 +233,10 @@ bool Collision::cast(const Vector3d &from, const Vector3d &to, float &t, Common:
 			hit = true;
 			if (hitName)
 				*hitName = o.model->file.objects[o.object].name;
+			if (hitModel)
+				*hitModel = o.model;
+			if (hitObject)
+				*hitObject = o.object;
 		}
 	}
 	return hit;

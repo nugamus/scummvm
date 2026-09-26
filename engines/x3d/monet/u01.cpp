@@ -334,23 +334,11 @@ void U01::throwSwitch() {
 	_vm->runFor(0);
 }
 
-// The ground object is the train or one of its parts
-bool U01::onTrain(const Common::String &ground) {
-	Scene::Model *m;
-	uint o;
-	if (ground.empty() || !_vm->scene()->findObject(ground, m, o))
-		return false;
-	for (int a = o; a >= 0; a = m->file.objects[a].parent)
-		if (m->file.objects[a].name.equalsIgnoreCase("*U01_20"))
-			return true;
-	return false;
-}
-
 bool U01::input(float dt) {
 	// The input hook: riding the train (u01.md, E-0083)
 	Player &player = _vm->player();
 	Collision &collision = *_vm->collision();
-	_onTrain = onTrain(player.groundObject);
+	_onTrain = player.standsOn(*_vm->scene(), "*U01_20");
 	if (!_onTrain) {
 		player.collide = true;
 		return false;
@@ -365,7 +353,7 @@ bool U01::input(float dt) {
 	player.tick(dt, _vm->keys(), collision);
 	if (!_vm->keys().up)
 		_vm->sound()->stopGroup(Sound::kEffects);
-	if (!onTrain(player.groundObject))
+	if (!player.standsOn(*_vm->scene(), "*U01_20"))
 		player.collide = true;
 	return true;
 }

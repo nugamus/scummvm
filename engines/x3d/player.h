@@ -26,6 +26,8 @@
 
 #include "math/vector3d.h"
 
+#include "x3d/scene.h"
+
 namespace Common {
 class Serializer;
 }
@@ -59,6 +61,10 @@ public:
 	float eyeHeight() const { return _eyeHeight; }
 	bool collide = true;           // collision and ground snapping (U01's train turns it off)
 	Common::String groundObject;   // name of the object the last ground probe hit
+	const Scene::Model *groundModel = nullptr; // and the object itself
+	uint groundIndex = 0;
+	// The ground object is the object the scene finds by this name
+	bool standsOn(Scene &scene, const Common::String &name) const;
 
 	// The downward probe alone: updates groundObject, not the position
 	void probeGround(const Collision &collision);
