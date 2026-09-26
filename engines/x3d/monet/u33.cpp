@@ -151,7 +151,7 @@ void U33::afterFrame() {
 	if (interaction->exhausted(5) && !interaction->exhausted(6)) {
 		if (!_timer)
 			_timer = _vm->logicMs();
-		if (_vm->logicMs() > _timer + 25000 && !voice) {
+		if (_vm->logicMs() - _timer > 25000 && !voice) {
 			run(6); // the projectionist's nag
 			_timer = 0;
 		}
@@ -162,7 +162,7 @@ void U33::afterFrame() {
 		// The shared clock is not reset here: the nag's old start may still stand (E-0422)
 		if (!_timer)
 			_timer = _vm->logicMs();
-		if (_vm->logicMs() > _timer + 7000)
+		if (_vm->logicMs() - _timer > 7000)
 			run(63);
 	}
 	if (interaction->exhausted(62) && interaction->exhausted(63) && !interaction->exhausted(64) && !voice)
@@ -475,6 +475,15 @@ void U33::afterStep() {
 	const Vector3d d = at("*guidon") - at("*selle");
 	player.yaw = atan2f(-d.y(), d.x());
 	player.pitch = kHalfPi;
+}
+
+void U33::syncState(Common::Serializer &s) {
+	// The original saves no chunk for this unit (save.md), so its clock restarted on every
+	// load; kept here as the time since it started (save version 5)
+	uint32 since = _timer ? _vm->logicMs() - _timer : 0;
+	s.syncAsUint32LE(since, 5);
+	if (s.isLoading())
+		_timer = since ? _vm->logicMs() - since : 0;
 }
 
 bool U33::handle(const Common::String &action) {

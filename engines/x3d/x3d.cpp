@@ -171,7 +171,7 @@ void X3DEngine::actionToKey(Common::Event &e) {
 	e.type = down ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
 }
 
-static const uint32 kSaveVersion = 4; // 2: numbered clip slots; 3: the scene gauge; 4: U01 on it
+static const uint32 kSaveVersion = 5; // 2: numbered clip slots; 3: the scene gauge; 4: U01 on it; 5: U05/U33 clocks
 
 bool X3DEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 	// Only between the unit's sequences: a save inside one could not replay its end. Not

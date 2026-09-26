@@ -41,6 +41,7 @@ public:
 	void start(bool newGame, bool video) override;
 	bool handle(const Common::String &action) override;
 	void afterFrame() override;
+	void syncState(Common::Serializer &s) override; // the clock (not in the original)
 
 private:
 	void run(uint32 id);
