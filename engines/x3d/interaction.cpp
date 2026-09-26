@@ -28,6 +28,7 @@
 #include "common/textconsole.h"
 
 #include "graphics/cursorman.h"
+#include "graphics/wincursor.h"
 #include "graphics/surface.h"
 
 #include "image/bmp.h"
@@ -70,7 +71,11 @@ Interaction::Interaction(Scene &scene, Sound &sound, Talk &talk) : _scene(scene)
 	// under INSTALL/02_PR/ on the CD
 	Common::PEResources exe;
 	if (!exe.loadFromEXE("MissionMonet.exe") && !exe.loadFromEXE("INSTALL/02_PR/MissionMonet.exe")) {
-		warning("MissionMonet.exe not found: no game cursors");
+		// Windows' arrow instead (the engine told the player at start)
+		Graphics::Cursor *arrow = Graphics::makeDefaultWinCursor();
+		CursorMan.replaceCursor(arrow);
+		delete arrow;
+		CursorMan.showMouse(true);
 		return;
 	}
 	for (int i = 0; i < ARRAYSIZE(kCursorNames); i++) {

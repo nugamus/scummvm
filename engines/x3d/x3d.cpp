@@ -28,6 +28,7 @@
 #include "common/events.h"
 #include "common/file.h"
 #include "common/system.h"
+#include "common/translation.h"
 
 #include "backends/keymapper/keymap.h"
 #include "backends/keymapper/keymapper.h"
@@ -40,6 +41,8 @@
 #include "engines/util.h"
 
 #include "graphics/cursorman.h"
+
+#include "gui/message.h"
 
 #include "image/bmp.h"
 
@@ -95,6 +98,13 @@ Common::Error X3DEngine::run() {
 		wait(3000);
 		showBitmap("2dbit/Intro2.bmp");
 		wait(2000);
+	}
+
+	// The cursors are in the game's EXE, which a copy of Data/ alone lacks
+	if (!Common::File::exists("MissionMonet.exe") && !Common::File::exists("INSTALL/02_PR/MissionMonet.exe")) {
+		GUI::MessageDialog dialog(_("MissionMonet.exe was not found, so the game's own mouse cursors are missing. "
+		                            "Copy the CD's INSTALL folder (or INSTALL/02_PR/MissionMonet.exe) next to the Data folder."));
+		dialog.runModal();
 	}
 
 	// U00 shows the players screen and runs Monet's tutorial; the Option menu's New game
