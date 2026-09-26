@@ -168,7 +168,19 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 			eye += velocity;
 			return false;
 		}
-		eye = slide(eye, velocity, collision);
+		Vector3d next = slide(eye, velocity, collision);
+		// Held at an opening narrower than the sphere: slide once more with the original's
+		// longest step (its 8 fps floor, at most r/2 so no flat face is crossed), and take it
+		// when that gets at least a step further (movement.md, Narrow openings)
+		const Vector3d dir = velocity * (1.0f / velocity.getMagnitude());
+		const float progress = Vector3d::dotProduct(next - eye, dir);
+		if (progress < 0.1f * velocity.getMagnitude()) {
+			const float longStep = MIN(velocity.getMagnitude() / (8 * dt), _radius / 2);
+			const Vector3d far = slide(eye, dir * longStep, collision);
+			if (Vector3d::dotProduct(far - eye, dir) >= progress + velocity.getMagnitude())
+				next = far;
+		}
+		eye = next;
 		if (ground(collision))
 			_fallVelocity = velocity;
 	}
