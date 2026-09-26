@@ -22,6 +22,7 @@
 #ifndef RING_RING_H
 #define RING_RING_H
 
+#include "common/array.h"
 #include "common/ptr.h"
 #include "common/rect.h"
 #include "common/str.h"
@@ -96,6 +97,8 @@ private:
 	void track(int x, int y);
 	/** `MouseLeftEvent` (spec/cursor.md). */
 	void click(int x, int y);
+	/** A key (0x40b060): clicks the hot spot that has it (spec/events.md, "Keys"). */
+	void key(int code);
 
 	const ADGameDescription *_gameDescription;
 	Graphics::ManagedSurface _screen;
@@ -110,6 +113,7 @@ private:
 	Common::Point _mouse;
 	bool _clicked = false; ///< a left button press at _clickPos not handled yet
 	Common::Point _clickPos;
+	Common::Array<int> _keys; ///< key codes not handled yet
 	Common::String _languageFolder;
 	bool _escapeDown = false;
 };
