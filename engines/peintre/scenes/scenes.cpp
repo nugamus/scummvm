@@ -84,6 +84,8 @@ public:
 private:
 	/** Logs where each table object shows on screen: the hit pixel nearest its centre. */
 	void listObjects(World &w) {
+		const int c = w.pickAt(320, 240);
+		debugC(2, kDebugScript, "Centre node %s", c >= 0 ? w.scene3D().nodes[c].name.c_str() : "none");
 		for (const SceneObject &o : w.objects) {
 			if (o.node < 0)
 				continue;
