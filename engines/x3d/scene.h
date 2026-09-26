@@ -159,6 +159,7 @@ public:
 	// The centres of the object's faces, nearest to eye first, then its centre: points to
 	// aim at, for thin or partly covered objects
 	Common::Array<Math::Vector3d> surfacePoints(const Common::String &name, const Math::Vector3d &eye) const;
+	Common::Array<Math::Vector3d> surfacePoints(const Model *m, uint o, const Math::Vector3d &eye) const;
 	// An object by name in X3D's lookup order (newest file first), or false
 	bool findObject(const Common::String &name, Model *&model, uint &object) const;
 	void renameObject(const Common::String &from, const Common::String &to);
