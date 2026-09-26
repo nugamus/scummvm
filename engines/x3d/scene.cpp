@@ -1443,11 +1443,23 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 					// ponytail: faces crossing the near plane are skipped, not clipped
 					if (!usable)
 						continue;
-					const float *v0 = &cam3[f.indices[0] * 3], *v1 = &cam3[f.indices[1] * 3], *v2 = &cam3[f.indices[2] * 3];
-					const float e1[3] = { v0[0] - v1[0], v0[1] - v1[1], v0[2] - v1[2] };
-					const float e2[3] = { v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2] };
-					float nrm[3] = { e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] };
-					if (nrm[0] * v0[0] + nrm[1] * v0[1] + nrm[2] * v0[2] >= -0.01f)
+					// The any-corner test (E-0607): corners k = 1..n-1, then 0, with
+					// n_k = (v[k-1] - v[k]) x (v[k+1] - v[k]); front at the first k where
+					// n_k . v[k-1] < -0.01 (collinear corners give 0 and are passed over)
+					float nrm[3] = { 0, 0, 0 };
+					const float *v0 = nullptr;
+					for (uint c = 1; c <= n && !v0; c++) {
+						const uint k = c % n;
+						const float *pa = &cam3[f.indices[(k + n - 1) % n] * 3], *pb = &cam3[f.indices[k] * 3], *pc = &cam3[f.indices[(k + 1) % n] * 3];
+						const float e1[3] = { pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2] };
+						const float e2[3] = { pc[0] - pb[0], pc[1] - pb[1], pc[2] - pb[2] };
+						const float nk[3] = { e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] };
+						if (nk[0] * pa[0] + nk[1] * pa[1] + nk[2] * pa[2] < -0.01f) {
+							memcpy(nrm, nk, sizeof(nrm));
+							v0 = pa;
+						}
+					}
+					if (!v0)
 						continue; // back face
 
 					bool inside = true;

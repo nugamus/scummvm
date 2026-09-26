@@ -43,7 +43,7 @@ static Graphics::Surface *bitmap(const Common::String &name) {
 
 Frame::~Frame() {
 	for (View &v : _views) {
-		for (Graphics::Surface *s : { v.bitmap, v.hover, v.knob }) {
+		for (Graphics::Surface *s : { v.bitmap, v.hover, v.knob, v.scrollBar, v.scrollThumb, v.caption }) {
 			if (s) {
 				s->free();
 				delete s;
@@ -83,7 +83,11 @@ bool Frame::load(const Common::String &name) {
 			if (v.bitmap && !v.h)
 				v.h = v.bitmap->h + v.bitmapDy;
 		} else if (v.tag == "RCS#" || v.tag == "AOL#" || v.tag == "VAS#" || v.tag == "cSU#") {
-			f.skip(108); // the scroll bar's bitmaps (Q-0061)
+			// The scroll bar: arrows-and-track bitmap, thumb (fra.ksy scroll, E-0600)
+			v.scrollBar = bitmap(f.readString(0, 32));
+			f.skip(8);
+			v.scrollThumb = bitmap(f.readString(0, 32));
+			f.skip(36);
 			v.list = v.tag != "RCS#";
 		} else if (v.tag == "loV#" || v.tag == "BoV#" || v.tag == "AoV#") {
 			v.slider = true;
@@ -109,15 +113,17 @@ bool Frame::load(const Common::String &name) {
 				v.command = f.readString(0, 32);
 				break;
 			case MKTAG('@', 'H', 'I', 'L'): // LIH@
-			case MKTAG('@', 'H', 'I', 'G'): { // GIH@ starts disabled
+			case MKTAG('@', 'H', 'I', 'G'): { // GIH@: a caption at absolute (dx, dy) (E-0603)
 				Graphics::Surface *s = bitmap(f.readString(0, 32));
-				v.hoverDx = f.readSint32LE();
-				v.hoverDy = f.readSint32LE();
-				if (tag == MKTAG('@', 'H', 'I', 'L'))
+				const int dx = f.readSint32LE(), dy = f.readSint32LE();
+				if (tag == MKTAG('@', 'H', 'I', 'L')) {
 					v.hover = s;
-				else if (s) {
-					s->free();
-					delete s;
+					v.hoverDx = dx;
+					v.hoverDy = dy;
+				} else {
+					v.caption = s;
+					v.captionX = dx;
+					v.captionY = dy;
 				}
 				break;
 			}
@@ -230,6 +236,8 @@ void Frame::setSliderValue(int id, int value) {
 }
 
 bool Frame::press(const Common::Point &p) {
+	if (pressScroll(p))
+		return true;
 	// A margin steps by 5, the knob starts a drag, the rest of the track does nothing
 	for (uint i = 0; i < _views.size(); i++) {
 		View &v = _views[i];
@@ -248,6 +256,16 @@ bool Frame::press(const Common::Point &p) {
 }
 
 void Frame::drag(const Common::Point &p) {
+	const int l = listView();
+	if (_scrollDrag && l >= 0 && scrollMax() > 0) {
+		const View &v = _views[l];
+		const int d = p.y - v.y - 33, len = v.h - 66, max = scrollMax();
+		const int step = MAX(1, len / max);
+		int s = d / step;
+		if (d % step > step / 2)
+			s++;
+		_scroll = CLIP(s, 0, max);
+	}
 	if (_dragging < 0)
 		return;
 	View &v = _views[_dragging];
@@ -272,6 +290,12 @@ int Frame::listView() const {
 void Frame::setList(const Common::Array<Common::String> &rows, int selected) {
 	_rows = rows;
 	_selected = selected;
+	_scroll = CLIP(selected, 0, scrollMax()); // the list scrolls to the selected row
+}
+
+int Frame::scrollMax() const {
+	const int l = listView();
+	return l < 0 ? 0 : MAX(0, (int)_rows.size() - _views[l].h / 32);
 }
 
 int Frame::listRowAt(const Common::Point &p) const {
@@ -279,11 +303,35 @@ int Frame::listRowAt(const Common::Point &p) const {
 	if (l < 0)
 		return -1;
 	const View &v = _views[l];
-	if (!Common::Rect(v.x, v.y, v.x + v.w - 38, v.y + v.h).contains(p))
+	const int bar = v.scrollBar ? v.scrollBar->w : 38;
+	if (!Common::Rect(v.x, v.y, v.x + v.w - bar, v.y + v.h).contains(p))
 		return -1;
-	// ponytail: no scrolling (the scroll bar is Q-0061); rows beyond the view are not shown
-	const int row = (p.y - v.y) / 32;
+	const int row = (p.y - v.y) / 32 + _scroll;
 	return row < (int)_rows.size() ? row : -1;
+}
+
+bool Frame::pressScroll(const Common::Point &p) {
+	// The bar column: 33 px arrows at both ends, the thumb drags, the track pages (E-0600)
+	const int l = listView();
+	if (l < 0 || !_views[l].scrollBar || scrollMax() <= 0)
+		return false;
+	const View &v = _views[l];
+	const int right = v.x + v.w, left = right - v.scrollBar->w;
+	if (p.x < left || p.x >= right || p.y < v.y || p.y >= v.y + v.h)
+		return false;
+	const int max = scrollMax(), page = v.h / 32;
+	const float f = (v.h - 66) / (float)max;
+	const int thumb = (int)(v.y + 33 + _scroll * f);
+	const int half = v.scrollThumb ? v.scrollThumb->h / 2 : 7;
+	if (p.y < v.y + 33)
+		_scroll = MAX(0, _scroll - 1);
+	else if (p.y >= v.y + v.h - 33)
+		_scroll = MIN(max, _scroll + 1);
+	else if (ABS(p.y - thumb) <= half)
+		_scrollDrag = true;
+	else
+		_scroll = CLIP(_scroll + (p.y < thumb ? -page : page), 0, max);
+	return true;
 }
 
 Common::String Frame::text() const {
@@ -322,13 +370,25 @@ void Frame::draw(Renderer &r, int xOffset, int hovered) {
 			Graphics::Surface s;
 			s.create(v.w, v.h, Graphics::PixelFormat::createFormatRGBA32());
 			s.fillRect(Common::Rect(v.w, v.h), s.format.ARGBToColor(255, 255, 255, 255));
-			for (int row = 0; row < (int)_rows.size() && (row + 1) * 32 <= v.h; row++) {
+			for (int shown = 0; shown + _scroll < (int)_rows.size() && (shown + 1) * 32 <= v.h; shown++) {
+				const int row = shown + _scroll;
 				const uint32 color = row == _selected ? s.format.ARGBToColor(255, 247, 196, 90) : s.format.ARGBToColor(255, 135, 186, 235);
-				font->drawString(&s, _rows[row], 0, row * 32 + (32 - font->getFontHeight()) / 2, v.w - 38, color, Graphics::kTextAlignCenter);
+				font->drawString(&s, _rows[row], 0, shown * 32 + (32 - font->getFontHeight()) / 2, v.w - 38, color, Graphics::kTextAlignCenter);
 			}
 			r.drawImage(s, xOffset + v.x, v.y, true);
 			s.free();
+			const int max = scrollMax();
+			if (v.scrollBar && max > 0) {
+				const int bx = xOffset + v.x + v.w - v.scrollBar->w;
+				r.drawImage(*v.scrollBar, bx, v.y, false);
+				if (v.scrollThumb) {
+					const float f = (v.h - 66) / (float)max;
+					r.drawImage(*v.scrollThumb, bx, (int)(v.y + 33 + _scroll * f) - v.scrollThumb->h / 2, false);
+				}
+			}
 		}
+		if ((int)i == hovered && v.caption)
+			r.drawImage(*v.caption, xOffset + v.captionX, v.captionY, false);
 	}
 }
 

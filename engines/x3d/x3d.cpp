@@ -827,7 +827,11 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 					result = "escape";
 				else if (e.kbd.keycode == Common::KEYCODE_RETURN || e.kbd.keycode == Common::KEYCODE_KP_ENTER)
 					result = "enter";
-				else if (!frame.hasEdit())
+				else if (e.kbd.keycode == Common::KEYCODE_KP_PLUS || e.kbd.keycode == Common::KEYCODE_KP_MINUS) {
+					// Every sound group +-10 while a frame is open (E-0604)
+					for (int g = 1; g <= 6; g++)
+						_sound->setGroupVolume(g, _sound->groupVolume(g) + (e.kbd.keycode == Common::KEYCODE_KP_PLUS ? 10 : -10));
+				} else if (!frame.hasEdit())
 					result = "key";
 				else if (e.kbd.keycode == Common::KEYCODE_BACKSPACE)
 					frame.backspace();
