@@ -25,6 +25,7 @@
 
 #include "graphics/font.h"
 #include "graphics/fontman.h"
+#include "graphics/fonts/ttf.h"
 #include "graphics/surface.h"
 
 #include "x3d/frame.h"
@@ -42,12 +43,19 @@ static Graphics::Surface *bitmap(const Common::String &name) {
 	return s;
 }
 
-// The original draws edits and lists with GDI Arial 12 pt (ui.md, Text): a sans-serif here
-static const Graphics::Font *textFont() {
+// The original draws edits and lists with GDI Arial 12 pt at 96 dpi, 16 px characters
+// (ui.md, Text): Liberation Sans has Arial's metrics; the GUI font without FreeType
+const Graphics::Font *Frame::textFont() const {
+#ifdef USE_FREETYPE2
+	if (!_font)
+		_font.reset(Graphics::loadTTFFontFromArchive("LiberationSans-Regular.ttf", 12, Graphics::kTTFSizeModeCharacter, 96, 96));
+	if (_font)
+		return _font.get();
+#endif
 	return FontMan.getFontByUsage(Graphics::FontManager::kBigGUIFont);
 }
 
-static int textWidth(const Common::String &text, int chars) {
+int Frame::textWidth(const Common::String &text, int chars) const {
 	return textFont()->getStringWidth(Common::String(text.c_str(), chars));
 }
 
