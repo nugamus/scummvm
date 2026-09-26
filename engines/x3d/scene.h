@@ -144,6 +144,8 @@ public:
 	// owner: prefer the face object below the object of that name (two talkers may share
 	// a face name, U05's $$$DUMMY.*visage)
 	int addFaceClip(const Common::String &faceObject, const Common::String &path, const Common::String &owner = "");
+	// The global position of the face object addFaceClip binds to (sound.md, Say)
+	Math::Vector3d facePosition(const Common::String &faceObject, const Common::String &owner) const;
 	void setNode(int node, bool enabled, bool running);
 	void setNodeFrame(int node, float frame);
 	void setNodeFps(int node, float fps);
@@ -248,6 +250,8 @@ private:
 	void addNode(const A3DFile *file, uint animation, Model *m, uint object, float fps);
 	void animate(const A3DFile &file, uint animation, Model &m, uint object, float frame);
 	void pose(Model &m); // world vertices and bounds from the live transforms
+	// addFaceClip's face lookup: newest file first, the one below owner preferred
+	bool findFace(const Common::String &faceObject, const Common::String &owner, Model *&model, uint &object) const;
 	void attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold);
 	void drawObject(const Model &m, uint object);
 
