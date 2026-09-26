@@ -377,6 +377,7 @@ void X3DEngine::logicStep(bool input) {
 		const bool handled = _unit && _unit->input(stepMs / 1000.0f);
 		if (!handled && _player.tick(stepMs / 1000.0f, _keys, *_collision))
 			_sound->emit(Sound::kEffectsEmitter, "SAUT.WAV", _player.eye, false);
+		_keys.mouseTurn = false;
 	}
 	_logicMs += stepMs;
 	_inventory->tick(_logicMs);
@@ -410,9 +411,10 @@ void X3DEngine::frame(bool input) {
 	}
 
 	// Modern controls: the mouse is captured in free play, the bar closed; a locked view
-	// (no turning, as in close-ups) points with a free cursor. A click at a given point
-	// (dev_click, dev_commands) keeps its point.
-	captureMouse(_modern && (input || _walk) && !_suspended && !_inventory->shown() && _player.canTurn);
+	// (no turning, as in close-ups) points with a free cursor. Short sequences that are not
+	// suspended keep it captured but do not look. A click at a given point (dev_click,
+	// dev_commands) keeps its point.
+	captureMouse(_modern && !_suspended && !_inventory->shown() && _player.canTurn);
 	const bool pointClick = _clickNow;
 	const Common::Point centre(_renderer->width() / 2, _renderer->height() / 2);
 	bool looked = false;
@@ -422,11 +424,11 @@ void X3DEngine::frame(bool input) {
 		actionToKey(e);
 		if (e.type == Common::EVENT_MOUSEMOVE && _mouseCaptured) {
 			// Mouse look, within the original's pitch limits (movement.md, Keys); the
-			// last step turns too, so the drawn view follows at once
-			// Motion queued before the capture, or from its warp, does not turn
-			if (_system->getMillis() - _captureStart < 100)
-				continue;
-			if (_player.canTurn && (e.relMouse.x || e.relMouse.y)) {
+			// last step turns too, so the drawn view follows at once. Motion queued
+			// before the capture, or from its warp, does not turn.
+			looked |= e.relMouse.x || e.relMouse.y;
+			if ((input || _walk) && _player.canTurn && _system->getMillis() - _captureStart >= 100 &&
+			    (e.relMouse.x || e.relMouse.y)) {
 				const float dYaw = e.relMouse.x * _lookScale;
 				const float pitch = _player.pitch - (_invertY ? -1 : 1) * e.relMouse.y * _lookScale;
 				const float dPitch = CLIP(pitch, MIN(_player.pitch, 0.6f), MAX(_player.pitch, 2.7f)) - _player.pitch;
@@ -434,8 +436,8 @@ void X3DEngine::frame(bool input) {
 				_previous.yaw += dYaw;
 				_player.pitch += dPitch;
 				_previous.pitch += dPitch;
+				_keys.mouseTurn = true;
 			}
-			looked |= e.relMouse.x || e.relMouse.y;
 			continue;
 		}
 		if (e.type == Common::EVENT_MOUSEMOVE) {
