@@ -21,6 +21,9 @@
 
 #include "common/debug.h"
 
+#include "graphics/font.h"
+#include "graphics/managed_surface.h"
+
 #include "ring/detection.h"
 #include "ring/resources.h"
 #include "ring/world.h"
@@ -121,6 +124,27 @@ void World::apply(int zone, const SetupCall &c) {
 		p->images.insert_at(i, img);
 		break;
 	}
+	case kObjPreAddTxtToPuz: {
+		Puzzle *p = puzzle(a[2]);
+		Object *o = object(a[0]);
+		if (!p || !o || (uint)a[1] >= o->presentations.size())
+			break;
+		Common::SharedPtr<PuzzleText> t(new PuzzleText());
+		t->object = a[0];
+		t->presentation = a[1];
+		t->text = str(3);
+		t->x = a[4];
+		t->y = a[5];
+		t->font = a[6];
+		for (int i = 0; i < 3; i++) {
+			t->color[i] = (byte)a[7 + i];
+			t->background[i] = (byte)a[10 + i];
+		}
+		t->opaque = !(a[10] == -1 && a[11] == -1 && a[12] == -1);
+		o->presentations[a[1]].texts.push_back(t);
+		p->texts.push_back(t);
+		break;
+	}
 	case kObjPreSho:
 		showPresentation(a[0], c.argc > 1 ? a[1] : -1, true);
 		break;
@@ -128,8 +152,21 @@ void World::apply(int zone, const SetupCall &c) {
 		setAccessibilities(a[0], false, a[1], a[2]);
 		break;
 	default:
-		break; // ponytail: rotations, texts, animations, sounds and variables come with their specs
+		break; // ponytail: rotations, animations, sounds and variables come with their specs
 	}
+}
+
+bool World::shown(int id, int presentation) {
+	Object *o = object(id);
+	return o && (uint)presentation < o->presentations.size() && o->presentations[presentation].shown;
+}
+
+PuzzleText *World::text(int id, int presentation, int index) {
+	Object *o = object(id);
+	if (!o || (uint)presentation >= o->presentations.size())
+		return nullptr;
+	Presentation &pr = o->presentations[presentation];
+	return (uint)index < pr.texts.size() ? pr.texts[index].get() : nullptr;
 }
 
 void World::showPresentation(int id, int presentation, bool shown) {
@@ -166,14 +203,21 @@ void World::draw(Puzzle &p, Resources &res, Graphics::ManagedSurface &dst) {
 			p.bgImage->draw(dst, p.bgX, p.bgY, 1);
 	}
 	for (auto &img : p.images) {
-		Object *o = object(img->object);
-		if (!img->active || !o || (uint)img->presentation >= o->presentations.size() ||
-			!o->presentations[img->presentation].shown)
+		if (!img->active || !shown(img->object, img->presentation))
 			continue;
 		if (!img->image)
 			img->image.reset(res.loadImage(img->zone, img->file, true));
 		if (img->image)
 			img->image->draw(dst, img->x, img->y, img->drawType);
+	}
+	for (auto &t : p.texts) {
+		// Only font 1 exists (spec/text.md); GDI's TextOutA from the cell's top left.
+		if (t->font != 1 || !_font || t->text.empty() || !shown(t->object, t->presentation))
+			continue;
+		if (t->opaque)
+			dst.fillRect(Common::Rect(t->x, t->y, t->x + _font->getStringWidth(t->text), t->y + _font->getFontHeight()),
+						 dst.format.RGBToColor(t->background[0], t->background[1], t->background[2]));
+		_font->drawString(&dst, t->text, t->x, t->y, dst.w - t->x, dst.format.RGBToColor(t->color[0], t->color[1], t->color[2]));
 	}
 }
 

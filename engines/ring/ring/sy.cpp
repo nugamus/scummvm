@@ -79,10 +79,24 @@ static void closeQuestion(RingEngine *vm, int kind) {
 	vm->puzSetMod(1, 1, 0);
 }
 
-static void askQuestion(RingEngine *vm, int kind) {
+// The message's title and text as the dialogue's two lines (0x40e090, spec/text.md).
+static void setLines(RingEngine *vm, int object) {
+	World &w = vm->world();
+	const Common::String *lines[2] = { &vm->messageTitle(), &vm->messageText() };
+	for (int i = 0; i < 2; i++) {
+		if (PuzzleText *t = w.text(object, 0, i)) {
+			t->text = *lines[i];
+			t->x = 225;
+			t->y = i ? 213 : 193;
+		}
+	}
+}
+
+static void askQuestion(RingEngine *vm, int kind, const char *key) {
+	vm->message(key);
 	if (!vm->puzSetMod(1, 2, kObjQuestion))
 		return;
-	// ponytail: the message's two text lines need the font spec (spec/text.md, to come)
+	setLines(vm, kObjQuestion);
 	vm->world().showPresentation(kObjQuestion, 0, true);
 	vm->world().setAccessibilities(kObjQuestion, true, kind, kind + 1);
 }
@@ -90,7 +104,7 @@ static void askQuestion(RingEngine *vm, int kind) {
 void onClick(RingEngine *vm, int object, int value) {
 	switch (object) {
 	case kObjNewGame:
-		askQuestion(vm, 2); // "DoYouWantToStartNewGame"
+		askQuestion(vm, 2, "DoYouWantToStartNewGame");
 		break;
 	case kObjPreferences:
 	case kObjLoad:

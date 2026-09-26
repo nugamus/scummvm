@@ -30,6 +30,7 @@
 #include "ring/api.h"
 
 namespace Graphics {
+class Font;
 class ManagedSurface;
 }
 
@@ -54,8 +55,20 @@ struct Accessibility {
 	HotSpot hotSpot;
 };
 
+/** A text on a puzzle (`ObjPreAddTxtToPuz`, spec/text.md). */
+struct PuzzleText {
+	int object = 0, presentation = 0;
+	int x = 0, y = 0;
+	int font = 0;
+	byte color[3] = {};
+	bool opaque = false; ///< false when the background colour is -1, -1, -1
+	byte background[3] = {};
+	Common::String text;
+};
+
 struct Presentation {
 	bool shown = false;
+	Common::Array<Common::SharedPtr<PuzzleText> > texts;
 };
 
 /** A picture of a presentation on a puzzle (`ObjPreAddImgToPuz`, spec/drawing.md). */
@@ -79,6 +92,7 @@ struct Puzzle {
 	int mode = 1, modeObject = 0;                            ///< `PuzSetMod`
 	Common::Array<Common::SharedPtr<Accessibility> > accessibilities;
 	Common::Array<Common::SharedPtr<PuzzleImage> > images; ///< ascending priority
+	Common::Array<Common::SharedPtr<PuzzleText> > texts;
 };
 
 struct Object {
@@ -101,13 +115,19 @@ public:
 	Puzzle *puzzle(int id);
 	Object *object(int id);
 
+	/** Font 1 (spec/text.md); texts are not drawn without it. */
+	void setFont(const Graphics::Font *font) { _font = font; }
+
+	bool shown(int object, int presentation);
 	void showPresentation(int object, int presentation, bool shown);
+	/** `ObjPreSetTxtToPuz` / `ObjPreSetTxtCooToPuz`: the presentation's `index`-th text. */
+	PuzzleText *text(int object, int presentation, int index);
 	/** `ObjPreHidDeaPuz`: hides every presentation of the object and frees its pictures. */
 	void hideAndFree(int object);
 	/** `ObjSetAccOnOrOff` over all (from < 0) or `from`..`to` of the object's accessibilities. */
 	void setAccessibilities(int object, bool on, int from = -1, int to = -1);
 
-	/** Draws a puzzle: background with type 1, then its shown pictures (spec/drawing.md). */
+	/** Draws a puzzle: background with type 1, its shown pictures (spec/drawing.md), its texts (spec/text.md). */
 	void draw(Puzzle &p, Resources &res, Graphics::ManagedSurface &dst);
 
 	/**
@@ -121,6 +141,7 @@ private:
 
 	Common::Array<Common::SharedPtr<Puzzle> > _puzzles;
 	Common::Array<Common::SharedPtr<Object> > _objects;
+	const Graphics::Font *_font = nullptr;
 };
 
 } // End of namespace Ring
