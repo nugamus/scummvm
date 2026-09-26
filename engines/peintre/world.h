@@ -23,6 +23,7 @@
 #define PEINTRE_WORLD_H
 
 #include "common/array.h"
+#include "common/hashmap.h"
 #include "common/ptr.h"
 #include "common/str.h"
 
@@ -129,6 +130,8 @@ public:
 	void afterMovie();
 	/** After a zone or the option menu: back to the scene at the saved spot. */
 	void afterZone(int code);
+	/** Back from the option menu opened in 3D (0x42f515 sets 0x4e3120). */
+	void afterOptions() { localVar(0x4e3120) = 1; }
 
 	PeintreEngine *vm() { return _vm; }
 	int scene() const { return _scene; }
@@ -142,6 +145,11 @@ public:
 	/** A u32 of the saved 3D block, by its original address (0x4aba40..0x4abdab). */
 	uint32 &var(uint32 address);
 	byte &varByte(uint32 address);
+	/**
+	 * A u32 of the original outside the saved block (e.g. 0x4e3120, 0x4e30f4): kept for
+	 * the whole run, not saved, 0 until set.
+	 */
+	uint32 &localVar(uint32 address) { return _locals[address]; }
 	bool zoneSolved(int zone) { return var(0x4abb0c + 4 * zone) != 0; }
 	byte &sunflowers() { return varByte(0x4abbd4); }
 	bool sceneComplete(int scene);
@@ -261,6 +269,7 @@ private:
 	WorldExit _exit = kExitNone;
 	Common::String _ambience;
 	Common::Array<Common::String> _sounds;
+	Common::HashMap<uint32, uint32> _locals;
 };
 
 /** The scene code for a scene number and bundle (scenes/). */

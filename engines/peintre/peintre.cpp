@@ -190,9 +190,12 @@ void PeintreEngine::runWorld(int scene, int prevScene) {
 		case kExitMovie: {
 			const Common::String name = world.movieRequest();
 			_movies->play(name);
-			if (name.equalsIgnoreCase("cinefin")) {
-				// The end (boot.md "End of the game"): cinefin2, the credits, quit.
+			// After the end of the game (0x4aba5c) a movie's end leads to the credits
+			// (0x42fbd6): cinefin first plays cinefin2 (boot.md "End of the game"); the
+			// museum's `fin` (musee.md) goes straight there.
+			if (name.equalsIgnoreCase("cinefin"))
 				_movies->play("cinefin2");
+			if (name.equalsIgnoreCase("cinefin") || name.equalsIgnoreCase("fin")) {
 				runEndCredits();
 				return;
 			}
@@ -218,6 +221,7 @@ void PeintreEngine::runWorld(int scene, int prevScene) {
 			const int code = runOptionMenu(true);
 			if (code == -2)
 				return;
+			world.afterOptions();
 			if (code >= 0 && readGame(code / 100, code % 100)) {
 				const int again = enterZone(_state.currentZone());
 				if (again == -2)
