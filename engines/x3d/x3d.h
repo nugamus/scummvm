@@ -205,6 +205,7 @@ private:
 	uint32 _last = 0, _pending = 0, _logicMs = 0, _lastClick = 0, _frames = 0, _fpsStart = 0;
 	Common::Array<int> _devClicks;
 	Common::StringArray _devCommands; // "ms:command", from dev_commands
+	uint32 _devUp = 0, _devDown = 0, _devShift = 0; // console "press": held until these times (ms)
 	uint32 _sceneStart = 0, _devStart = 0;
 	bool _devParsed = false;
 	Common::String _nextScene, _sceneName;

@@ -25,7 +25,7 @@
 namespace X3D {
 
 Console::Console(X3DEngine *vm) : GUI::Debugger(), _vm(vm) {
-	static const char *const commands[] = { "where", "goto", "lookat", "click", "hotspots", "give", "hold", "bar" };
+	static const char *const commands[] = { "where", "goto", "lookat", "click", "hotspots", "give", "hold", "bar", "press", "probe", "objs", "node" };
 	for (const char *c : commands)
 		registerCmd(c, WRAP_METHOD(Console, cmd));
 }
