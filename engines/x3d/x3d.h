@@ -164,6 +164,7 @@ public:
 	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold, pos, act,
 	// save <slot>, load <slot>, savemenu, loadmenu, page <credits|settings|gallery|loupe p|painting>, exhaust <id>, view3d <painting>
 	Common::String command(const Common::String &line);
+	void queueCommand(const Common::String &line) { _devCommands.insert_at(0, "0:" + line); } // runs on the next frame
 
 	static constexpr float kKeep = 100.0f;
 	bool u02Warned = false; // U02's gauge warning, said once per process (u02.md)
