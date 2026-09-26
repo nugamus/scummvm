@@ -126,15 +126,17 @@ bool U07::input(float dt) {
 		_downWas = keys.down;
 		return false;
 	}
+	// Both tests compare the ground object's name, not its identity (E-0619)
+	bool handled = false;
 	if (!_plankTipped && player.groundObject.equalsIgnoreCase("Planch01")) {
-		tipPlank();
-		return true;
+		tipPlank(); // then the water test, in the same call
+		handled = true;
 	}
-	if (player.groundObject.empty() || player.groundObject.hasPrefix("*eau")) {
+	if (player.groundObject.empty() || player.groundObject.hasPrefixIgnoreCase("*eau")) {
 		fallInWater();
-		return true;
+		handled = true;
 	}
-	return false;
+	return handled;
 }
 
 void U07::switchAndDescent() {
