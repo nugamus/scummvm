@@ -22,11 +22,48 @@
 #ifndef PEINTRE_PEINTRE_H
 #define PEINTRE_PEINTRE_H
 
+#include "common/array.h"
+#include "common/keyboard.h"
+#include "common/rect.h"
 #include "common/scummsys.h"
+#include "common/str.h"
+
 #include "engines/advancedDetector.h"
 #include "engines/engine.h"
 
+#include "graphics/surface.h"
+
 namespace Peintre {
+
+class MoviePlayer;
+
+/** A player record (save.md "USERS.BIN"). */
+struct PlayerRecord {
+	Common::String name;
+	int32 volume = 0;     ///< DirectSound attenuation, 0 = full, -5000 = silent
+	uint32 viewSize = 0;  ///< 0..3 = 640x480, 512x384, 400x300, 320x240
+};
+
+const uint kMaxPlayers = 5;
+const uint kNumObjects = 35;
+const uint kNumZones = 25;
+const uint k3DBlockSize = 0x36C;
+const uint k2DBlockSize = 0x100;
+
+/** Everything a save holds (save.md): the 3D state block and the 2D block. */
+struct GameState {
+	byte block3D[k3DBlockSize];
+	uint32 zoneDone[kNumZones];
+	uint32 placed[kNumObjects];
+	uint32 counters[4];
+
+	GameState() { clear(); }
+	void clear();
+	/** The 35 object-held flags live in the 3D block at +0x40. */
+	uint32 held(uint object) const;
+	void setHeld(uint object, uint32 value);
+	byte currentZone() const { return block3D[0x3E]; }
+};
 
 class PeintreEngine : public Engine {
 public:
@@ -35,10 +72,56 @@ public:
 
 	Common::Error run() override;
 
+	// Screen: the original's 640x480 RGB565 page.
+	Graphics::Surface &screen() { return _screen; }
+	void present();
+
+	// Input, sampled once per tick (ui.md "Input").
+	void pollInput();
+	Common::Point mouse() const { return _mouse; }
+	bool buttonDown() const { return _button; }
+	/** True on the tick a key is released (the original's "fires"). */
+	bool keyFired(Common::KeyCode key) const;
+	/** Characters typed since the last poll. */
+	const Common::String &typed() const { return _typed; }
+	/** Waits until `ms` after the previous tick. */
+	void waitTick(uint32 ms);
+
+	// Players and saves (players.cpp, save.md).
+	Common::Array<PlayerRecord> &players() { return _players; }
+	uint currentPlayer() const { return _player; }
+	GameState &state() { return _state; }
+	void loadPlayers();
+	void savePlayers();
+	/** The integrity check: drops players without a resume file (save.md). */
+	void checkSessions();
+	void deletePlayerSaves(uint player);
+	bool writeGame(uint slot);
+	bool writeResume(uint32 in2d);
+	bool readGame(uint player, uint slot);
+	bool readResume(uint player, uint32 &in2d);
+	bool gameExists(uint player, uint slot) const;
+
+	MoviePlayer *movies() { return _movies; }
+
 private:
+	/** The player-name screen (accueil.cpp). Returns false when the player quits. */
+	bool runPlayerScreen(uint &player, bool &known);
 	void loadAllScenes();
 
 	const ADGameDescription *_gameDescription;
+	Graphics::Surface _screen;
+	MoviePlayer *_movies = nullptr;
+
+	Common::Point _mouse;
+	bool _button = false;
+	Common::Array<Common::KeyCode> _keysDown, _keysFired;
+	Common::String _typed;
+	uint32 _lastTick = 0;
+
+	Common::Array<PlayerRecord> _players;
+	uint _player = 0;
+	GameState _state;
 };
 
 } // End of namespace Peintre

@@ -29,6 +29,7 @@
 #include "graphics/pixelformat.h"
 
 #include "peintre/bfg.h"
+#include "peintre/gfx.h"
 #include "peintre/movie.h"
 #include "peintre/obj3d.h"
 #include "peintre/peintre.h"
@@ -41,28 +42,113 @@ PeintreEngine::PeintreEngine(OSystem *syst, const ADGameDescription *gameDesc)
 }
 
 PeintreEngine::~PeintreEngine() {
+	delete _movies;
+	_screen.free();
+}
+
+void PeintreEngine::present() {
+	_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, _screen.w, _screen.h);
+	_system->updateScreen();
+}
+
+void PeintreEngine::pollInput() {
+	_keysFired.clear();
+	_typed.clear();
+	Common::Event event;
+	while (_eventMan->pollEvent(event)) {
+		switch (event.type) {
+		case Common::EVENT_MOUSEMOVE:
+			_mouse = event.mouse;
+			break;
+		case Common::EVENT_LBUTTONDOWN:
+			_mouse = event.mouse;
+			_button = true;
+			break;
+		case Common::EVENT_LBUTTONUP:
+			_mouse = event.mouse;
+			_button = false;
+			break;
+		case Common::EVENT_KEYDOWN:
+			if (Common::find(_keysDown.begin(), _keysDown.end(), event.kbd.keycode) == _keysDown.end())
+				_keysDown.push_back(event.kbd.keycode);
+			if (event.kbd.keycode == Common::KEYCODE_BACKSPACE)
+				_typed += '\b';
+			else if (event.kbd.ascii >= 32 && event.kbd.ascii < 256)
+				_typed += (char)event.kbd.ascii;
+			break;
+		case Common::EVENT_KEYUP: {
+			// A key fires on the tick it is released (ui.md "Input").
+			Common::Array<Common::KeyCode>::iterator it = Common::find(_keysDown.begin(), _keysDown.end(), event.kbd.keycode);
+			if (it != _keysDown.end())
+				_keysDown.erase(it);
+			_keysFired.push_back(event.kbd.keycode);
+			break;
+		}
+		default:
+			break;
+		}
+	}
+}
+
+bool PeintreEngine::keyFired(Common::KeyCode key) const {
+	return Common::find(_keysFired.begin(), _keysFired.end(), key) != _keysFired.end();
+}
+
+void PeintreEngine::waitTick(uint32 ms) {
+	const uint32 now = _system->getMillis();
+	if (_lastTick && now < _lastTick + ms)
+		_system->delayMillis(_lastTick + ms - now);
+	_lastTick = _system->getMillis();
 }
 
 Common::Error PeintreEngine::run() {
-	// The original draws on a 640x480 16-bit surface (spec boot.md).
+	// The original draws on a 640x480 16-bit surface (boot.md step 5).
 	const Graphics::PixelFormat format(2, 5, 6, 5, 0, 11, 5, 0, 0);
 	initGraphics(640, 480, &format);
+	_screen.create(640, 480, format);
 
 	if (ConfMan.getBool("dev_load_all"))
 		loadAllScenes();
 
-	MoviePlayer movies(this);
-	if (!movies.loadTable())
+	_movies = new MoviePlayer(this);
+	if (!_movies->loadTable())
 		warning("Cannot read the movie table from mission.___");
-	if (ConfMan.hasKey("dev_movie"))
-		movies.play(ConfMan.get("dev_movie"));
+	if (ConfMan.hasKey("dev_movie")) {
+		_movies->play(ConfMan.get("dev_movie"));
+		return Common::kNoError;
+	}
 
-	while (!shouldQuit()) {
-		Common::Event event;
-		while (_eventMan->pollEvent(event)) {
+	// boot.md "Sequence": players, the player-name screen, resume state, loading, intro.
+	loadPlayers();
+	checkSessions();
+	bool known = false;
+	if (!runPlayerScreen(_player, known))
+		return Common::kNoError;
+	if (!known)
+		deletePlayerSaves(_player);
+	savePlayers();
+
+	uint32 in2d = 0;
+	_state.clear();
+	if (!known || !readResume(_player, in2d)) {
+		_state.clear();
+		in2d = 0;
+	}
+	if (!in2d) {
+		Graphics::Surface loading;
+		if (loadTga("loading", loading)) {
+			_screen.copyRectToSurface(loading, 0, 0, Common::Rect(MIN<int>(loading.w, 640), MIN<int>(loading.h, 480)));
+			loading.free();
+			present();
 		}
-		_system->updateScreen();
-		_system->delayMillis(10);
+	}
+	_movies->play("intro");
+
+	// Not specced into the engine yet: the 3D world and the 2D zones.
+	while (!shouldQuit()) {
+		pollInput();
+		present();
+		waitTick(40);
 	}
 	return Common::kNoError;
 }
