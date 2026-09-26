@@ -241,6 +241,9 @@ void Scene::pose(Model &m) {
 		}
 	}
 
+	for (uint32 &state : m.colorFrame)
+		state = 0; // lit colours follow the new pose
+
 	// Bounding spheres of what each object draws, for view culling
 	for (uint i = 0; i < objects.size(); i++) {
 		int owner = i;
@@ -363,9 +366,9 @@ void Scene::poseAll() {
 
 const Common::Array<byte> &Scene::lighting(const Model &m, uint owner) const {
 	Common::Array<byte> &out = m.colors[owner];
-	if (m.colorFrame[owner] == _frame && !out.empty())
+	if (m.colorFrame[owner] == _lightingState)
 		return out;
-	m.colorFrame[owner] = _frame;
+	m.colorFrame[owner] = _lightingState;
 
 	// D starts at the ambient, each light adds colour * multiplier * falloff * cos; the
 	// excess over 255 becomes S (lighting.md, Per-vertex colour)
@@ -439,6 +442,7 @@ void Scene::loadLights(const Common::String &path) {
 		}
 		_lights.push_back(l);
 	}
+	_lightingState++;
 }
 
 bool Scene::inView(const float *sphere) const {
@@ -1011,11 +1015,11 @@ void Scene::Playback::advance(float dt) {
 		if (backward ? frame <= lo : frame >= hi)
 			running = false;
 	} else if (frame > hi) {
-		frame = fmod(frame, hi) + lo;
+		frame = fmodf(frame, hi) + lo;
 	} else if (frame < lo) {
 		frame = hi - (lo - frame);
 	}
-	if (stopAt >= 0 && fabs(frame - stopAt) <= 2 * dt * fps) {
+	if (stopAt >= 0 && fabsf(frame - stopAt) <= 2 * dt * fps) {
 		frame = stopAt;
 		running = false;
 		stopAt = -1;
@@ -1152,7 +1156,7 @@ void Scene::draw(const Camera &cam, int width, int height) {
 	// outputs keep the 4:3 frame's vertical extent. The original's near/far are 0.1 and
 	// 1,000,000; TinyGL's depth buffer needs a tighter range.
 	// ponytail: fixed 1..20000 depth range, derive it from the scene bounds if a unit is larger
-	const float sy = (4.0f / 3.0f) / tan(cam.fov * M_PI / 360.0);
+	const float sy = (4.0f / 3.0f) / tanf(cam.fov * (float)M_PI / 360.0f);
 	const float sx = sy * height / width;
 	const float n = 1, f = 20000;
 	const float projection[16] = {
@@ -1184,7 +1188,10 @@ void Scene::draw(const Camera &cam, int width, int height) {
 		view[12 + k] = -(p[0] * view[k] + p[1] * view[4 + k] + p[2] * view[8 + k]);
 
 	_renderer->begin3D(projection, view);
-	_frame++;
+	if (memcmp(ambient, _litAmbient, 3)) {
+		memcpy(_litAmbient, ambient, 3);
+		_lightingState++;
+	}
 
 	for (int k = 0; k < 3; k++) {
 		_eye[k] = p[k];
@@ -1235,21 +1242,26 @@ void Scene::draw(const Camera &cam, int width, int height) {
 	}
 
 	// The held-back faces, farthest key first; equal keys: last queued first
-	Common::sort(_deferred.begin(), _deferred.end(), [](const Deferred &x, const Deferred &y) {
-		return x.key != y.key ? x.key > y.key : x.order > y.order;
+	_deferredOrder.resize(_deferredCount);
+	for (uint i = 0; i < _deferredCount; i++)
+		_deferredOrder[i] = &_deferred[i];
+	Common::sort(_deferredOrder.begin(), _deferredOrder.end(), [](const Deferred *x, const Deferred *y) {
+		return x->key != y->key ? x->key > y->key : x->order > y->order;
 	});
-	for (const Deferred &d : _deferred) {
-		_renderer->setBlend(d.additive ? Renderer::kAdditive : Renderer::kAlpha, d.keyed);
-		drawFace(d);
+	for (const Deferred *d : _deferredOrder) {
+		_renderer->setBlend(d->additive ? Renderer::kAdditive : Renderer::kAlpha, d->keyed);
+		drawFace(*d);
 	}
-	_deferred.clear();
+	_deferredCount = 0;
 	_renderer->setBlend(Renderer::kOpaque, true);
 }
 
 void Scene::faceCamera(const Model &m, uint object, Common::Array<float> &v) const {
 	// Welded or not, the object's own vertices turn about its own origin (E-0270)
 	const float *w = m.file.objects[object].world;
-	Common::Array<bool> done(v.size() / 3, false);
+	Common::Array<bool> &done = _faceDone;
+	done.resize(0);
+	done.resize(v.size() / 3, false);
 	for (const O3DFace &face : m.file.objects[object].faces)
 		for (uint32 index : face.indices) {
 			if (index * 3 + 2 >= v.size() || done[index])
@@ -1277,16 +1289,21 @@ void Scene::drawObject(const Model &m, uint object) {
 
 	// ponytail: only camera type 2 ($Z$, the only one in U01); types 1 and 3 fix the yaw at
 	// -pi/2 instead (E-0045, E-0058)
-	Common::Array<float> facing;
 	if (objects[object].cameraType == 2) {
-		facing = *vertices;
-		faceCamera(m, object, facing);
-		vertices = &facing;
+		_facingVertices.resize(vertices->size());
+		Common::copy(vertices->begin(), vertices->end(), _facingVertices.begin());
+		faceCamera(m, object, _facingVertices);
+		vertices = &_facingVertices;
 	}
 
 	for (const O3DFace &face : objects[object].faces) {
 		const O3DMaterial &mat = m.file.materials[face.material];
-		Deferred f;
+		// Held-back faces are built in place
+		const bool deferred = mat.transparency || mat.mode == 2;
+		if (deferred && _deferredCount == _deferred.size())
+			_deferred.push_back(Deferred());
+		Deferred opaque;
+		Deferred &f = deferred ? _deferred[_deferredCount++] : opaque;
 		f.tex = mat.textureMap.empty() ? 0 : texture(mat.textureMap);
 		f.clamp = !mat.wrap;
 		// The colour key cuts texels only in draw modes 1..3 (E-0481)
@@ -1326,10 +1343,9 @@ void Scene::drawObject(const Model &m, uint object) {
 			}
 			f.count++;
 		}
-		if (mat.transparency || f.additive) {
+		if (deferred) {
 			f.key = (int)farthest;
-			f.order = _deferred.size();
-			_deferred.push_back(f);
+			f.order = _deferredCount - 1;
 		} else {
 			_renderer->setBlend(Renderer::kOpaque, f.keyed);
 			drawFace(f);
@@ -1355,7 +1371,7 @@ void Scene::drawFace(const Deferred &f) {
 bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
                  const Model *&model, uint &object, float &depth) {
 	// The render projection and camera axes (no roll: picking ignores the head bob)
-	const float ky = (4.0f / 3.0f) / tan(cam.fov * M_PI / 360.0), kx = ky * height / width;
+	const float ky = (4.0f / 3.0f) / tanf(cam.fov * (float)M_PI / 360.0f), kx = ky * height / width;
 	const float cx = width / 2.0f, cy = height / 2.0f;
 	const float a = cam.yaw, e = cam.pitch;
 	const float right[3] = { -sinf(a), -cosf(a), 0 };
@@ -1387,7 +1403,7 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 				}
 			const Common::Array<O3DObject> &dobjects = drawn->file.objects;
 			// Camera-facing objects are picked as drawn (E-0270)
-			Common::Array<float> facing;
+			Common::Array<float> &facing = _facingVertices;
 			const Common::Array<float> *vp = &drawn->worldVertices[top];
 			for (uint o = top; o < dobjects.size(); o++) {
 				if (dobjects[o].cameraType != 2)
@@ -1398,7 +1414,8 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 				if (owner != (int)top || (o != top && !dobjects[o].welded))
 					continue;
 				if (vp != &facing) {
-					facing = *vp;
+					facing.resize(vp->size());
+					Common::copy(vp->begin(), vp->end(), facing.begin());
 					vp = &facing;
 				}
 				faceCamera(*drawn, o, facing);
@@ -1406,7 +1423,9 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 			const Common::Array<float> &v = *vp;
 
 			// Camera-space vertices, then projected
-			Common::Array<float> cam3(v.size()), screen(v.size() / 3 * 2);
+			Common::Array<float> &cam3 = _pickCamera, &screen = _pickScreen;
+			cam3.resize(v.size());
+			screen.resize(v.size() / 3 * 2);
 			for (uint j = 0; j < v.size(); j += 3) {
 				float d[3];
 				for (int k = 0; k < 3; k++)

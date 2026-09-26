@@ -122,7 +122,7 @@ static void tangents(const A3DTrack &t, uint i, float in[3], float out[3]) {
 	const float tension = key[0], continuity = key[1], bias = key[2];
 	const float h = (t.frames[q] - (float)t.frames[p]) / 2;
 	const float a = (t.frames[i] - (float)t.frames[p]) / h, b = (t.frames[q] - (float)t.frames[i]) / h;
-	const float c = fabs(continuity);
+	const float c = fabsf(continuity);
 	const float a2 = a + c - c * a, b2 = b + c - c * b, half = (1 - tension) / 2;
 	for (int k = 0; k < 3; k++) {
 		const float d0 = t.values[i * 3 + k] - t.values[p * 3 + k];

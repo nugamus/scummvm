@@ -108,8 +108,8 @@ public:
 		bool animated = false;
 		Common::Array<Common::Array<float> > worldNormals; // like worldVertices
 		bool lit = false; // reached by the scene's lights (light= after it in the script)
-		// Lit colours per vertex array, 6 bytes per vertex (D rgb, S rgb), and the frame
-		// they were computed for
+		// Lit colours per vertex array, 6 bytes per vertex (D rgb, S rgb), and the lighting
+		// state they were computed for (0: posed since)
 		mutable Common::Array<Common::Array<byte> > colors;
 		mutable Common::Array<uint32> colorFrame;
 		Common::Array<float> bounds; // per object: world bounding sphere x, y, z, radius (< 0: nothing drawn)
@@ -259,7 +259,9 @@ private:
 		int key;
 		uint order;
 	};
-	Common::Array<Deferred> _deferred;
+	Common::Array<Deferred> _deferred; // the first _deferredCount are this frame's; kept for reuse
+	uint _deferredCount = 0;
+	Common::Array<const Deferred *> _deferredOrder;
 	void drawFace(const Deferred &f);
 	const Common::Array<byte> &lighting(const Model &m, uint owner) const;
 	void loadLights(const Common::String &path);
@@ -272,7 +274,9 @@ private:
 		bool hidden, attenuate;
 	};
 	Common::Array<Light> _lights;
-	uint32 _frame = 0;
+	// Bumped when the ambient or the lights change; lit colours of another state are stale
+	uint32 _lightingState = 1;
+	byte _litAmbient[3] = { 255, 255, 255 };
 	bool inView(const float *sphere) const;
 	uint32 texture(const Common::String &mapName);
 
@@ -294,6 +298,9 @@ private:
 	// The object's camera-type-2 faces turned toward the camera about its origin, in a copy
 	// of the owner's world vertices (E-0270)
 	void faceCamera(const Model &m, uint object, Common::Array<float> &vertices) const;
+	// Scratch arrays reused by drawObject, faceCamera and pick
+	Common::Array<float> _facingVertices, _pickCamera, _pickScreen;
+	mutable Common::Array<bool> _faceDone;
 	Renderer *_renderer;
 	Common::HashMap<Common::String, uint32, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _textures;
 };
