@@ -45,6 +45,9 @@ public:
 	int width() const { return _width; }
 	int height() const { return _height; }
 
+	// Enhancement: mipmapped, anisotropic scene textures (created after it is set)
+	bool filterTextures = false;
+
 	// Textures from RGBA32 surfaces; texels with alpha 0 are cut out (colour keys)
 	virtual uint32 createTexture(const Graphics::Surface &rgba) = 0;
 	virtual void deleteTexture(uint32 texture) = 0;
