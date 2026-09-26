@@ -59,7 +59,7 @@ enum Action {
 	kActionNone,
 	kActionForward, kActionBackward, kActionTurnLeft, kActionTurnRight, kActionLookUp,
 	kActionLookDown, kActionRun, kActionJump, kActionInventory, kActionMenu, kActionSkip, kActionCrouch,
-	kActionStrafeLeft, kActionStrafeRight
+	kActionStrafeLeft, kActionStrafeRight, kActionToggleHotspots
 };
 
 class X3DEngine : public Engine {
