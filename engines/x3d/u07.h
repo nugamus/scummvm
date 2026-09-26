@@ -19,8 +19,10 @@
  *
  */
 
-#ifndef X3D_U00_H
-#define X3D_U00_H
+#ifndef X3D_U07_H
+#define X3D_U07_H
+
+#include "common/random.h"
 
 #include "math/vector3d.h"
 
@@ -28,44 +30,35 @@
 
 namespace X3D {
 
-class Collision;
-class Scene;
 class X3DEngine;
 
-// U04's name fix-ups and collision exclusions, shared by U00 and U04 (u00.md Start 0)
-void fixU04Names(Scene *scene);
-void disableU04Boxes(Collision *collision);
-
-// U00, the garden with Monet: players screen and tutorial (docs/engine-spec/u00.md)
-class U00 : public Unit {
+// U07, the cellars under the orangery and the end of the game (docs/engine-spec/u07.md)
+class U07 : public Unit {
 public:
-	U00(X3DEngine *vm, bool practice) : _vm(vm), _practice(practice) {}
+	explicit U07(X3DEngine *vm) : _vm(vm), _random("x3d_u07") {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
 	bool input(float dt) override;
 	bool handle(const Common::String &action) override;
 	void afterFrame() override;
-	bool gameStarted() const override { return false; }
+	void syncState(Common::Serializer &s) override; // PLANCHE
 
 private:
-	void say(const char *line, bool cut);
-	void remark(const char *line);
-	void startGauge(int state);
-	void stopGauge() { _state = 0; _gaugeStart = 0; }
-	bool fired() const;
-	void waitClip();
-	bool onStone(const Common::String &ground);
+	void effect(const char *name, const Math::Vector3d &position);
+	float heightAboveGround(const Math::Vector3d &p);
+	void switchAndDescent();
+	void tipPlank();
+	void fallInWater();
+	void explosion();
+	void end();
 
 	X3DEngine *_vm;
-	bool _practice;
-	bool _started = false, _onStone = false, _moved = false, _turned = false;
-	bool _glassesTaken = false, _nearMonet = false, _spaceSeen = false;
-	int _state = 0;          // the hidden gauge's state (u00.md, Unit state)
-	uint32 _gaugeStart = 0;  // 0: stopped
-	Math::Vector3d _monet, _boat; // hotspot positions at creation
+	Common::RandomSource _random;
+	bool _plankTipped = false;
+	bool _upWas = false, _downWas = false; // one rung per key press
 };
 
 } // End of namespace X3D
 
-#endif // X3D_U00_H
+#endif // X3D_U07_H

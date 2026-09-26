@@ -79,6 +79,8 @@ public:
 	void runAction(uint32 id, Common::StringArray &unitActions); // steps, then count the run
 	void setCondition(uint32 id, const Common::String &condition);
 	void exhaust(uint32 id); // count := max runs, exhausted, no step run (u05.md)
+	void setRuns(uint32 id, int runs) { if (id < kIds) _runs[id] = runs; } // U33's M02 flag
+	uint32 lastRun() const { return _lastRun; } // the id of the action run last (U04's paintings)
 	int runs(uint32 id) const;
 	bool exhausted(uint32 id) const;
 	// Steps 2 and 3 run by unit code: take a hotspot's object, use up the held item on one
@@ -113,6 +115,7 @@ private:
 	// two records with one id share them
 	static const uint kIds = 256;
 	int _runs[kIds] = {};
+	uint32 _lastRun = 0;
 	bool _exhausted[kIds] = {};
 
 	int findHotspot(const Common::String &name) const; // "U01_04" or "*U01_04"

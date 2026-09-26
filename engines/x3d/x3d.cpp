@@ -55,7 +55,11 @@
 #include "x3d/u01.h"
 #include "x3d/u02.h"
 #include "x3d/u03.h"
+#include "x3d/u04.h"
 #include "x3d/u05.h"
+#include "x3d/u06.h"
+#include "x3d/u07.h"
+#include "x3d/u33.h"
 #include "x3d/x3d.h"
 
 namespace X3D {
@@ -108,7 +112,7 @@ Common::Error X3DEngine::run() {
 	return Common::kNoError;
 }
 
-static const uint32 kSaveVersion = 2; // 2: numbered clip slots
+static const uint32 kSaveVersion = 3; // 2: numbered clip slots; 3: the scene gauge
 
 bool X3DEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 	return _scene && _unit && _unit->gameStarted() && !_suspended;
@@ -140,6 +144,7 @@ Common::Error X3DEngine::saveGameStream(Common::WriteStream *stream, bool isAuto
 	_inventory->syncState(s);
 	if (_unit)
 		_unit->syncState(s);
+	syncGauge(s);
 	return Common::kNoError;
 }
 
@@ -298,12 +303,20 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	U01 unit01(this);
 	U02 unit02(this);
 	U03 unit03(this);
+	U04 unit04(this);
 	U05 unit05(this);
+	U06 unit06(this);
+	U07 unit07(this);
+	U33 unit33(this);
 	_unit = sceneName.hasPrefixIgnoreCase("U00") ? (Unit *)&unit00 :
 	        sceneName.hasPrefixIgnoreCase("U01") ? (Unit *)&unit01 :
 	        sceneName.hasPrefixIgnoreCase("U02") ? (Unit *)&unit02 :
 	        sceneName.hasPrefixIgnoreCase("U03") ? (Unit *)&unit03 :
-	        sceneName.hasPrefixIgnoreCase("U05") ? (Unit *)&unit05 : nullptr;
+	        sceneName.hasPrefixIgnoreCase("U04") ? (Unit *)&unit04 :
+	        sceneName.hasPrefixIgnoreCase("U05") ? (Unit *)&unit05 :
+	        sceneName.hasPrefixIgnoreCase("U06") ? (Unit *)&unit06 :
+	        sceneName.hasPrefixIgnoreCase("U07") ? (Unit *)&unit07 :
+	        sceneName.hasPrefixIgnoreCase("U33") ? (Unit *)&unit33 : nullptr;
 	if (_unit)
 		_unit->afterLoad();
 
@@ -322,6 +335,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_unitActions.clear();
 	_last = _fpsStart = _sceneStart = _system->getMillis();
 	_pending = _logicMs = _lastClick = _frames = 0;
+	_gauge = Gauge();
 
 	// Development shortcut: dev_click=x,y,ms[;x,y,ms...] clicks at game pixel (x, y) ms
 	// after the first scene starts, for testing without focus (SDL takes click positions
@@ -379,6 +393,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 		_inventory->syncState(s);
 		if (_unit)
 			_unit->syncState(s);
+		syncGauge(s);
 		_pendingLoad.clear();
 		if (_unit)
 			_unit->start(false, false);
@@ -529,6 +544,10 @@ void X3DEngine::frame(bool input) {
 		_interaction->showCursor(_inventory->cursorAt(mouse2d));
 		_hoverNow = false;
 	}
+	if (interactive && !overBar && _clickNow && _unit && _unit->beforeClick()) {
+		_lastClick = now;
+		_clickNow = false;
+	}
 	if (interactive && !overBar && (_hoverNow || _clickNow)) {
 		_hotspot = -1;
 		const Scene::Model *model;
@@ -559,6 +578,8 @@ void X3DEngine::frame(bool input) {
 	_inventory->draw(*_renderer, x2d);
 	if (_unit)
 		_unit->draw();
+	if (_gauge.ms && _gauge.visible)
+		drawGauge(_renderer, MIN(1.0f, (_logicMs - _gauge.start) / (float)_gauge.ms));
 	_renderer->present();
 	_system->delayMillis(1);
 
@@ -1126,6 +1147,10 @@ Common::String X3DEngine::command(const Common::String &line) {
 	}
 	if (c == "loadmenu")
 		return loadMenu() ? "loaded" : "no load";
+	if (c == "exhaust" && a.size() >= 2) {
+		_interaction->exhaust(atoi(a[1].c_str()));
+		return "ok";
+	}
 	if (c == "act" && a.size() >= 2) {
 		_interaction->runAction(atoi(a[1].c_str()), _unitActions); // Mnn, bypassing the click
 		return "ok";
@@ -1194,7 +1219,32 @@ void X3DEngine::fadeToBlack(uint32 ms) {
 	}
 }
 
-void X3DEngine::playVideo(const Common::String &name, const Common::String &wav) {
+void X3DEngine::startGauge(uint32 ms, bool visible, const Common::String &label) {
+	_gauge.ms = ms;
+	_gauge.start = _logicMs;
+	_gauge.visible = visible;
+	_gauge.label = label;
+}
+
+void X3DEngine::syncGauge(Common::Serializer &s) {
+	// save.md JAUGE: duration and elapsed; a restore resumes with the remainder
+	uint32 elapsed = _logicMs - _gauge.start;
+	s.syncAsUint32LE(_gauge.ms, 3);
+	s.syncAsUint32LE(elapsed, 3);
+	s.syncAsByte(_gauge.visible, 3);
+	s.syncString(_gauge.label, 3);
+	if (s.isLoading())
+		_gauge.start = _logicMs - elapsed;
+}
+
+bool X3DEngine::gaugeExpired() {
+	if (!gaugeOver())
+		return false;
+	_gauge.ms = 0;
+	return true;
+}
+
+void X3DEngine::playVideo(const Common::String &name, const Common::String &wav, uint32 action, bool keepSounds) {
 	Video::AVIDecoder video;
 	if (!video.loadFile(Common::Path("Video/" + name + ".avi"))) {
 		warning("Unable to open video %s", name.c_str());
@@ -1202,7 +1252,12 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav)
 	}
 
 	video.start();
-	_sound->stopAll(); // a video stops every sound (sound.md)
+	if (!action && !keepSounds) {
+		_sound->stopAll(); // a video stops every sound (sound.md)
+	} else if (action && _interaction) {
+		Common::StringArray ignored;
+		_interaction->runAction(action, ignored);
+	}
 
 	// The soundtrack is a separate WAV, started right after the video
 	Audio::SoundHandle sound;
@@ -1220,8 +1275,11 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav)
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
 			if (e.type == Common::EVENT_KEYDOWN &&
-			    (e.kbd.keycode == Common::KEYCODE_RETURN || e.kbd.keycode == Common::KEYCODE_ESCAPE))
+			    (e.kbd.keycode == Common::KEYCODE_RETURN || (!action && e.kbd.keycode == Common::KEYCODE_ESCAPE))) {
 				skip = true;
+				if (action)
+					_sound->stopGroup(Sound::kVoice);
+			}
 		}
 
 		if (video.needsUpdate()) {

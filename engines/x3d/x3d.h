@@ -66,6 +66,22 @@ public:
 	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
 	// A game over (u01.md caught, u02.md): the load screen, else the Option menu
 	void gameOver();
+	// The scene gauge (u01.md): a bar that empties over ms while visible; expired() is
+	// true once, when it runs out, and stops it
+	struct Gauge {
+		uint32 ms = 0, start = 0;
+		bool visible = false;
+		Common::String label; // U04 runs four timers on it: Door, Paint, ecroule, PlusVite
+	};
+	void startGauge(uint32 ms, bool visible = true, const Common::String &label = "");
+	void stopGauge() { _gauge.ms = 0; }
+	bool gaugeRunning() const { return _gauge.ms != 0; }
+	bool gaugeOver() const { return _gauge.ms && _logicMs - _gauge.start >= _gauge.ms; }
+	const Common::String &gaugeLabel() const { return _gauge.label; }
+	const Gauge &gauge() const { return _gauge; }
+	void setGauge(const Gauge &g) { _gauge = g; }
+	bool gaugeExpired();
+	void syncGauge(Common::Serializer &s);
 	void storeHeldItem(); // a held item back into the bar (E-0210)
 	// The last view redrawn at thumbnail size (save thumbnails in 3D mode), or nullptr
 	Graphics::Surface *thumbnail(int width, int height);
@@ -76,6 +92,8 @@ public:
 	// 0: one frame. walk: the camera keys and the unit's input hook stay on (the original's
 	// "RunFor + generic input" waits), clicks and Escape do not.
 	void runFor(uint32 ms, bool walk = false);
+	// One frame with full input, clicks included (U04 waits for the glove to be taken)
+	void frameWithInput() { frame(true); }
 	// Moves the camera over ms; nullptr keeps the position, kKeep keeps an angle / the FOV
 	void moveTo(uint32 ms, const float *position, float yaw, float pitch, float fov = kKeep);
 	void lookAt(uint32 ms, const Math::Vector3d &target);
@@ -86,8 +104,11 @@ public:
 	void suspend(bool suspended);
 	void gotoScene(const Common::String &name) { _nextScene = name; }
 	void addUnitAction(const Common::String &name) { _unitActions.push_back(name); }
-	// Video/<name>.avi with its soundtrack Video/<wav>.wav (the video's name when empty)
-	void playVideo(const Common::String &name, const Common::String &wav = "");
+	// Video/<name>.avi with its soundtrack Video/<wav>.wav (the video's name when empty).
+	// action: an INFOACT action run once the video starts (U33's film and its speech);
+	// then only Enter ends it, stopping the voice, and sounds already playing go on.
+	// keepSounds: sounds already playing go on (U33's films)
+	void playVideo(const Common::String &name, const Common::String &wav = "", uint32 action = 0, bool keepSounds = false);
 	void fadeToBlack(uint32 ms); // the ambient light down to 0 over ms (u01.md, caught)
 
 	// A frame's list view (save.md "Lists"): its rows, the selected one, and the names a
@@ -124,7 +145,7 @@ public:
 	const Common::String &menuText() const { return _menuText; }
 
 	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold, pos, act,
-	// save <slot>, load <slot>, savemenu, loadmenu, page <credits|settings|gallery|loupe p|painting>
+	// save <slot>, load <slot>, savemenu, loadmenu, page <credits|settings|gallery|loupe p|painting>, exhaust <id>
 	Common::String command(const Common::String &line);
 
 	static constexpr float kKeep = 100.0f;
@@ -187,6 +208,7 @@ private:
 	Common::String _menuText; // the text edit of the last menu
 	bool _escapeNow = false;
 	bool _walk = false; // runFor with walking input
+	Gauge _gauge;
 	int _menuView = -1;  // the view index of the last frame click
 	int _musicVolume = 85; // group 1 in play (Settings)
 	Common::String _playerName;

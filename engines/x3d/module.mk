@@ -21,7 +21,11 @@ MODULE_OBJS = \
 	u01.o \
 	u02.o \
 	u03.o \
+	u04.o \
 	u05.o \
+	u06.o \
+	u07.o \
+	u33.o \
 	x3d.o
 
 # This module can be built as a plugin

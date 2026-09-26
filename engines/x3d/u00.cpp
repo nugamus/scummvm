@@ -43,7 +43,12 @@ static const char *const kNoCollision[] = {
 	"Box620", "Box212", "Box214", "Box218", "Box713", "Box822"
 };
 
-static void fixU04Names(Scene *scene) {
+void disableU04Boxes(Collision *collision) {
+	for (const char *name : kNoCollision)
+		collision->setEnabled(name, false);
+}
+
+void fixU04Names(Scene *scene) {
 	static const char *const renames[][2] = {
 		{ "*U04_37", "*U04_44" }, { "*U04_37", "*U04_63" }, { "*U04_05t", "*U04_05" },
 		{ "*pot confi", "*U04_53" }, { "*U04_27", "*U04_61" }, { "*U04_28", "*U04_62" },
@@ -90,8 +95,7 @@ void U00::start(bool newGame, bool video) {
 	Player &player = _vm->player();
 	_vm->sound()->play(Common::Path("U04/Sound/s3_01.wav"), Sound::kAmbient, 85, true);
 	player.setSphere(3.0f, 1.0f);
-	for (const char *name : kNoCollision)
-		_vm->collision()->setEnabled(name, false);
+	disableU04Boxes(_vm->collision());
 	// Distances use the hotspots' positions from when they were created (E-0231)
 	_monet = _vm->scene()->objectPosition("*U04_03");
 	_boat = _vm->scene()->objectPosition("*U04_32");

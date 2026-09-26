@@ -44,6 +44,7 @@ public:
 	virtual void afterFrame() {}                     // per-frame checks after rendering
 	virtual void afterAnimate() {}                   // each logic step, before the pose
 	virtual void afterClick(const Common::String &hotspot) {} // after a click's queued actions
+	virtual bool beforeClick() { return false; }     // true: the click is taken, no pick
 	virtual void draw() {}                           // 2D drawn over the frame
 	virtual bool gameStarted() const { return true; } // false: Escape opens the Option menu
 	virtual void syncState(Common::Serializer &s) {}  // the unit's save chunk (save.md)

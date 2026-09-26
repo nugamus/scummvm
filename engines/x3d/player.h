@@ -54,6 +54,9 @@ public:
 	float yaw = 0, pitch = M_PI / 2, fov = 90, roll = 0;
 	float sphereOffset = 0; // eye minus collision sphere centre, along Z
 	bool canMove = true, canTurn = true;
+	bool runAllowed = false, jumpAllowed = false; // Ctrl runs, Shift jumps (U33 turns them on)
+	void setEyeHeight(float h) { _eyeHeight = h; }
+	float eyeHeight() const { return _eyeHeight; }
 	bool collide = true;           // collision and ground snapping (U01's train turns it off)
 	Common::String groundObject;   // name of the object the last ground probe hit
 
@@ -66,6 +69,12 @@ private:
 
 	float _scale = 1, _speed = 2, _eyeHeight = 1.5f, _radius = 0.5f;
 	float _bob = 1; // head bob direction, kept across scenes
+
+	// A jump in progress (movement.md, Jump): z = z0 + s t - s t^2 / 2, the walk sampled
+	// once at the start
+	bool _jumping = false, _shiftWas = false;
+	float _jumpTime = 0, _jumpZ = 0;
+	Math::Vector3d _jumpVelocity;
 
 	// A fall in progress: drops _fallDrop from _fallZ, then slides once with _fallVelocity
 	bool _falling = false;
