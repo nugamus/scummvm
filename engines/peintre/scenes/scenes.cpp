@@ -33,6 +33,7 @@ namespace Peintre {
 SceneScript *createSceneScript(int scene, const Common::String &bundle) {
 	switch (scene) {
 	case kSceneMusee: return createMusee();
+	case kSceneAuberge: return createAuberge();
 	case kSceneHopiext: return createHopiext();
 	case kSceneMaisonet: return createMaisonet();
 	case kSceneMangeurs: return createMangeurs();
@@ -42,6 +43,9 @@ SceneScript *createSceneScript(int scene, const Common::String &bundle) {
 	case kSceneHopiint: return createHopiint();
 	case kScenePont: return createPont();
 	case kSceneTerrasse: return createTerrasse();
+	case kSceneJardin: return createJardin();
+	case kSceneChamp: return createChamp();
+	case kSceneEglise: return createEglise();
 	default: return nullptr;
 	}
 }
