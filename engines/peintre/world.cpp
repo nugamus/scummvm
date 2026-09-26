@@ -319,51 +319,74 @@ void World::loadAnims() {
 	}
 }
 
+/** The first key index in 1..n-1 with time >= t, by the original's bisection (animation.md). */
+template<class Key>
+static uint findKey(const Common::Array<Key> &keys, int32 frame) {
+	uint lo = 0, hi = keys.size() - 1;
+	while (lo + 1 < hi) {
+		const uint mid = (lo + hi) / 2;
+		if ((int32)keys[mid].time < frame)
+			lo = mid;
+		else
+			hi = mid;
+	}
+	return hi;
+}
+
 void World::pose(uint record, int32 frame) {
-	// Q-0004: the key order and time units are tentative; keys are sampled at `frame`,
-	// linearly between the surrounding keys.
+	// animation.md: track i drives node i of the scene's node table; each track with at
+	// least two keys is sampled at `frame` (ticks) and replaces the local pose.
 	if (record >= anims.size())
 		return;
-	AnimRecord &a = anims[record];
-	if (a.nodeIndex < 0 || a.data.tracks.empty())
-		return;
-	const AnimTrack &t = a.data.tracks[0];
-	Node &nd = _scene3D.nodes[a.nodeIndex];
-	if (!t.pos.empty()) {
-		uint k = 0;
-		while (k + 1 < t.pos.size() && (int32)t.pos[k + 1].time <= frame)
-			k++;
-		const AnimTrack::PosKey &p0 = t.pos[k];
-		const AnimTrack::PosKey &p1 = t.pos[MIN<uint>(k + 1, t.pos.size() - 1)];
-		const double span = (double)p1.time - p0.time;
-		const double f = span > 0 ? CLIP((frame - (double)p0.time) / span, 0.0, 1.0) : 0.0;
-		nd.position.x = (int32)(p0.pos.x + (p1.pos.x - p0.pos.x) * f);
-		nd.position.y = (int32)(p0.pos.y + (p1.pos.y - p0.pos.y) * f);
-		nd.position.z = (int32)(p0.pos.z + (p1.pos.z - p0.pos.z) * f);
-	}
-	if (!t.rot.empty()) {
-		uint k = 0;
-		while (k + 1 < t.rot.size() && (int32)t.rot[k + 1].time <= frame)
-			k++;
-		const AnimTrack::RotKey &r0 = t.rot[k];
-		const AnimTrack::RotKey &r1 = t.rot[MIN<uint>(k + 1, t.rot.size() - 1)];
-		const double span = (double)r1.time - r0.time;
-		const double f = span > 0 ? CLIP((frame - (double)r0.time) / span, 0.0, 1.0) : 0.0;
-		double q[4];
-		for (int c = 0; c < 4; c++)
-			q[c] = (r0.q[c] + (r1.q[c] - r0.q[c]) * f) / 32768.0;
-		const double len = sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
-		if (len > 0)
-			for (double &c : q)
-				c /= len;
-		const double x = q[0], y = q[1], z = q[2], w = q[3];
-		const double m[9] = {
-			1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w),
-			2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w),
-			2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)
-		};
-		for (int c = 0; c < 9; c++)
-			nd.rotation[c] = (int32)(m[c] * 32768.0);
+	const AnimRecord &a = anims[record];
+	const uint count = MIN<uint>(a.data.tracks.size(), _scene3D.nodes.size());
+	for (uint i = 0; i < count; i++) {
+		const AnimTrack &t = a.data.tracks[i];
+		Node &nd = _scene3D.nodes[i];
+		if (t.rot.size() >= 2) {
+			const uint k = findKey(t.rot, frame);
+			int32 q[4];
+			if ((int32)t.rot[k].time <= frame) {
+				memcpy(q, t.rot[k].q, sizeof(q));
+			} else {
+				const AnimTrack::RotKey &r0 = t.rot[k - 1], &r1 = t.rot[k];
+				const int32 f = (int32)((int64)(frame - (int32)r0.time) * 256 / ((int32)r1.time - (int32)r0.time));
+				const int32 c = (int32)(((int64)r0.q[0] * r1.q[0] + (int64)r0.q[1] * r1.q[1] +
+										 (int64)r0.q[2] * r1.q[2] + (int64)r0.q[3] * r1.q[3]) >> 15);
+				if (32768 - c < 21 || 32768 + c <= 20) {
+					// Nearly equal keys: linear (the opposite case never occurs in the corpus).
+					for (int j = 0; j < 4; j++)
+						q[j] = (r0.q[j] * (256 - f) + r1.q[j] * f) / 256;
+				} else {
+					// Slerp without the shorter-arc flip.
+					const double theta = acos(CLIP(c / 32768.0, -1.0, 1.0));
+					const double s0 = sin((256 - f) * theta / 256), s1 = sin(f * theta / 256), s = sin(theta);
+					for (int j = 0; j < 4; j++)
+						q[j] = (int32)((r0.q[j] * s0 + r1.q[j] * s1) / s);
+				}
+			}
+			// Quat_ToMatrix, (x, y, z, w) Q15, row-major.
+			const double x = q[0] / 32768.0, y = q[1] / 32768.0, z = q[2] / 32768.0, w = q[3] / 32768.0;
+			const double m[9] = {
+				1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y),
+				2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x),
+				2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)
+			};
+			for (int j = 0; j < 9; j++)
+				nd.rotation[j] = (int32)(m[j] * 32768.0);
+		}
+		if (t.pos.size() >= 2) {
+			const uint k = findKey(t.pos, frame);
+			if ((int32)t.pos[k].time <= frame) {
+				nd.position = t.pos[k].pos;
+			} else {
+				const AnimTrack::PosKey &p0 = t.pos[k - 1], &p1 = t.pos[k];
+				const int32 f = (int32)((int64)(frame - (int32)p0.time) * 256 / ((int32)p1.time - (int32)p0.time));
+				nd.position.x = (p1.pos.x * f + p0.pos.x * (256 - f)) >> 8;
+				nd.position.y = (p1.pos.y * f + p0.pos.y * (256 - f)) >> 8;
+				nd.position.z = (p1.pos.z * f + p0.pos.z * (256 - f)) >> 8;
+			}
+		}
 	}
 }
 

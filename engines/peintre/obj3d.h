@@ -38,11 +38,13 @@ struct Vec3i {
 };
 
 struct Poly {
-	int32 vertex[3];       ///< index into Node::vertices
+	uint32 word0;          ///< poly +0: bit 3 = back-face test by corners (render.md)
+	int32 vertexNode[3];   ///< node owning the corner's vertex (its parent for flag 0x10 nodes)
+	int32 vertex[3];       ///< index into vertexNode's Node::vertices
 	int32 normal[3];       ///< index into Node::vertexNormals, -1 if none
 	int32 uv[3];           ///< index into Node::uvs, -1 when the group is untextured
 	int32 faceNormal;      ///< index into Node::faceNormals, -1 if none
-	int32 unk30;           ///< poly +0x30 (s32, meaning open)
+	int32 planeDistance;   ///< poly +0x30: (n . v0) >> 15 (render.md "Back faces")
 };
 
 struct FaceGroup {
@@ -73,6 +75,7 @@ struct Node {
 struct Material {
 	Common::String name;
 	Common::String texture;  ///< "<texture>.3DM" in the same BFG, empty for none
+	uint16 colour = 0;       ///< RGB565 flat colour (type-1 groups, render.md)
 };
 
 /** A .3DC scene: every node, the first one is the root. */
