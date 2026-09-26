@@ -32,6 +32,7 @@
 
 #include "image/bmp.h"
 
+#include "x3d/detection.h"
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
@@ -137,7 +138,7 @@ void Interaction::load(const Common::String &unitDir) {
 		delete s;
 	}
 
-	debug(1, "%u hotspots in %sINFOOBJ.BIN", _hotspots.size(), unitDir.c_str());
+	debugC(1, kDebugLoad, "%u hotspots in %sINFOOBJ.BIN", _hotspots.size(), unitDir.c_str());
 
 	// Click actions (E-0071)
 	if (Common::SeekableReadStream *s = openBinChunk(Common::Path(unitDir + "INFOACT.BIN"), "#ACTIONS#")) {
@@ -442,7 +443,7 @@ void Interaction::useUp(const Common::String &hotspot) {
 }
 
 void Interaction::run(Action &a, Common::StringArray &unitActions) {
-	debug(1, "action %s on %s", a.name.c_str(), a.hotspot.c_str());
+	debugC(1, kDebugScript, "action %s on %s", a.name.c_str(), a.hotspot.c_str());
 	const int target = findHotspot(a.target);
 	const Common::String targetName = target >= 0 ? _hotspots[target].name : a.target;
 	for (uint k = 0; k < a.ops.size(); k++) {

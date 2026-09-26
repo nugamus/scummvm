@@ -103,7 +103,7 @@ void U03::start(bool newGame, bool video) {
 	else
 		collision->setEnabled("ColClown", false, true);
 
-	// The café and the clown's music: extra looping emitters on groups 5 and 6
+	// The cafe and the clown's music: extra looping emitters on groups 5 and 6
 	sound->setEmitter(Sound::kUnitEmitter1, 5, 1000);
 	sound->emit(Sound::kUnitEmitter1, Common::Path(scene->dir() + "Sound/s2_03.wav"), at("*U03_01"), true);
 	if (!interaction->exhausted(10)) {

@@ -159,11 +159,11 @@ void U00::remark(const char *line) {
 
 void U00::startGauge(int state) {
 	_state = state;
-	_gaugeStart = g_system->getMillis();
+	_gaugeStart = MAX<uint32>(1, _vm->logicMs()); // logic time: pauses do not count
 }
 
 bool U00::fired() const {
-	return _gaugeStart && g_system->getMillis() - _gaugeStart >= 10000;
+	return _gaugeStart && _vm->logicMs() - _gaugeStart >= 10000;
 }
 
 bool U00::onStone(const Common::String &ground) {

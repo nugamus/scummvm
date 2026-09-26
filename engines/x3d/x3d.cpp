@@ -41,6 +41,7 @@
 
 #include "video/avi_decoder.h"
 
+#include "x3d/detection.h"
 #include "x3d/collision.h"
 #include "x3d/console.h"
 #include "x3d/frame.h"
@@ -93,7 +94,7 @@ Common::Error X3DEngine::run() {
 
 	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
 	// sequence and the scene's entry video
-	if (!ConfMan.hasKey("start_scene")) {
+	if (!ConfMan.hasKey("start_scene") && !ConfMan.hasKey("save_slot")) {
 		// Boot sequence: docs/engine-spec/boot.md
 		showBitmap("2dbit/Intro1.bmp");
 		wait(3000);
@@ -104,6 +105,9 @@ Common::Error X3DEngine::run() {
 	// U00 shows the players screen and runs Monet's tutorial; the Option menu's New game
 	// then goes to App.bin's start scene (ui.md, Boot to U01)
 	Common::String sceneName = ConfMan.hasKey("start_scene") ? ConfMan.get("start_scene") : "U00.X3D";
+	// A game chosen in the launcher's load dialog
+	if (ConfMan.hasKey("save_slot") && loadGameState(ConfMan.getInt("save_slot")).getCode() == Common::kNoError)
+		sceneName = _nextScene;
 
 	while (!shouldQuit() && !sceneName.empty()) {
 		_nextScene.clear();
@@ -129,7 +133,7 @@ static void actionToKey(Common::Event &e) {
 	e.type = down ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
 }
 
-static const uint32 kSaveVersion = 3; // 2: numbered clip slots; 3: the scene gauge
+static const uint32 kSaveVersion = 4; // 2: numbered clip slots; 3: the scene gauge; 4: U01 on it
 
 bool X3DEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 	// Only between the unit's sequences: a save inside one could not replay its end
@@ -287,6 +291,12 @@ void X3DEngine::storeHeldItem() {
 		_inventory->add(_interaction->heldItem() + "P");
 		_interaction->holdItem("");
 	}
+}
+
+void X3DEngine::pauseEngineIntern(bool pause) {
+	Engine::pauseEngineIntern(pause);
+	if (!pause)
+		_last = _system->getMillis(); // the paused time is not game time
 }
 
 void X3DEngine::gameOver() {
@@ -484,7 +494,7 @@ void X3DEngine::frame(bool input) {
 	// Due commands, up to the first click (one click per frame)
 	while (input && !_clickNow && !_devCommands.empty() && _system->getMillis() - _devStart >= (uint32)atoi(_devCommands[0].c_str())) {
 		const Common::String c = _devCommands.remove_at(0);
-		debug(1, "dev command %s: %s", c.c_str(), command(c.substr(c.findFirstOf(':') + 1)).c_str());
+		debugC(1, kDebugScript, "dev command %s: %s", c.c_str(), command(c.substr(c.findFirstOf(':') + 1)).c_str());
 	}
 
 	Common::Event e;
@@ -496,7 +506,7 @@ void X3DEngine::frame(bool input) {
 			continue;
 		}
 		if (e.type == Common::EVENT_LBUTTONDOWN) {
-			debug(1, "click %d,%d", e.mouse.x, e.mouse.y);
+			debugC(1, kDebugInput, "click %d,%d", e.mouse.x, e.mouse.y);
 			_mouse = e.mouse;
 			_clickNow = true;
 			continue;
@@ -504,9 +514,9 @@ void X3DEngine::frame(bool input) {
 		if (e.type != Common::EVENT_KEYDOWN && e.type != Common::EVENT_KEYUP)
 			continue;
 		const bool down = e.type == Common::EVENT_KEYDOWN;
-		debug(3, "key %d %s", e.kbd.keycode, down ? "down" : "up");
+		debugC(3, kDebugInput, "key %d %s", e.kbd.keycode, down ? "down" : "up");
 		if (!down) {
-			debug(1, "camera %g,%g,%g,%g,%g", _player.eye.x(), _player.eye.y(), _player.eye.z(), _player.yaw, _player.pitch);
+			debugC(2, kDebugInput, "camera %g,%g,%g,%g,%g", _player.eye.x(), _player.eye.y(), _player.eye.z(), _player.yaw, _player.pitch);
 			_hoverNow = true; // the original re-hovers on every key release
 		}
 		switch (e.kbd.keycode) {
@@ -555,7 +565,8 @@ void X3DEngine::frame(bool input) {
 		if (!_keys.shift)
 			_devShift = 0;
 	}
-	_pending += now - _last;
+	// A long gap (a stall, a debugger) is not replayed as game time
+	_pending += MIN<uint32>(now - _last, 250);
 	_last = now;
 	while (_pending >= stepMs && !shouldQuit()) {
 		_pending -= stepMs;
@@ -604,7 +615,7 @@ void X3DEngine::frame(bool input) {
 			for (int o = object; o >= 0; o = model->file.objects[o].parent)
 				names.push_back(model->file.objects[o].name);
 			_hotspot = _interaction->hotspotFor(names);
-			debug(2, "pick %s at depth %g: hotspot %d", names[0].c_str(), depth, _hotspot);
+			debugC(2, kDebugInput, "pick %s at depth %g: hotspot %d", names[0].c_str(), depth, _hotspot);
 		}
 		_hoverNow = false;
 	}
@@ -630,7 +641,7 @@ void X3DEngine::frame(bool input) {
 
 	_frames++;
 	if (now - _fpsStart >= 5000) {
-		debug(2, "%u frames per second", _frames * 1000 / (now - _fpsStart));
+		debugC(2, kDebugGraphics, "%u frames per second", _frames * 1000 / (now - _fpsStart));
 		_frames = 0;
 		_fpsStart = now;
 	}
@@ -768,7 +779,7 @@ Common::String X3DEngine::runMenu(const Common::String &name, MenuList *list, co
 	if (!placeholder.empty())
 		frame.setText(placeholder, true);
 	const Common::String result = runFrame(frame, list);
-	debug(1, "menu %s: %s", name.c_str(), result.c_str());
+	debugC(1, kDebugMenu, "menu %s: %s", name.c_str(), result.c_str());
 	return result;
 }
 
@@ -849,7 +860,7 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 			} else {
 				result = c;
 			}
-			debug(1, "dev menu: %s", c.c_str());
+			debugC(1, kDebugMenu, "dev menu: %s", c.c_str());
 		}
 
 		const int hovered = frame.viewAt(Common::Point(_mouse.x - x2d, _mouse.y));
@@ -1246,7 +1257,7 @@ Common::String X3DEngine::command(const Common::String &line) {
 			if (!found)
 				return "behind the camera";
 			if (!hit)
-				debug(1, "click: no visible point of %s", a[1].c_str());
+				debugC(1, kDebugScript, "click: no visible point of %s", a[1].c_str());
 		}
 		_clickNow = true;
 		return Common::String::format("click %d,%d", _mouse.x, _mouse.y);

@@ -45,7 +45,6 @@ public:
 	bool handle(const Common::String &action) override;
 	void afterClick(const Common::String &hotspot) override; // the climb's repeat
 	void afterFrame() override;    // the escape timer
-	void draw() override;          // the escape timer's gauge
 	void syncState(Common::Serializer &s) override; // TRAIN_CHANGED and the gauge
 
 private:
@@ -65,8 +64,6 @@ private:
 	X3DEngine *_vm;
 	Common::RandomSource _random;
 	bool _switchThrown = false, _train2Loaded = false, _onTrain = false, _firstMaire = true;
-	bool _gauge = false;
-	uint32 _gaugeStart = 0;
 };
 
 } // End of namespace X3D

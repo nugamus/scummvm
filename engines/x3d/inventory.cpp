@@ -28,6 +28,7 @@
 
 #include "image/bmp.h"
 
+#include "x3d/detection.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
 #include "x3d/renderer.h"
@@ -85,7 +86,7 @@ Graphics::Surface *Inventory::image(const Common::String &name) {
 }
 
 void Inventory::slide(bool up) {
-	debug(1, "inventory %s from y %d", up ? "up" : "down", _y);
+	debugC(1, kDebugInput, "inventory %s from y %d", up ? "up" : "down", _y);
 	// Up to y = 420 or down to 480, 4 px per 50 ms tick
 	_step = up ? -4 : 4;
 	_ticks = up ? (_y - kBarTop) / 4 : (kParked - _y) / 4;

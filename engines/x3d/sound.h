@@ -38,7 +38,7 @@ class Sound {
 public:
 	enum Group { kAmbient = 1, kVoice = 2, kEffects = 3 };
 	// The phone emitter is U01's third one (u01.md, ClicTel)
-	// kUnitEmitter1/2 are extra ones units set up (U03's café and clown on groups 5, 6)
+	// kUnitEmitter1/2 are extra ones units set up (U03's cafe and clown on groups 5, 6)
 	enum Emitter { kVoiceEmitter, kEffectsEmitter, kPhoneEmitter, kUnitEmitter1, kUnitEmitter2, kEmitterCount };
 	void setEmitter(Emitter e, int group, float range); // group and absolute range
 

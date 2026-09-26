@@ -29,6 +29,10 @@ namespace X3D {
 enum X3DDebugChannels {
 	kDebugLoad = 1,
 	kDebugGraphics,
+	kDebugScript,
+	kDebugInput,
+	kDebugSound,
+	kDebugMenu
 };
 
 extern const PlainGameDescriptor monetGames[];

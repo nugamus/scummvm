@@ -47,8 +47,6 @@ static const char *const kInspector = "*U02_02";
 static const char *const kBell = "$Z$*U02_10";     // the whistle cord's node
 static const char *const kBellObject = "*U02_10";  // its object after the name cut (E-0271)
 
-// The gauge warning is said once per process (u02.md, Unit state)
-static bool warned = false;
 
 void U02::afterLoad() {
 	// u02.md, Load-time fixes (E-0160)
@@ -519,8 +517,9 @@ void U02::afterFrame() {
 	if (!_gauge)
 		return;
 	const uint32 elapsed = now - _gaugeStart;
-	if (!warned && elapsed > 160000 && elapsed < 170000) {
-		warned = true;
+	// Said once per game session (u02.md, Unit state: process-wide, never reset)
+	if (!_vm->u02Warned && elapsed > 160000 && elapsed < 170000) {
+		_vm->u02Warned = true;
 		say("U02_02", "d1_26");
 	}
 	if (elapsed >= kGaugeMs) {

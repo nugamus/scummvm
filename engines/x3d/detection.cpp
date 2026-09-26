@@ -26,6 +26,10 @@
 const DebugChannelDef X3DMetaEngineDetection::debugFlagList[] = {
 	{ X3D::kDebugLoad, "Load", "File loading" },
 	{ X3D::kDebugGraphics, "Graphics", "Graphics debug level" },
+	{ X3D::kDebugScript, "Script", "Unit code and INFOACT actions" },
+	{ X3D::kDebugInput, "Input", "Keys, clicks and picking" },
+	{ X3D::kDebugSound, "Sound", "Voices and talkers" },
+	{ X3D::kDebugMenu, "Menu", "Frames and menus" },
 	DEBUG_CHANNEL_END
 };
 
