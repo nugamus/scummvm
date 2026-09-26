@@ -587,7 +587,8 @@ void X3DEngine::frame(bool input) {
 }
 
 void X3DEngine::runFor(uint32 ms, bool walk) {
-	const uint32 end = _logicMs + ms;
+	// 0 = one frame, which includes an animation tick (movement.md)
+	const uint32 end = _logicMs + MAX<uint32>(ms, 1);
 	const bool outer = _walk;
 	_walk = walk;
 	do

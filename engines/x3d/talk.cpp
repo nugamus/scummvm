@@ -64,7 +64,7 @@ bool Talk::say(const Common::String &character, const Common::String &name) {
 
 	stop();
 	const Common::String sound = _unitDir + "Sound/" + (name.contains(".wav") || name.contains(".WAV") ? name : name + ".WAV");
-	if (!_sound.emit(Sound::kVoiceEmitter, Common::Path(sound), _scene.objectPosition(_talkers[talker].face), false))
+	if (!_sound.emit(Sound::kVoiceEmitter, Common::Path(sound), _scene.facePosition(_talkers[talker].face, _talkers[talker].character), false))
 		return true;
 
 	debugC(1, kDebugSound, "%s says %s", character.c_str(), name.c_str());

@@ -102,6 +102,7 @@ void U00::start(bool newGame, bool video) {
 	_monet = _vm->scene()->objectPosition("*U04_03");
 	_boat = _vm->scene()->objectPosition("*U04_32");
 	_vm->talk()->addTalker("U04_03", "$$$DUMMY.*visage", "Anim/U04_03_Lunettes/");
+	_vm->scene()->startAnimation("*U04_03"); // Monet's node runs after the registration
 	_vm->setView(kStart, kStartYaw, kStartPitch);
 	if (_practice)
 		return;

@@ -913,9 +913,9 @@ bool Scene::clipPlaying(const Common::String &objectName) {
 	return n && n->clipActive && n->clip.running;
 }
 
-int Scene::addFaceClip(const Common::String &faceObject, const Common::String &path, const Common::String &owner) {
-	Model *model = nullptr;
-	uint object = 0;
+bool Scene::findFace(const Common::String &faceObject, const Common::String &owner, Model *&model, uint &object) const {
+	model = nullptr;
+	object = 0;
 	bool owned = false;
 	// Newest file first: a model loaded at run time replaces an older one (U03's clown)
 	for (int mi = _models.size() - 1; mi >= 0; mi--) {
@@ -932,7 +932,21 @@ int Scene::addFaceClip(const Common::String &faceObject, const Common::String &p
 				}
 			}
 	}
+	return model != nullptr;
+}
 
+Math::Vector3d Scene::facePosition(const Common::String &faceObject, const Common::String &owner) const {
+	Model *m;
+	uint o;
+	if (!findFace(faceObject, owner, m, o))
+		return Math::Vector3d();
+	return Math::Vector3d(m->file.objects[o].world[12], m->file.objects[o].world[13], m->file.objects[o].world[14]);
+}
+
+int Scene::addFaceClip(const Common::String &faceObject, const Common::String &path, const Common::String &owner) {
+	Model *model;
+	uint object;
+	findFace(faceObject, owner, model, object);
 	Common::File f;
 	A3DFile *file = new A3DFile();
 	if (!model || !f.open(Common::Path(_dir + path)) || !file->load(f)) {
