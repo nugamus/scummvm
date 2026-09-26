@@ -154,11 +154,6 @@ Common::Error X3DEngine::saveGameStream(Common::WriteStream *stream, bool isAuto
 	s.setVersion(kSaveVersion);
 	s.syncString(_sceneName);
 	s.syncAsByte(_practice);
-	// The player's unit number follows every save: it unlocks the gallery (ui.md)
-	if (!_playerName.empty()) {
-		ConfMan.setInt("unit_" + _playerName, atoi(_sceneName.c_str() + 1));
-		ConfMan.flushToDisk();
-	}
 	_scene->syncState(s);
 	_interaction->syncState(s);
 	_collision->syncState(s);
@@ -252,38 +247,64 @@ bool X3DEngine::loadMenu() {
 	}
 }
 
+// The players and the unit of each one's last save, one "unit name" line per player, in
+// the savefile <target>.players
+void X3DEngine::readPlayers(Common::StringArray &names, Common::Array<int> &units) const {
+	Common::ScopedPtr<Common::InSaveFile> in(_saveFileMan->openForLoading(_targetName + ".players"));
+	while (in && !in->eos() && !in->err()) {
+		const Common::String line = in->readLine();
+		const char *space = strchr(line.c_str(), ' ');
+		if (!space || !space[1])
+			continue;
+		units.push_back(atoi(line.c_str()));
+		names.push_back(space + 1);
+	}
+}
+
+void X3DEngine::writePlayers(const Common::StringArray &names, const Common::Array<int> &units) {
+	Common::ScopedPtr<Common::OutSaveFile> out(_saveFileMan->openForSaving(_targetName + ".players", false));
+	if (!out)
+		return;
+	for (uint i = 0; i < names.size(); i++)
+		out->writeString(Common::String::format("%d %s\n", units[i], names[i].c_str()));
+	out->finalize();
+}
+
 Common::StringArray X3DEngine::players() const {
 	Common::StringArray names;
-	const Common::String all = ConfMan.get("players");
-	Common::String name;
-	for (const char *p = all.c_str(); ; p++) {
-		if (*p == '|' || !*p) {
-			if (!name.empty())
-				names.push_back(name);
-			name.clear();
-			if (!*p)
-				break;
-		} else {
-			name += *p;
-		}
-	}
+	Common::Array<int> units;
+	readPlayers(names, units);
 	return names;
 }
 
 bool X3DEngine::selectPlayer(const Common::String &name) {
 	_playerName = name;
 	// ponytail: players share ScummVM's save slots; the original keeps saves per player
-	Common::StringArray names = players();
+	Common::StringArray names;
+	Common::Array<int> units;
+	readPlayers(names, units);
 	for (const Common::String &n : names)
 		if (n == name)
 			return false;
 	names.push_back(name);
-	Common::String all;
-	for (const Common::String &n : names)
-		all += (all.empty() ? "" : "|") + n;
-	ConfMan.set("players", all);
-	ConfMan.flushToDisk();
+	units.push_back(0);
+	writePlayers(names, units);
 	return true;
+}
+
+Common::Error X3DEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
+	const Common::Error result = Engine::saveGameState(slot, desc, isAutosave);
+	// The player's unit number follows every save: it unlocks the gallery (ui.md)
+	if (result.getCode() == Common::kNoError && !_playerName.empty()) {
+		Common::StringArray names;
+		Common::Array<int> units;
+		readPlayers(names, units);
+		for (uint i = 0; i < names.size(); i++)
+			if (names[i] == _playerName)
+				units[i] = atoi(_sceneName.c_str() + 1);
+		writePlayers(names, units);
+	}
+	return result;
 }
 
 void X3DEngine::storeHeldItem() {
@@ -972,7 +993,13 @@ static int thumbnailView(const Common::String &painting) {
 }
 
 int X3DEngine::playerUnit() const {
-	return ConfMan.hasKey("unit_" + _playerName) ? ConfMan.getInt("unit_" + _playerName) : 0;
+	Common::StringArray names;
+	Common::Array<int> units;
+	readPlayers(names, units);
+	for (uint i = 0; i < names.size(); i++)
+		if (names[i] == _playerName)
+			return units[i];
+	return 0;
 }
 
 void X3DEngine::gallery() {
