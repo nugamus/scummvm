@@ -54,7 +54,6 @@ private:
 	void climb();
 	void throwSwitch();
 	void ride(float dt);
-	bool onTrain(const Common::String &ground);
 	void caught();
 	void leave();
 	void waitVoice();

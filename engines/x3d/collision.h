@@ -50,8 +50,9 @@ public:
 	Math::Vector3d resolveSphere(Math::Vector3d c, float r) const;
 
 	// Nearest face crossed from its front side by the segment from -> to; t in [0, 1].
-	// hitName, if given, receives the hit object's name.
-	bool cast(const Math::Vector3d &from, const Math::Vector3d &to, float &t, Common::String *hitName = nullptr) const;
+	// hitName, if given, receives the hit object's name; hitModel and hitObject the object itself.
+	bool cast(const Math::Vector3d &from, const Math::Vector3d &to, float &t, Common::String *hitName = nullptr,
+	          const Scene::Model **hitModel = nullptr, uint *hitObject = nullptr) const;
 
 private:
 	struct Face {
