@@ -174,11 +174,17 @@ public:
 			glDepthMask(GL_TRUE);
 		} else {
 			glEnable(GL_BLEND);
-			if (blend == kAlpha)
+			if (blend != kAdditive)
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			else
 				glBlendFunc(GL_ONE, GL_ONE);
 			glDepthMask(GL_FALSE);
+		}
+		if (blend == kTint) {
+			glEnable(GL_POLYGON_OFFSET_FILL);
+			glPolygonOffset(-1, -1);
+		} else {
+			glDisable(GL_POLYGON_OFFSET_FILL);
 		}
 		// Keyed texels have alpha 0; blended faces carry their vertex alpha
 		if (keyed) {
@@ -201,6 +207,16 @@ public:
 			glVertex3f(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]);
 		}
 		glEnd();
+	}
+
+	void drawLines(const float *xyz, uint count, byte r, byte g, byte b, float width) override {
+		glLineWidth(width * pixelScale());
+		glColor4ub(r, g, b, 255);
+		glBegin(GL_LINES);
+		for (uint i = 0; i < count; i++)
+			glVertex3f(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]);
+		glEnd();
+		glLineWidth(1);
 	}
 
 	void drawImage(const Graphics::Surface &image, int x, int y, bool keyed) override {

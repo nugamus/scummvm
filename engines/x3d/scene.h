@@ -207,6 +207,10 @@ public:
 	bool pick(const Camera &cam, int width, int height, float x, float y,
 	          const Model *&model, uint &object, float &depth);
 
+	// Enhancement (hotspot overlay): a tint over the drawn faces of these objects, then
+	// their outline; after draw(), with its view
+	void drawHighlight(const Common::Array<Common::Pair<const Model *, uint> > &objects);
+
 private:
 	// An animation being played (animation.md, Per-frame playback)
 	struct Playback {
@@ -254,6 +258,11 @@ private:
 	bool findFace(const Common::String &faceObject, const Common::String &owner, Model *&model, uint &object) const;
 	void attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold);
 	void drawObject(const Model &m, uint object);
+	// The level of detail draw() shows for the base object: file and object
+	void drawnLod(const Model *m, uint i, const Model *&drawn, uint &object) const;
+	// The vertices the object's faces index as drawn (its owner's, camera-facing turned),
+	// nullptr when it has none
+	const Common::Array<float> *drawnVertices(const Model &m, uint object);
 
 	// Translucent and additive faces, drawn after everything else, farthest first
 	// (scene.md, Drawing order and blending)
@@ -309,6 +318,12 @@ private:
 	// Scratch arrays reused by drawObject, faceCamera and pick
 	Common::Array<float> _facingVertices, _pickCamera, _pickScreen;
 	mutable Common::Array<bool> _faceDone;
+	struct Edge {
+		float a[3], b[3]; // ends in memcmp order
+		bool front;
+	};
+	Common::Array<Edge> _edges; // drawHighlight's
+	Common::Array<float> _lines;
 	Renderer *_renderer;
 	Common::HashMap<Common::String, uint32, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _textures;
 };

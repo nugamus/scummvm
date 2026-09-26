@@ -69,11 +69,14 @@ public:
 	// How the following fans reach the frame (scene.md, Drawing order and blending):
 	// opaque (depth written), alpha-blended by the vertex alpha or added (depth tested,
 	// not written). keyed: texels with texture alpha 0 (the colour key) are cut out.
-	enum Blend { kOpaque, kAlpha, kAdditive };
+	// kTint: alpha-blended and pulled toward the eye, over faces drawn already
+	enum Blend { kOpaque, kAlpha, kAdditive, kTint };
 	virtual void setBlend(Blend blend, bool keyed) = 0;
 	// count vertices: xyz, uv (may be null) and rgb (0..255, may be null: white) each;
 	// alpha for every vertex
 	virtual void drawFan(const float *xyz, const float *uv, const byte *rgb, uint count, byte alpha = 255) = 0;
+	// count / 2 lines between xyz pairs, width in frame pixels, depth tested, not written
+	virtual void drawLines(const float *xyz, uint count, byte r, byte g, byte b, float width) = 0;
 
 	// A 2D image over the frame at (x, y), drawn at present(); white (255, 255, 255) is
 	// transparent when keyed

@@ -117,11 +117,17 @@ public:
 			tglDepthMask(TGL_TRUE);
 		} else {
 			tglEnable(TGL_BLEND);
-			if (blend == kAlpha)
+			if (blend != kAdditive)
 				tglBlendFunc(TGL_SRC_ALPHA, TGL_ONE_MINUS_SRC_ALPHA);
 			else
 				tglBlendFunc(TGL_ONE, TGL_ONE);
 			tglDepthMask(TGL_FALSE);
+		}
+		if (blend == kTint) {
+			tglEnable(TGL_POLYGON_OFFSET_FILL);
+			tglPolygonOffset(-1, -1);
+		} else {
+			tglDisable(TGL_POLYGON_OFFSET_FILL);
 		}
 		// Keyed texels have alpha 0; blended faces carry their vertex alpha
 		if (keyed) {
@@ -143,6 +149,15 @@ public:
 				tglTexCoord2f(uv[i * 2], uv[i * 2 + 1]);
 			tglVertex3f(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]);
 		}
+		tglEnd();
+	}
+
+	void drawLines(const float *xyz, uint count, byte r, byte g, byte b, float width) override {
+		// ponytail: TinyGL declares tglLineWidth without implementing it; lines are 1 px
+		tglColor4ub(r, g, b, 255);
+		tglBegin(TGL_LINES);
+		for (uint i = 0; i < count; i++)
+			tglVertex3f(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]);
 		tglEnd();
 	}
 
