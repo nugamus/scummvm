@@ -157,14 +157,27 @@ bool Scene::load(const Common::String &scriptName) {
 	// ("$Z$*U02_10" -> "*U02_10"); animation nodes keep the full names (E-0271)
 	for (Common::Array<Model *> *list : { &_models, &_lodModels })
 		for (Model *m : *list)
-			for (O3DObject &o : m->file.objects) {
-				o.cameraType = o.name.contains("$XYZ$") ? 1 : o.name.contains("$Z$") ? 2 : o.name.contains("$XZ$") ? 3 : 0;
-				const size_t star = o.name.findFirstOf('*');
-				if (o.cameraType && star != Common::String::npos)
-					o.name = o.name.substr(star);
-			}
+			setCameraTypes(*m);
 
 	return !_models.empty();
+}
+
+void Scene::setCameraTypes(Model &m) {
+	Common::Array<O3DObject> &objects = m.file.objects;
+	m.facingTop.resize(0);
+	m.facingTop.resize(objects.size(), false);
+	for (uint i = 0; i < objects.size(); i++) {
+		O3DObject &o = objects[i];
+		o.cameraType = o.name.contains("$XYZ$") ? 1 : o.name.contains("$Z$") ? 2 : o.name.contains("$XZ$") ? 3 : 0;
+		const size_t star = o.name.findFirstOf('*');
+		if (o.cameraType && star != Common::String::npos)
+			o.name = o.name.substr(star);
+		int owner = i;
+		while (owner >= 0 && objects[owner].vertices.empty())
+			owner = objects[owner].parent;
+		if (o.cameraType == 2 && owner >= 0 && (owner == (int)i || o.welded))
+			m.facingTop[owner] = true;
+	}
 }
 
 Scene::Model *Scene::loadModel(const Common::String &path) {
@@ -194,6 +207,7 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 	m->colors.resize(m->file.objects.size());
 	m->colorFrame.resize(m->file.objects.size());
 	m->bounds.resize(m->file.objects.size() * 4);
+	m->vertexBounds.resize(m->file.objects.size() * 4);
 	pose(*m);
 	return m;
 }
@@ -244,7 +258,24 @@ void Scene::pose(Model &m) {
 	for (uint32 &state : m.colorFrame)
 		state = 0; // lit colours follow the new pose
 
-	// Bounding spheres of what each object draws, for view culling
+	// Bounding spheres of what each object draws, for view culling, and of its whole vertex
+	// array (its welded objects' faces too), for picking
+	for (uint i = 0; i < objects.size(); i++) {
+		const Common::Array<float> &v = m.worldVertices[i];
+		float lo[3] = { 1e30f, 1e30f, 1e30f }, hi[3] = { -1e30f, -1e30f, -1e30f };
+		for (uint j = 0; j + 2 < v.size(); j += 3)
+			for (int k = 0; k < 3; k++) {
+				lo[k] = MIN(lo[k], v[j + k]);
+				hi[k] = MAX(hi[k], v[j + k]);
+			}
+		float *b = &m.vertexBounds[i * 4];
+		float r2 = 0;
+		for (int k = 0; k < 3; k++) {
+			b[k] = (lo[k] + hi[k]) / 2;
+			r2 += (hi[k] - lo[k]) * (hi[k] - lo[k]) / 4;
+		}
+		b[3] = v.size() >= 3 ? sqrtf(r2) : -1;
+	}
 	for (uint i = 0; i < objects.size(); i++) {
 		int owner = i;
 		while (owner >= 0 && objects[owner].vertices.empty())
@@ -761,12 +792,7 @@ Scene::Model *Scene::addModel(const Common::String &path, const Common::String &
 	if (!m)
 		return nullptr;
 	m->lit = !_lights.empty();
-	for (O3DObject &o : m->file.objects) {
-		o.cameraType = o.name.contains("$XYZ$") ? 1 : o.name.contains("$Z$") ? 2 : o.name.contains("$XZ$") ? 3 : 0;
-		const size_t star = o.name.findFirstOf('*');
-		if (o.cameraType && star != Common::String::npos)
-			o.name = o.name.substr(star);
-	}
+	setCameraTypes(*m);
 	_models.push_back(m);
 	// One node for the whole file on the whole tree (u03.md cutscene step 2), whatever the
 	// root's name
@@ -1551,7 +1577,7 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 			// Camera-facing objects are picked as drawn (E-0270)
 			Common::Array<float> &facing = _facingVertices;
 			const Common::Array<float> *vp = &drawn->worldVertices[top];
-			for (uint o = top; o < dobjects.size(); o++) {
+			for (uint o = top; drawn->facingTop[top] && o < dobjects.size(); o++) {
 				if (dobjects[o].cameraType != 2)
 					continue;
 				int owner = o;
@@ -1567,6 +1593,25 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 				faceCamera(*drawn, o, facing);
 			}
 			const Common::Array<float> &v = *vp;
+
+			// A ray that misses the sphere around every vertex, or reaches it only beyond the
+			// nearest hit so far, hits none of the faces (camera-facing copies are turned
+			// out of it: always tested)
+			if (vp != &facing) {
+				const float *b = &drawn->vertexBounds[top * 4];
+				if (b[3] < 0)
+					continue;
+				const float d[3] = { b[0] - cam.position[0], b[1] - cam.position[1], b[2] - cam.position[2] };
+				const float c[3] = { d[0] * right[0] + d[1] * right[1] + d[2] * right[2],
+				                     d[0] * up[0] + d[1] * up[1] + d[2] * up[2],
+				                     d[0] * forward[0] + d[1] * forward[1] + d[2] * forward[2] };
+				if (c[2] + b[3] < 0.1f || c[2] - b[3] > depth)
+					continue;
+				const float r[3] = { (x - cx) / cx / kx, (cy - y) / cy / ky, 1 };
+				const float q[3] = { c[1] * r[2] - c[2] * r[1], c[2] * r[0] - c[0] * r[2], c[0] * r[1] - c[1] * r[0] };
+				if (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] > b[3] * b[3] * (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]))
+					continue;
+			}
 
 			// Camera-space vertices, then projected
 			Common::Array<float> &cam3 = _pickCamera, &screen = _pickScreen;

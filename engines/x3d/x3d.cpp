@@ -633,8 +633,6 @@ void X3DEngine::frame(bool input) {
 	if (_gauge.ms && _gauge.visible)
 		drawGauge(_renderer, MIN(1.0f, (_logicMs - _gauge.start) / (float)_gauge.ms));
 	drawHotspots();
-	if (_showHotspots && !_hotspotCount && _system->isOverlayVisible())
-		_system->hideOverlay(); // the base class keeps its last markers when there are none
 	_renderer->present();
 	_system->delayMillis(1);
 
@@ -941,10 +939,33 @@ bool X3DEngine::aimAt(const Common::String &object, int target, Common::Point &p
 	return found;
 }
 
+void X3DEngine::drawHotspots() {
+	// Markers found again when the view moves (at most every 50 ms) and a few times a
+	// second, and sent to ScummVM's overlay (a full-window upload) only when they changed
+	if (!_showHotspots || (!hotspotDirty() && !_hotspotForceRedraw))
+		return;
+	const Common::Array<Graphics::HotspotInfo> last = _hotspots;
+	findHotspots();
+	bool same = !_hotspotForceRedraw && last.size() == _hotspots.size();
+	for (uint i = 0; same && i < last.size(); i++)
+		same = last[i].position == _hotspots[i].position && last[i].name == _hotspots[i].name;
+	if (same)
+		return;
+	_hotspotForceRedraw = true; // the base class draws only when dirty
+	Engine::drawHotspots();
+	if (_hotspots.empty() && _system->isOverlayVisible())
+		_system->hideOverlay(); // the base class keeps its last markers when there are none
+}
+
 void X3DEngine::getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) {
+	hotspots = _hotspots;
+}
+
+void X3DEngine::findHotspots() {
 	// Each clickable hotspot once, at a point where a click reaches it; its INFOOBJ name
 	// (the data has no other)
-	_hotspotCount = 0;
+	_hotspots.clear();
+	_highlight.clear();
 	if (!_freePlay || !_scene)
 		return;
 	_hotspotCamera = _camera;
@@ -969,12 +990,10 @@ void X3DEngine::getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspo
 				continue;
 			done[h] = true;
 			const Common::String &label = _interaction->hotspotName(h);
-			hotspots.push_back(Graphics::HotspotInfo(_renderer->toWindow(s), label.substr(label.findFirstOf('*') + 1)));
-			_hotspotCount++;
+			_hotspots.push_back(Graphics::HotspotInfo(_renderer->toWindow(s), label.substr(label.findFirstOf('*') + 1)));
 		}
 	}
 	// Every object a pick takes to a marked hotspot (its name or an ancestor's), for the outline
-	_highlight.clear();
 	for (const Scene::Model *m : _scene->models()) {
 		if (m->hidden)
 			continue;
@@ -993,7 +1012,8 @@ void X3DEngine::getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspo
 
 bool X3DEngine::hotspotDirty() const {
 	// Again when the view moves, and a few times a second for animations and state
-	return memcmp(&_camera, &_hotspotCamera, sizeof(Camera)) || _system->getMillis() - _hotspotTime >= 250;
+	const uint32 age = _system->getMillis() - _hotspotTime;
+	return (age >= 50 && memcmp(&_camera, &_hotspotCamera, sizeof(Camera))) || age >= 250;
 }
 
 Common::String X3DEngine::command(const Common::String &line) {

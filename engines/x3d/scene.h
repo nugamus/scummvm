@@ -114,6 +114,8 @@ public:
 		mutable Common::Array<Common::Array<byte> > colors;
 		mutable Common::Array<uint32> colorFrame;
 		Common::Array<float> bounds; // per object: world bounding sphere x, y, z, radius (< 0: nothing drawn)
+		Common::Array<float> vertexBounds; // per object: sphere around all its world vertices (< 0: none), for picking
+		Common::Array<bool> facingTop; // per object: it owns camera-facing ($Z$) faces
 	};
 
 	// X3d_Object_Hide by object name, in every loaded file
@@ -257,6 +259,8 @@ private:
 	// addFaceClip's face lookup: newest file first, the one below owner preferred
 	bool findFace(const Common::String &faceObject, const Common::String &owner, Model *&model, uint &object) const;
 	void attachLod(Model *base, uint baseObject, const Model *lod, uint lodObject, float threshold);
+	// Camera types from the names, which then start at their '*' ("$Z$*U02_10" -> "*U02_10")
+	void setCameraTypes(Model &m);
 	void drawObject(const Model &m, uint object);
 	// The level of detail draw() shows for the base object: file and object
 	void drawnLod(const Model *m, uint i, const Model *&drawn, uint &object) const;
