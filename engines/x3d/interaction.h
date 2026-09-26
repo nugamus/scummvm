@@ -72,6 +72,8 @@ public:
 	const Common::String &heldItem() const { return _heldItem; }
 	void holdItem(const Common::String &item);
 	void showCursor(uint kind);
+	// Window pixels per game pixel, so cursors keep their size at high resolutions
+	void setCursorScale(int scale);
 	Inventory *inventory = nullptr; // take and use-up steps show and hide it
 	Collision *collision = nullptr; // take and op 9 switch objects out of it (E-0252, E-0088)
 
@@ -137,6 +139,8 @@ private:
 	Graphics::Surface *_heldImage = nullptr;
 	Graphics::Surface *_cursors[6] = {};
 	int _shownCursor = -2; // -1: held item, -3: nothing (blink off)
+	int _cursorScale = 1;
+	void replaceCursor(const Graphics::Surface &s, int hotspotX, int hotspotY);
 };
 
 } // End of namespace X3D

@@ -468,6 +468,7 @@ void X3DEngine::frame(bool input) {
 	const bool interactive = input && !_suspended;
 	if (_clickNow && (!interactive || now - _lastClick < 1000 / kStepsPerSecond + 10))
 		_clickNow = false;
+	_interaction->setCursorScale(_renderer->pixelScale());
 	// The inventory bar takes the mouse before the scene (ui.md, Frame manager)
 	const int x2d = (_renderer->width() - 640) / 2;
 	const Common::Point mouse2d(_mouse.x - x2d, _mouse.y);
