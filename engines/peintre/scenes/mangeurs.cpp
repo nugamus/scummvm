@@ -19,6 +19,9 @@
  *
  */
 
+#include "common/debug.h"
+
+#include "peintre/detection.h"
 #include "peintre/peintre.h"
 #include "peintre/scenes/scenes.h"
 
@@ -106,6 +109,8 @@ public:
 			// Q-0405: the click is a level, a long one drops the object at once.
 			// Cursor 40 while hovering is replaced before it is drawn (interaction.md).
 			if (w.click()) {
+				debugC(1, kDebugScript, "Drop %s on %s", w.scene3D().nodes[w.carriedNode()].name.c_str(),
+					   h >= 0 ? w.scene3D().nodes[h].name.c_str() : "nothing");
 				const Common::String &carried = w.scene3D().nodes[w.carriedNode()].name;
 				if (h >= 0 && h == _fire && carried == "fagot") {
 					startSound(w, "finfeu");

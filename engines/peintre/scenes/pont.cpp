@@ -19,6 +19,9 @@
  *
  */
 
+#include "common/debug.h"
+
+#include "peintre/detection.h"
 #include "peintre/peintre.h"
 #include "peintre/scenes/scenes.h"
 
@@ -95,6 +98,8 @@ public:
 		if (w.carrying()) {
 			// Q-0405: the click is a level, a long one drops the object at once.
 			if (w.click()) {
+				debugC(1, kDebugScript, "Drop %s on %s", w.scene3D().nodes[w.carriedNode()].name.c_str(),
+					   h >= 0 ? w.scene3D().nodes[h].name.c_str() : "nothing");
 				if (h >= 0 && h == node(w, kPouli03)) {
 					w.setHidden(_poignee02, false);
 					if (!w.var(kBridgeDown)) {
