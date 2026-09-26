@@ -21,6 +21,7 @@
 
 #include "common/config-manager.h"
 #include "common/memstream.h"
+#include "common/ptr.h"
 #include "common/savefile.h"
 #include "common/serializer.h"
 #include "common/debug.h"
@@ -327,6 +328,34 @@ void X3DEngine::gameOver() {
 		afterOptionMenu(optionMenu());
 }
 
+Unit *X3DEngine::createUnit(const Common::String &sceneName) {
+	if (sceneName.size() < 3 || toupper(sceneName[0]) != 'U' || !Common::isDigit(sceneName[1]))
+		return nullptr;
+	const int n = atoi(sceneName.c_str() + 1);
+	switch (n) {
+	case 0:
+		return new U00(this, _practice);
+	case 1:
+		return new U01(this);
+	case 2:
+		return new U02(this);
+	case 3:
+		return new U03(this);
+	case 4:
+		return new U04(this);
+	case 5:
+		return new U05(this);
+	case 6:
+		return new U06(this);
+	case 7:
+		return new U07(this);
+	case 33:
+		return new U33(this);
+	default:
+		return nullptr;
+	}
+}
+
 void X3DEngine::playScene(const Common::String &sceneName) {
 	_sceneName = sceneName;
 
@@ -348,28 +377,10 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_inventory->attach(&interaction);
 	interaction.inventory = _inventory;
 
-	U00 unit00(this, _practice);
-	U01 unit01(this);
-	U02 unit02(this);
-	U03 unit03(this);
-	U04 unit04(this);
-	U05 unit05(this);
-	U06 unit06(this);
-	Gallery3D gallery3d(this, _gallery3D);
-	U07 unit07(this);
-	U33 unit33(this);
 	const bool view3d = !_gallery3D.empty() && sceneName.equalsIgnoreCase(Gallery3D::sceneFor(_gallery3D));
+	Common::ScopedPtr<Unit> unit(view3d ? new Gallery3D(this, _gallery3D) : createUnit(sceneName));
 	_gallery3D.clear();
-	_unit = view3d ? (Unit *)&gallery3d :
-	        sceneName.hasPrefixIgnoreCase("U00") ? (Unit *)&unit00 :
-	        sceneName.hasPrefixIgnoreCase("U01") ? (Unit *)&unit01 :
-	        sceneName.hasPrefixIgnoreCase("U02") ? (Unit *)&unit02 :
-	        sceneName.hasPrefixIgnoreCase("U03") ? (Unit *)&unit03 :
-	        sceneName.hasPrefixIgnoreCase("U04") ? (Unit *)&unit04 :
-	        sceneName.hasPrefixIgnoreCase("U05") ? (Unit *)&unit05 :
-	        sceneName.hasPrefixIgnoreCase("U06") ? (Unit *)&unit06 :
-	        sceneName.hasPrefixIgnoreCase("U07") ? (Unit *)&unit07 :
-	        sceneName.hasPrefixIgnoreCase("U33") ? (Unit *)&unit33 : nullptr;
+	_unit = unit.get();
 	if (_unit)
 		_unit->afterLoad();
 
