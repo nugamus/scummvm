@@ -262,6 +262,7 @@ bool U00::input(float dt) {
 		player.canMove = true;
 		player.collide = true;
 		player.groundObject.clear();
+		player.groundModel = nullptr;
 		if (_state == 2)
 			stopGauge();
 		return true;
