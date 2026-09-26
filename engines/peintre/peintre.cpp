@@ -253,6 +253,21 @@ Common::Error PeintreEngine::run() {
 	// boot.md "Sequence": players, the player-name screen, resume state, loading, intro.
 	loadPlayers();
 	checkSessions();
+	if (ConfMan.hasKey("save_slot")) {
+		// A game chosen in the launcher: slot = player * 100 + object (metaengine.cpp).
+		// Like Load3DGame it resumes inside the saved zone (save.md), then the 3D.
+		const int slot = ConfMan.getInt("save_slot");
+		if (slot / 100 < (int)_players.size() && readGame(slot / 100, slot % 100)) {
+			_player = slot / 100;
+			_sound->setVolume(_players[_player].volume);
+			int code = enterZone(_state.currentZone());
+			while (code >= 0 && readGame(code / 100, code % 100))
+				code = enterZone(_state.currentZone());
+			if (code != -2)
+				runWorld(_state.block3D[0x3C], _state.block3D[0x3D], _state.currentZone(), code);
+			return Common::kNoError;
+		}
+	}
 	bool known = false;
 	if (!runPlayerScreen(_player, known))
 		return Common::kNoError;
@@ -295,17 +310,26 @@ Common::Error PeintreEngine::run() {
 	_movies->play("intro");
 
 	if (in2d) {
-		// boot.md step 9: resume inside the saved zone.
-		enterZone(_state.currentZone());
+		// boot.md step 9: resume inside the saved zone, then the 3D at the saved spot.
+		int code = enterZone(_state.currentZone());
+		while (code >= 0 && readGame(code / 100, code % 100))
+			code = enterZone(_state.currentZone());
+		if (code != -2)
+			runWorld(_state.block3D[0x3C], _state.block3D[0x3D], _state.currentZone(), code);
+		return Common::kNoError;
 	}
 	runWorld(_state.block3D[0x3C], _state.block3D[0x3D]);
 	return Common::kNoError;
 }
 
-void PeintreEngine::runWorld(int scene, int prevScene) {
+void PeintreEngine::runWorld(int scene, int prevScene, int zone, int zoneCode) {
 	World world(this);
-	if (!world.load(scene, prevScene, false))
+	if (zone >= 0) {
+		// The 3D after a zone: the saved spot, the zone's bookkeeping (scene.md case C).
+		world.resumeFromZone(zone, zoneCode);
+	} else if (!world.load(scene, prevScene, false)) {
 		return;
+	}
 	// movement.md "The tick": 66 ms.
 	while (!shouldQuit()) {
 		pollInput();
@@ -331,15 +355,13 @@ void PeintreEngine::runWorld(int scene, int prevScene) {
 			const int code = enterZone(world.zoneRequest());
 			if (code == -2)
 				return;
-			if (code >= 0) {
-				// Load game n: always resumes inside its saved zone (save.md).
-				if (readGame(code / 100, code % 100)) {
-					const int again = enterZone(_state.currentZone());
-					if (again == -2)
-						return;
-				}
-			}
-			world.afterZone(code >= 0 ? -1 : code);
+			int result = code;
+			// Load game n: always resumes inside its saved zone (save.md).
+			while (result >= 0 && readGame(result / 100, result % 100))
+				result = enterZone(_state.currentZone());
+			if (result == -2)
+				return;
+			world.resumeFromZone(_state.currentZone(), result >= 0 ? -1 : result);
 			break;
 		}
 		case kExitOptions: {
@@ -347,11 +369,13 @@ void PeintreEngine::runWorld(int scene, int prevScene) {
 			if (code == -2)
 				return;
 			world.afterOptions();
-			if (code >= 0 && readGame(code / 100, code % 100)) {
-				const int again = enterZone(_state.currentZone());
-				if (again == -2)
+			if (code >= 0) {
+				int result = code;
+				while (result >= 0 && readGame(result / 100, result % 100))
+					result = enterZone(_state.currentZone());
+				if (result == -2)
 					return;
-				world.afterZone(-1);
+				world.resumeFromZone(_state.currentZone(), result >= 0 ? -1 : result);
 			}
 			break;
 		}

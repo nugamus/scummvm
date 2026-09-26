@@ -39,7 +39,7 @@ public:
 	}
 
 	bool hasFeature(MetaEngineFeature f) const override {
-		return f == kSupportsListSaves || f == kSupportsDeleteSave;
+		return f == kSupportsListSaves || f == kSupportsDeleteSave || f == kSupportsLoadingDuringStartup;
 	}
 
 	int getMaximumSaveSlot() const override {
