@@ -105,8 +105,8 @@ bool U06::input(float dt) {
 }
 
 void U06::afterAnimate() {
-	// Each tick after the pose: the clown's local matrix times Rz(3pi/2 - yaw).
-	// ponytail: the hotspot's load-time matrix is left out (Q-0170)
+	// Each tick after the pose: the clown's local matrix times Rz(3pi/2 - yaw); the
+	// hotspot's load-time matrix is the identity (E-0533)
 	if (!_turned)
 		return;
 	O3DObject *clown = _vm->scene()->object(kClown);

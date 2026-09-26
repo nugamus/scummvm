@@ -50,7 +50,7 @@ private:
 	void drain();
 
 	X3DEngine *_vm;
-	bool _shooting = false; // Q-0171: the original never sets it itself
+	bool _shooting = true; // never written by the original: debug-heap fill, so true (E-0534)
 	int _shots = 0;
 	float _clownYaw = 3 * (float)M_PI / 2;
 	bool _turned = false;
