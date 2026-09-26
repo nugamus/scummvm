@@ -30,6 +30,7 @@
 
 #if defined(USE_OPENGL_GAME) && !defined(USE_GLES2)
 
+#include "graphics/opengl/context.h"
 #include "graphics/opengl/system_headers.h"
 
 namespace X3D {
@@ -149,7 +150,24 @@ public:
 					if (rgba->getPixel(i, j) == white)
 						rgba->setPixel(i, j, clear);
 		}
-		const uint32 texture = createTexture(*rgba);
+		// Without NPOT support the image goes into the corner of a power-of-two texture
+		int w = rgba->w, h = rgba->h;
+		if (!OpenGLContext.NPOTSupported) {
+			w = h = 1;
+			while (w < rgba->w)
+				w <<= 1;
+			while (h < rgba->h)
+				h <<= 1;
+		}
+		GLuint texture;
+		glGenTextures(1, &texture);
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rgba->w, rgba->h, GL_RGBA, GL_UNSIGNED_BYTE, rgba->getPixels());
+		const float u = (float)rgba->w / w, v = (float)rgba->h / h;
 		rgba->free();
 		delete rgba;
 
@@ -170,11 +188,11 @@ public:
 		glBegin(GL_QUADS);
 		glTexCoord2f(0, 0);
 		glVertex2i(x, y);
-		glTexCoord2f(1, 0);
+		glTexCoord2f(u, 0);
 		glVertex2i(x + image.w, y);
-		glTexCoord2f(1, 1);
+		glTexCoord2f(u, v);
 		glVertex2i(x + image.w, y + image.h);
-		glTexCoord2f(0, 1);
+		glTexCoord2f(0, v);
 		glVertex2i(x, y + image.h);
 		glEnd();
 		deleteTexture(texture);
