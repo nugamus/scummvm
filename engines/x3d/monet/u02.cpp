@@ -68,8 +68,10 @@ void U02::start(bool newGame, bool video) {
 	talk->addTalker("U02_02", "$$$DUMMY.*U02Parle");
 	talk->addTalker("U02_03", "$$$DUMMY.*U_03Parle");
 	talk->addTalker("U02_04", "$$$DUMMY.*visage");
+	// The clerk asleep on a restore: his snore as a looping effect, not the snore
+	// emitter, so the next effect cuts it (E-0618)
 	if (_vm->interaction()->exhausted(8) && !_vm->interaction()->exhausted(12))
-		startSnore();
+		_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(_vm->scene()->dir() + "Sound/d1_25.wav"), hotspotPosition("U02_04"), true);
 	if (!newGame)
 		return;
 	const float p[3] = { 122.626f, 67.0605f, 52.529f };
@@ -175,7 +177,9 @@ bool U02::handle(const Common::String &action) {
 		else
 			scene->runNodeTo("*U02_12", 1, true);
 	} else if (action.equalsIgnoreCase("TakePlanche")) {
-		if (!_vm->player().groundObject.equalsIgnoreCase("plncher01"))
+		// Only from the floor the plank lies on: the original compares the ground
+		// object's name, and plncher01 is unique in U02 (E-0618)
+		if (_vm->player().groundObject.equalsIgnoreCase("plncher01"))
 			interaction->take("*U02_07");
 	} else if (action.equalsIgnoreCase("PoserPlanche")) {
 		show("*U02_07a");
