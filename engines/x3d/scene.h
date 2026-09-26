@@ -79,6 +79,9 @@ public:
 	// A new node playing the .A3D's root animation on an existing object, named after it
 	// (U07's tipping plank)
 	bool addObjectNode(const Common::String &object, const Common::String &path, float fps);
+	// A new node, last in the list, playing the loaded track named after the object on it
+	// (XSceneAnim_AddNode: U04's chest lid *U04_26, E-0230, E-0056)
+	bool addTrackNode(const Common::String &object);
 	O3DObject *object(const Common::String &name); // newest file first
 	void draw(const Camera &cam, int width, int height);
 

@@ -759,6 +759,24 @@ bool Scene::addObjectNode(const Common::String &object, const Common::String &pa
 	return true;
 }
 
+bool Scene::addTrackNode(const Common::String &object) {
+	Model *m;
+	uint o;
+	if (!findObject(object, m, o))
+		return false;
+	for (uint i = 0; i < _nodes.size(); i++) {
+		if (_nodes[i].model != m)
+			continue;
+		const A3DFile *file = _nodes[i].base.file;
+		for (uint a = 0; a < file->animations.size(); a++)
+			if (file->animations[a].name.equalsIgnoreCase(object)) {
+				addNode(file, a, m, o, 30);
+				return true;
+			}
+	}
+	return false;
+}
+
 void Scene::nameNodes(Model *m, const Common::String &name) {
 	for (AnimNode &n : _nodes)
 		if (n.model == m)
@@ -925,12 +943,18 @@ Common::Array<Math::Vector3d> Scene::surfacePoints(const Common::String &name, c
 	uint o;
 	if (!findObject(name, m, o))
 		return points;
-	int owner = o;
-	while (owner >= 0 && m->file.objects[owner].vertices.empty())
-		owner = m->file.objects[owner].parent;
-	if (owner >= 0) {
+	// The faces of the object and of everything below it (a hotspot may be a dummy)
+	for (uint d = 0; d < m->file.objects.size(); d++) {
+		int a = d;
+		while (a >= 0 && a != (int)o)
+			a = m->file.objects[a].parent;
+		int owner = d;
+		while (owner >= 0 && m->file.objects[owner].vertices.empty())
+			owner = m->file.objects[owner].parent;
+		if (a < 0 || owner < 0)
+			continue;
 		const Common::Array<float> &v = m->worldVertices[owner];
-		for (const O3DFace &face : m->file.objects[o].faces) {
+		for (const O3DFace &face : m->file.objects[d].faces) {
 			Math::Vector3d c;
 			uint n = 0;
 			for (uint32 index : face.indices)
