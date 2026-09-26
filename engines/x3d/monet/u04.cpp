@@ -203,9 +203,10 @@ void U04::afterFrame() {
 				_vm->stopGauge();
 		} else if (label == "ecroule") {
 			_vm->stopGauge();
-			if (_onBoat)
+			if (_onBoat) {
 				boatSinks();
-			return;
+				return;
+			}
 		} else if (label == "PlusVite") {
 			_vm->stopGauge();
 			voiceAt("d3_20", player.eye - Vector3d(10 * _vm->scene()->scale, 0, 0));
@@ -218,6 +219,7 @@ void U04::afterFrame() {
 	if (interaction->exhausted(18) && !interaction->exhausted(20) && !interaction->exhausted(40) &&
 	    (player.eye - Vector3d(213.47f, 296.4f, 15)).getMagnitude() < 2 * _vm->scene()->scale)
 		ernest();
+	// A name test in the original, unlike the window's (E-0616)
 	if (!_onBoat && player.groundObject.equalsIgnoreCase(kBoat))
 		stepOntoBoat();
 }
@@ -248,15 +250,20 @@ bool U04::input(float dt) {
 			Scene *scene = _vm->scene();
 			const bool clip = scene->activeSlot(kBoat) != 0;
 			const float frame = scene->nodeFrame(kBoat);
-			if (!clip || frame < 60 || frame > scene->nodeLastFrame(kBoat) - 60) {
-				if (clip)
-					scene->setNodeFrame(kBoat, 1);
+			if (frame < 60 || frame > scene->nodeLastFrame(kBoat) - 60) {
 				jumpOffBoat();
+				scene->setNodeFrame(kBoat, 1); // after the jump (E-0616)
+				return true;
 			}
-			return true;
+			if (!clip) {
+				jumpOffBoat();
+				return true;
+			}
+			// Mid-pond with a clip: on to the window test and generic input
 		}
 	}
-	if (player.groundObject.equalsIgnoreCase("Box70"))
+	// The Box70 object itself, a pointer test (E-0616)
+	if (player.standsOn(*_vm->scene(), "Box70"))
 		climbOut();
 	return false;
 }
