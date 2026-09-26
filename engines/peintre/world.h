@@ -130,6 +130,11 @@ public:
 	void afterMovie();
 	/** After a zone or the option menu: back to the scene at the saved spot. */
 	void afterZone(int code);
+	/** Starting the 3D after a zone left with `code` (a load, or a resume in 2D). */
+	void resumeFromZone(int zone, int code) {
+		_zone = zone;
+		afterZone(code);
+	}
 	/** Back from the option menu opened in 3D (0x42f515 sets 0x4e3120). */
 	void afterOptions() { localVar(0x4e3120) = 1; }
 
@@ -270,6 +275,11 @@ private:
 	Common::String _ambience;
 	Common::Array<Common::String> _sounds;
 	Common::HashMap<uint32, uint32> _locals;
+
+public:
+	// Scene API additions (scenes agent)
+	/** The node drawn at a screen point in the last frame, -1 (dev harness). */
+	int pickAt(int x, int y) const { return _renderer.pick(x, y); }
 };
 
 /** The scene code for a scene number and bundle (scenes/). */

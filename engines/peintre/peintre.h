@@ -133,7 +133,7 @@ private:
 	/** The player-name screen (accueil.cpp). Returns false when the player quits. */
 	bool runPlayerScreen(uint &player, bool &known);
 	/** The 3D world until the player quits (world.cpp). */
-	void runWorld(int scene, int prevScene);
+	void runWorld(int scene, int prevScene, int zone = -1, int zoneCode = 0);
 	void loadAllScenes();
 
 	const ADGameDescription *_gameDescription;
