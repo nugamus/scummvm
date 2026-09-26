@@ -267,7 +267,7 @@ private:
 
 	// Modern controls (an option, not in the original): in free play the mouse is captured,
 	// turns the view, and clicks and hovers act at the centre of the screen
-	bool _modern = false, _invertY = false, _mouseCaptured = false;
+	bool _modern = false, _invertY = false, _mouseCaptured = false, _cursorHidden = false;
 	float _lookScale = 0.0025f; // radians per mouse count, times mouse_sensitivity / 100
 	uint32 _captureStart = 0; // mouse motion right after a capture is dropped
 	const char *keymapName() const { return _modern ? "x3d-modern" : "x3d-default"; }

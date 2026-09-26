@@ -550,6 +550,14 @@ void X3DEngine::frame(bool input) {
 	// ignored; nothing counts beyond 4 scene units of depth
 	const bool interactive = input && !_suspended;
 	_freePlay = interactive;
+	// Modern controls: no cursor while it has no use (scripted scenes, dialogue), so none
+	// sits in the middle of the view (not in the original, which keeps its cursor)
+	const bool hideCursor = _modern && !interactive && !_inventory->shown();
+	if (hideCursor)
+		CursorMan.showMouse(false); // every frame: suspend() and hold changes show it
+	else if (_cursorHidden)
+		CursorMan.showMouse(true);
+	_cursorHidden = hideCursor;
 	if (_clickNow && (!interactive || now - _lastClick < 1000 / kStepsPerSecond + 10))
 		_clickNow = false;
 	_interaction->setCursorScale(_renderer->pixelScale());
@@ -771,6 +779,7 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 	if (keymapOff)
 		keymap->setEnabled(false);
 	CursorMan.showMouse(true);
+	_cursorHidden = false;
 	const uint32 start = _system->getMillis();
 	_menuView = -1;
 	Common::String result;
