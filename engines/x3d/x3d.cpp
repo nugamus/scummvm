@@ -147,6 +147,17 @@ void X3DEngine::actionToKey(Common::Event &e) {
 		_renderer->updateSize(ConfMan.getBool("widescreen"));
 	if (e.type != Common::EVENT_CUSTOM_ENGINE_ACTION_START && e.type != Common::EVENT_CUSTOM_ENGINE_ACTION_END)
 		return;
+	// ScummVM's hotspot overlay, as a toggle instead of while held; the cursor stays as
+	// it was (the base class hides it while the overlay shows)
+	if (e.customType == kActionToggleHotspots) {
+		if (e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START && ConfMan.getBool("enable_hotspots")) {
+			const bool cursor = CursorMan.isVisible();
+			showHotspots(!_showHotspots);
+			CursorMan.showMouse(cursor);
+		}
+		e.type = Common::EVENT_INVALID;
+		return;
+	}
 	static const Common::KeyCode keys[] = {
 		Common::KEYCODE_INVALID, Common::KEYCODE_UP, Common::KEYCODE_DOWN, Common::KEYCODE_LEFT,
 		Common::KEYCODE_RIGHT, Common::KEYCODE_PAGEUP, Common::KEYCODE_PAGEDOWN, Common::KEYCODE_LCTRL,
