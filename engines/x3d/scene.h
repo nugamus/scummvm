@@ -277,6 +277,8 @@ private:
 	Common::Array<Model *> _models;
 	Common::Array<Model *> _lodModels; // only drawn through their base objects
 	Common::Array<A3DFile *> _animationFiles;
+	// Materials by exact name: the first loaded wins for every later file (E-0484)
+	Common::HashMap<Common::String, O3DMaterial> _materials;
 	Common::HashMap<Common::String, const A3DFile *, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _clipFiles;
 	Common::Array<AnimNode> _nodes;
 
