@@ -6,6 +6,7 @@ MODULE_OBJS = \
 	console.o \
 	dmf.o \
 	frame.o \
+	gallery3d.o \
 	interaction.o \
 	inventory.o \
 	metaengine.o \
