@@ -24,14 +24,18 @@
 #include "common/file.h"
 #include "common/fs.h"
 #include "common/system.h"
+#include "common/tokenizer.h"
 
 #include "engines/util.h"
 
 
+#include "ring/cursor.h"
 #include "ring/detection.h"
 #include "ring/movie.h"
 #include "ring/resources.h"
 #include "ring/ring.h"
+#include "ring/world.h"
+#include "ring/ring/zones.h"
 
 namespace Ring {
 
@@ -59,6 +63,13 @@ void RingEngine::pollEvents(uint32 ms) {
 			_escapeDown = true;
 		else if (event.type == Common::EVENT_KEYUP && event.kbd.keycode == Common::KEYCODE_ESCAPE)
 			_escapeDown = false;
+		else if (event.type == Common::EVENT_MOUSEMOVE)
+			_mouse = event.mouse;
+		else if (event.type == Common::EVENT_LBUTTONDOWN && event.mouse.y < 465) {
+			_mouse = event.mouse;
+			_clickPos = event.mouse;
+			_clicked = true;
+		}
 	}
 	if (ms)
 		g_system->delayMillis(ms);
@@ -167,26 +178,179 @@ Common::Error RingEngine::run() {
 	default: _languageFolder = "ENG"; break;
 	}
 	_resources.reset(new Resources(format));
+	_cursors.reset(new Cursors());
 	_resources->setLanguageFolder(_languageFolder);
 
 	// The window shows nothing for 3 s (timer 100), the set-up runs, then 2 s more (timer 101).
 	present();
 	wait(3000);
 	_resources->openArchive(kZoneSY);
+	addCursors();
+	_world.reset(new World());
+	_world->setUp();
 	wait(2000);
 	_escapeDown = false;
 
-	showStartupScreens();
+	// Development: dev_skip_startup=true in the game domain goes straight to the menu.
+	if (!ConfMan.getBool("dev_skip_startup"))
+		showStartupScreens();
 
-	// StartMenu(0) shows puzzle 90000 (games/ring/docs, to come); for now its background.
-	_screen.clear();
-	Common::ScopedPtr<Image> menu(_resources->loadImage(kZoneSY, "GenMen.bmp", true));
-	if (menu)
-		menu->draw(_screen, 0, 16, 1);
-	present();
-	while (!shouldQuit())
-		pollEvents(10);
+	startMenu(false);
+	_clicked = false;
+	// Development: dev_input="ms:move x y;ms:click x y;..." replays mouse input at ms after the menu opens.
+	Common::StringArray script;
+	for (const Common::String &step : Common::StringTokenizer(ConfMan.get("dev_input"), ";").split())
+		script.push_back(step);
+	uint32 menuStart = g_system->getMillis();
+	while (!shouldQuit()) {
+		pollEvents();
+		while (!script.empty()) {
+			uint ms, x, y;
+			char what[8];
+			if (sscanf(script[0].c_str(), "%u:%7s %u %u", &ms, what, &x, &y) != 4) {
+				script.remove_at(0);
+				continue;
+			}
+			if (g_system->getMillis() - menuStart < ms)
+				break;
+			_mouse = Common::Point(x, y);
+			if (!strcmp(what, "click"))
+				click(x, y);
+			script.remove_at(0);
+		}
+		if (_clicked) {
+			_clicked = false;
+			click(_clickPos.x, _clickPos.y);
+		}
+		frame();
+		g_system->delayMillis(10);
+	}
 	return Common::kNoError;
+}
+
+void RingEngine::addCursors() {
+	// The game set-up's cursors, 0x430ed0 (spec/boot.md); kind 1 (id 0x36) is a Windows cursor.
+	static const struct {
+		int id;
+		const char *name;
+		int kind, frames, offX, offY;
+	} cursors[] = {
+		{ 0x33, "CUR_busy", 3, 0, 0, 0 }, { 10000, "ni_handsel", 3, 0, 15, 15 },
+		{ 0x32, "cur_idle", 4, 15, 10, 6 }, { 0x35, "cur_muv", 4, 20, 10, 6 },
+		{ 0x34, "CUR_Hotspot", 4, 19, 10, 6 }, { 0x37, "cur_back", 3, 0, 10, 20 },
+		{ 0x38, "CUR_MenuIdle", 3, 0, 0, 0 }, { 0x39, "CUR_MenuActive", 3, 0, 0, 0 },
+	};
+	for (const auto &c : cursors) {
+		_cursors->add(c.id, c.name, c.kind, c.frames, 12.5f);
+		_cursors->setOffset(c.id, c.offX, c.offY);
+	}
+}
+
+void RingEngine::puzSetAct(int puzzle) {
+	// ponytail: the puzzle's ambient sounds start here (spec/sound.md, to come)
+	if (_world->puzzle(puzzle))
+		_puzzle = puzzle;
+}
+
+bool RingEngine::puzSetMod(int puzzle, int mode, int object) {
+	Puzzle *p = _world->puzzle(puzzle);
+	if (!p || (p->mode == 2 && mode == 2))
+		return false;
+	p->mode = mode;
+	p->modeObject = object;
+	return true;
+}
+
+void RingEngine::startMenu(bool fromGame) {
+	if (_menuZone)
+		return;
+	// ponytail: from the game, the snapshot save and the thumbnail come with spec/save.md
+	_menuZone = _zone;
+	_zone = kZoneSY;
+	puzSetAct(90000);
+	puzSetMod(1, 1, 0);
+	for (int o = 1; o < 8; o++) {
+		_world->setAccessibilities(o, false);
+		_world->hideAndFree(o);
+	}
+	_world->setAccessibilities(90004, fromGame); // "continue"
+}
+
+void RingEngine::requestClose() {
+	puzSetMod(1, 2, 2);
+	_world->showPresentation(2, 0, true);
+	_world->setAccessibilities(2, true);
+}
+
+void RingEngine::frame() {
+	_screen.fillRect(Common::Rect(0, 0, 640, 16), 0);
+	_screen.fillRect(Common::Rect(0, 464, 640, 480), 0);
+	if (Puzzle *p = _world->puzzle(_puzzle))
+		_world->draw(*p, *_resources, _screen);
+	if (Puzzle *p1 = _world->puzzle(1))
+		_world->draw(*p1, *_resources, _screen);
+	track(_mouse.x, _mouse.y);
+	_cursors->draw(*_resources, _screen, _mouse.x, _mouse.y, g_system->getMillis());
+	present();
+}
+
+// The zone's handlers; puzzle 1's events always go to SY (spec/events.md).
+static void onAccessibility(RingEngine *vm, int zone, int object, int value) {
+	if (zone == kZoneSY)
+		SY::onAccessibility(vm, object, value);
+}
+
+static void onNothing(RingEngine *vm, int zone) {
+	if (zone == kZoneSY)
+		SY::onNothing(vm);
+}
+
+static void onClick(RingEngine *vm, int zone, int object, int value) {
+	if (zone == kZoneSY)
+		SY::onClick(vm, object, value);
+}
+
+void RingEngine::track(int x, int y) {
+	// ponytail: the inventory, rotations and movabilities join with their specs
+	if (Puzzle *p1 = _world->puzzle(1)) {
+		if (const Accessibility *acc = _world->hit(*p1, x, y)) {
+			_cursors->set(acc->hotSpot.cursor);
+			onAccessibility(this, kZoneSY, acc->object, acc->hotSpot.value);
+			return;
+		}
+		if (p1->mode == 2) {
+			_cursors->set(0x32);
+			SY::onNothing(this);
+			return;
+		}
+	}
+	if (Puzzle *p = _world->puzzle(_puzzle)) {
+		if (const Accessibility *acc = _world->hit(*p, x, y)) {
+			_cursors->set(acc->hotSpot.cursor);
+			onAccessibility(this, _zone, acc->object, acc->hotSpot.value);
+			return;
+		}
+	}
+	_cursors->set(0x32);
+	onNothing(this, _zone);
+}
+
+void RingEngine::click(int x, int y) {
+	Puzzle *p1 = _world->puzzle(1);
+	Puzzle *p = _world->puzzle(_puzzle);
+	for (Puzzle *q : { p1, p }) {
+		if (!q)
+			continue;
+		if (const Accessibility *acc = _world->hit(*q, x, y)) {
+			Object *o = _world->object(acc->object);
+			if (o && (o->flags & 1))
+				onClick(this, q == p1 ? kZoneSY : _zone, acc->object, acc->hotSpot.value);
+			track(x, y);
+			return;
+		}
+		if (q == p1 && p1->mode == 2)
+			return;
+	}
 }
 
 } // End of namespace Ring
