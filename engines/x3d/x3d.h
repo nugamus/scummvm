@@ -110,9 +110,13 @@ public:
 	void getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) override;
 	bool hotspotDirty() const override;
 	void findHotspots(); // the markers and the objects to outline
+	void placeMarkers(); // their positions in the drawn view
 	// The object's first surface point on screen that a pick takes to hotspot target (hit),
 	// else its first on screen; false when none is. tries: surface points picked at most
-	bool aimAt(const Common::String &object, int target, Common::Point &point, bool &hit, uint tries = 1000);
+	bool aimAt(const Common::String &object, int target, Common::Point &point, bool &hit, uint tries = 1000,
+	           Math::Vector3d *world = nullptr); // world: the point hit
+	bool toScreen(const Math::Vector3d &p, Common::Point &s) const; // the pick's projection
+	bool picks(const Common::Point &s, int target); // a click at s reaches hotspot target
 
 	// Script primitives for unit code (movement.md, "Scripted camera moves"; u01.md).
 	// They run frames until done, like the original's blocking loops: animation, sound
@@ -258,7 +262,15 @@ private:
 	float _fovExtra = 0; // the fov option's degrees beyond the original's 90
 	Camera _hotspotCamera; // the view of the last hotspot overlay
 	uint32 _hotspotTime = 0;
-	Common::Array<Graphics::HotspotInfo> _hotspots; // its markers, in window pixels
+	// A marker: a point of the hotspot's object a click reaches, as an offset from its origin
+	struct Marker {
+		int hotspot = -1;
+		Common::String object;
+		Math::Vector3d offset;
+		Common::U32String label;
+	};
+	Common::Array<Marker> _markers;
+	Common::Array<Graphics::HotspotInfo> _hotspots; // the markers placed, in window pixels
 	Common::Array<Common::Pair<const Scene::Model *, uint> > _highlight; // their objects, outlined
 	Common::String _menuText; // the text edit of the last menu
 	bool _escapeNow = false, _escapeBlocked = false;
