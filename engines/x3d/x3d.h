@@ -57,7 +57,7 @@ class Unit;
 enum Action {
 	kActionNone,
 	kActionForward, kActionBackward, kActionTurnLeft, kActionTurnRight, kActionLookUp,
-	kActionLookDown, kActionRun, kActionJump, kActionInventory, kActionMenu, kActionSkip
+	kActionLookDown, kActionRun, kActionJump, kActionInventory, kActionMenu, kActionSkip, kActionCrouch
 };
 
 class X3DEngine : public Engine {
@@ -231,7 +231,7 @@ private:
 	Common::Array<int> _devClicks;
 	Common::StringArray _devCommands; // "ms:command", from dev_commands
 	bool _restoring = false;
-	uint32 _devUp = 0, _devDown = 0, _devShift = 0; // console "press": held until these times (ms)
+	uint32 _devUp = 0, _devDown = 0, _devShift = 0, _devCrouch = 0; // console "press": held until these times (ms)
 	uint32 _sceneStart = 0, _devStart = 0;
 	bool _devParsed = false, _devMenuParsed = false;
 	Common::StringArray _devMenu; // dev_menu answers for the next menus

@@ -135,9 +135,10 @@ void X3DEngine::actionToKey(Common::Event &e) {
 	static const Common::KeyCode keys[] = {
 		Common::KEYCODE_INVALID, Common::KEYCODE_UP, Common::KEYCODE_DOWN, Common::KEYCODE_LEFT,
 		Common::KEYCODE_RIGHT, Common::KEYCODE_PAGEUP, Common::KEYCODE_PAGEDOWN, Common::KEYCODE_LCTRL,
-		Common::KEYCODE_LSHIFT, Common::KEYCODE_SPACE, Common::KEYCODE_ESCAPE, Common::KEYCODE_RETURN
+		Common::KEYCODE_LSHIFT, Common::KEYCODE_SPACE, Common::KEYCODE_ESCAPE, Common::KEYCODE_RETURN,
+		Common::KEYCODE_KP0
 	};
-	if (e.customType <= kActionNone || e.customType > kActionSkip)
+	if (e.customType <= kActionNone || e.customType > kActionCrouch)
 		return;
 	const bool down = e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START;
 	e.kbd = Common::KeyState(keys[e.customType]);
@@ -428,6 +429,7 @@ void X3DEngine::frame(bool input) {
 			break;
 		case Common::KEYCODE_LSHIFT:
 		case Common::KEYCODE_RSHIFT: _keys.shift = down; break;
+		case Common::KEYCODE_KP0: _keys.crouch = down; break;
 		case Common::KEYCODE_ESCAPE:
 		case Common::KEYCODE_F5: // the same in play (ui.md, Escape)
 			if (down && input && !_suspended && !_escapeBlocked)
@@ -455,6 +457,11 @@ void X3DEngine::frame(bool input) {
 		_keys.shift = now < _devShift;
 		if (!_keys.shift)
 			_devShift = 0;
+	}
+	if (_devCrouch) {
+		_keys.crouch = now < _devCrouch;
+		if (!_keys.crouch)
+			_devCrouch = 0;
 	}
 	// A long gap (a stall, a debugger) is not replayed as game time
 	_pending += MIN<uint32>(now - _last, 250);
@@ -954,9 +961,9 @@ Common::String X3DEngine::command(const Common::String &line) {
 	}
 	if (c == "node" && a.size() >= 2) // an animation node's frame
 		return Common::String::format("frame %g running %d", _scene->nodeFrame(a[1]), (int)_scene->nodeRunning(a[1]));
-	if (c == "press" && a.size() >= 3) { // hold up, down or shift for ms, for scripted play
+	if (c == "press" && a.size() >= 3) { // hold up, down, shift or crouch for ms, for scripted play
 		const uint32 until = _system->getMillis() + atoi(a[2].c_str());
-		(a[1] == "shift" ? _devShift : a[1] == "down" ? _devDown : _devUp) = until;
+		(a[1] == "shift" ? _devShift : a[1] == "crouch" ? _devCrouch : a[1] == "down" ? _devDown : _devUp) = until;
 		return "ok";
 	}
 	if (c == "probe" && a.size() >= 4) { // the ground below a point, without moving

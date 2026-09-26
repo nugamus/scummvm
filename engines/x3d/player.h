@@ -39,7 +39,7 @@ class Collision;
 // Keys read by the keyboard camera, held state (docs/engine-spec/movement.md, Keys)
 struct Keys {
 	bool up = false, down = false, left = false, right = false;
-	bool pageUp = false, pageDown = false, ctrl = false, shift = false, space = false;
+	bool pageUp = false, pageDown = false, ctrl = false, shift = false, space = false, crouch = false;
 };
 
 // The first-person camera: movement, turning, collision and falls
@@ -81,6 +81,12 @@ private:
 	// once at the start
 	bool _jumping = false, _shiftWas = false;
 	bool _runToggle = false, _runOn = false, _ctrlWas = false; // the run_toggle option
+
+	// Crouching (movement.md, Crouch): lowering, down, rising; the standing eye height and
+	// sphere offset come back when it ends
+	enum { kStanding, kLowering, kCrouched, kRising } _crouch = kStanding;
+	bool _crouchWas = false;
+	float _crouchTime = 0, _standHeight = 0, _standOffset = 0;
 	float _jumpTime = 0, _jumpZ = 0;
 	Math::Vector3d _jumpVelocity;
 
