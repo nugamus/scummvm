@@ -28,6 +28,7 @@
 #include "common/str.h"
 
 #include "ring/api.h"
+#include "ring/rotation.h"
 
 namespace Graphics {
 class Font;
@@ -83,6 +84,14 @@ struct PuzzleImage {
 	Common::ScopedPtr<Image> image;
 };
 
+/** A way out of a puzzle or rotation (`*AddMovTo*`, spec/api.md "Movability"). */
+struct Movability {
+	HotSpot hotSpot;
+	int target = 0;
+	int kind = 0;        ///< 0 rotation → rotation, 1 rotation → puzzle, 2 puzzle → rotation, 3 puzzle → puzzle
+	Common::String ride; ///< the video played on the way
+};
+
 struct Puzzle {
 	int id = 0;
 	int zone = 0;
@@ -93,6 +102,28 @@ struct Puzzle {
 	Common::Array<Common::SharedPtr<Accessibility> > accessibilities;
 	Common::Array<Common::SharedPtr<PuzzleImage> > images; ///< ascending priority
 	Common::Array<Common::SharedPtr<PuzzleText> > texts;
+	Common::Array<Movability> movabilities;
+};
+
+/** A panorama node (`AddRot`, spec/rotation.md). */
+struct Rotation {
+	int id = 0;
+	int zone = 0;
+	Common::String name;
+	int layers = 0;
+	bool paused = false; ///< +0x28: not drawn and not tracked while set
+	// ponytail: the constructor leaves alpha, beta and ran unset (E-0046); the zones set them first
+	float alpha = 0, beta = 0, ran = 85.3f;
+	Common::Array<Common::SharedPtr<Accessibility> > accessibilities;
+	Common::Array<Movability> movabilities;
+	Common::ScopedPtr<Panorama> panorama;
+
+	/** `RotSetAlp` (0x405920): stored 135 degrees less. */
+	void setAlpha(float a) {
+		alpha = a - 135.0f;
+		if (alpha < 0.0f)
+			alpha += 360.0f;
+	}
 };
 
 struct Object {
@@ -113,6 +144,7 @@ public:
 	void setUp();
 
 	Puzzle *puzzle(int id);
+	Rotation *rotation(int id);
 	Object *object(int id);
 
 	/** Font 1 (spec/text.md); texts are not drawn without it. */
@@ -135,11 +167,14 @@ public:
 	 * accessibility of another object than the puzzle's ends the search (spec/cursor.md).
 	 */
 	const Accessibility *hit(const Puzzle &p, int x, int y) const;
+	static const Accessibility *hit(const Common::Array<Common::SharedPtr<Accessibility> > &list, int x, int y);
+	static const Movability *hit(const Common::Array<Movability> &list, int x, int y);
 
 private:
 	void apply(int zone, const SetupCall &c);
 
 	Common::Array<Common::SharedPtr<Puzzle> > _puzzles;
+	Common::Array<Common::SharedPtr<Rotation> > _rotations;
 	Common::Array<Common::SharedPtr<Object> > _objects;
 	const Graphics::Font *_font = nullptr;
 };

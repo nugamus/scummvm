@@ -19,28 +19,30 @@
  *
  */
 
-#ifndef RING_RING_ZONES_H
-#define RING_RING_ZONES_H
+// Zone AS (spec/rotation.md for the entry of a new game).
+
+#include "common/textconsole.h"
+
+#include "ring/ring.h"
+#include "ring/world.h"
+#include "ring/ring/zones.h"
 
 namespace Ring {
-
-class RingEngine;
-
-/**
- * Ring's zone code: the handlers the engine's events reach (spec/events.md). Each zone's
- * logic is specified in the research repository's games/ring/docs/<zone>.md.
- */
-namespace SY {
-void onAccessibility(RingEngine *vm, int object, int value);
-void onNothing(RingEngine *vm);
-void onClick(RingEngine *vm, int object, int value);
-}
-
 namespace AS {
-/** GameSetZoneAS (0x437ba0): entering the zone at `entry` (999: a new game). */
-void enter(RingEngine *vm, int entry);
+
+void enter(RingEngine *vm, int entry) {
+	if (entry == 999) { // a new game (0x437ba0, E-0046)
+		Rotation *r = vm->world().rotation(80001);
+		if (!r)
+			return;
+		r->setAlpha(90.0f);
+		r->ran = 85.3f;
+		vm->rotSetAct(80001);
+		// ponytail: timers 2, 3, 4 (100, 220, 150 s) come with the zone's handlers
+		return;
+	}
+	warning("Ring: AS entry %d is not implemented yet", entry);
 }
 
+} // End of namespace AS
 } // End of namespace Ring
-
-#endif // RING_RING_ZONES_H

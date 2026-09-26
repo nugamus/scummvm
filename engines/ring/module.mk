@@ -7,7 +7,9 @@ MODULE_OBJS = \
 	movie.o \
 	resources.o \
 	ring.o \
+	rotation.o \
 	world.o \
+	ring/as.o \
 	ring/setup.o \
 	ring/sy.o
 

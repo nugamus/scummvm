@@ -46,11 +46,28 @@ Puzzle *World::puzzle(int id) {
 	return nullptr;
 }
 
+Rotation *World::rotation(int id) {
+	for (auto &r : _rotations)
+		if (r->id == id)
+			return r.get();
+	return nullptr;
+}
+
 Object *World::object(int id) {
 	for (auto &o : _objects)
 		if (o->id == id)
 			return o.get();
 	return nullptr;
+}
+
+// A hot spot's rectangle as declared; some are empty or inverted and never match (0x4238b0).
+static Common::Rect rectOf(const int32 *a) {
+	Common::Rect r;
+	r.left = a[0];
+	r.top = a[1];
+	r.right = a[2];
+	r.bottom = a[3];
+	return r;
 }
 
 void World::apply(int zone, const SetupCall &c) {
@@ -62,6 +79,56 @@ void World::apply(int zone, const SetupCall &c) {
 		p->id = a[0];
 		p->zone = zone;
 		_puzzles.push_back(p);
+		break;
+	}
+	case kAddRot: {
+		Common::SharedPtr<Rotation> r(new Rotation());
+		r->id = a[0];
+		r->zone = zone;
+		r->name = str(1);
+		r->paused = a[2] != 0;
+		r->layers = a[3];
+		_rotations.push_back(r);
+		break;
+	}
+	case kObjAddRotAcc: {
+		Object *o = object(a[0]);
+		Rotation *r = rotation(a[1]);
+		if (!o || !r)
+			break;
+		Common::SharedPtr<Accessibility> acc(new Accessibility());
+		acc->object = o->id;
+		acc->hotSpot.rect = rectOf(a + 2);
+		acc->hotSpot.enabled = a[6] != 0;
+		acc->hotSpot.cursor = a[7];
+		acc->hotSpot.value = a[8];
+		o->accessibilities.push_back(acc);
+		r->accessibilities.push_back(acc);
+		break;
+	}
+	case kRotAddMovToRot:
+	case kRotAddMovToPuz:
+	case kPuzAddMovToRot:
+	case kPuzAddMovToPuz: {
+		int kind = c.call == kRotAddMovToRot ? 0 : c.call == kRotAddMovToPuz ? 1 : c.call == kPuzAddMovToRot ? 2 : 3;
+		Common::Array<Movability> *list = nullptr;
+		if (kind < 2) {
+			if (Rotation *r = rotation(a[0]))
+				list = &r->movabilities;
+		} else if (Puzzle *p = puzzle(a[0])) {
+			list = &p->movabilities;
+		}
+		if (!list)
+			break;
+		Movability m;
+		m.target = a[1];
+		m.kind = kind;
+		m.ride = str(2);
+		m.hotSpot.rect = rectOf(a + 3);
+		m.hotSpot.enabled = a[7] != 0;
+		m.hotSpot.cursor = a[8];
+		m.hotSpot.value = a[9];
+		list->push_back(m);
 		break;
 	}
 	case kPuzAddBgrImg:
@@ -86,7 +153,7 @@ void World::apply(int zone, const SetupCall &c) {
 			break;
 		Common::SharedPtr<Accessibility> acc(new Accessibility());
 		acc->object = o->id;
-		acc->hotSpot.rect = Common::Rect(a[2], a[3], a[4], a[5]);
+		acc->hotSpot.rect = rectOf(a + 2);
 		acc->hotSpot.enabled = a[6] != 0;
 		acc->hotSpot.cursor = a[7];
 		acc->hotSpot.value = a[8];
@@ -219,6 +286,20 @@ void World::draw(Puzzle &p, Resources &res, Graphics::ManagedSurface &dst) {
 						 dst.format.RGBToColor(t->background[0], t->background[1], t->background[2]));
 		_font->drawString(&dst, t->text, t->x, t->y, dst.w - t->x, dst.format.RGBToColor(t->color[0], t->color[1], t->color[2]));
 	}
+}
+
+const Accessibility *World::hit(const Common::Array<Common::SharedPtr<Accessibility> > &list, int x, int y) {
+	for (auto &acc : list)
+		if (acc->hotSpot.contains(x, y))
+			return acc.get();
+	return nullptr;
+}
+
+const Movability *World::hit(const Common::Array<Movability> &list, int x, int y) {
+	for (auto &m : list)
+		if (m.hotSpot.contains(x, y))
+			return &m;
+	return nullptr;
 }
 
 const Accessibility *World::hit(const Puzzle &p, int x, int y) const {
