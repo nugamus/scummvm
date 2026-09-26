@@ -67,6 +67,9 @@ public:
 	// two so unit code can move objects after the animation (U03's policeman).
 	void update(float dt) { advance(dt); poseAll(); }
 	void advance(float dt);
+	// Samples the running nodes between the last two advances (0 < alpha < 1) for
+	// rendering above the step rate (animation.md, Engine model); true if any moved
+	bool interpolate(float alpha);
 	void poseAll();
 
 	struct Model;
@@ -229,8 +232,11 @@ private:
 		int slot = 1;
 		Playback slots[16];
 		bool enabled = true; // disabled nodes are neither advanced nor applied
+		float prevFrame = -1; // the active playback's frame before the last advance
+		bool prevClip = false;
 	};
 
+	float _stepDt = 0; // the last advance's dt
 	AnimNode *findNode(const Common::String &objectName);
 	const A3DFile *clipFile(const Common::String &path); // loaded once, owned by the scene
 	void syncPlayback(Common::Serializer &s, Playback &p);

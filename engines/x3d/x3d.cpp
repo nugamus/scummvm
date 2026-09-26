@@ -666,6 +666,11 @@ void X3DEngine::frame(bool input) {
 		_interaction->hover(_hotspot, now);
 
 	_camera = camera;
+	if (alpha > 0 && _scene->interpolate(alpha)) {
+		if (_unit)
+			_unit->afterAnimate();
+		_scene->poseAll();
+	}
 	_scene->draw(camera, _renderer->width(), _renderer->height());
 	_inventory->draw(*_renderer, x2d);
 	if (_unit)

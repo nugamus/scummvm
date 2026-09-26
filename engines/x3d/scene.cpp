@@ -243,6 +243,11 @@ void Scene::pose(Model &m) {
 
 	for (uint32 &state : m.colorFrame)
 		state = 0; // lit colours follow the new pose
+	if (!objects.empty() && objects[0].name == "*U01_02" && m.worldVertices[0].size() > 349 * 3 + 2) {
+		static uint32 cnt = 0;
+		if ((cnt++ % 30) == 0)
+			debug("LIPDBG v349 %f %f %f lods %d", m.worldVertices[0][349 * 3], m.worldVertices[0][349 * 3 + 1], m.worldVertices[0][349 * 3 + 2], m.lods[18].size());
+	}
 
 	// Bounding spheres of what each object draws, for view culling
 	for (uint i = 0; i < objects.size(); i++) {
@@ -338,6 +343,7 @@ void Scene::animate(const A3DFile &file, uint animation, Model &m, uint object, 
 }
 
 void Scene::advance(float dt) {
+	_stepDt = dt;
 	for (AnimNode &n : _nodes) {
 		if (!n.enabled || !n.model)
 			continue;
@@ -349,9 +355,27 @@ void Scene::advance(float dt) {
 			n.base.running = true;
 		}
 		Playback &p = n.clipActive ? n.clip : n.base;
+		n.prevFrame = p.frame;
+		n.prevClip = n.clipActive;
 		p.advance(dt);
 		animate(*p.file, p.animation, *n.model, p.object >= 0 ? p.object : n.object, p.frame);
 	}
+}
+
+bool Scene::interpolate(float alpha) {
+	bool moved = false;
+	for (AnimNode &n : _nodes) {
+		if (!n.enabled || !n.model || n.prevFrame < 0 || n.prevClip != n.clipActive)
+			continue;
+		const Playback &p = n.clipActive ? n.clip : n.base;
+		const float d = p.frame - n.prevFrame;
+		// Not across a loop wrap, a turn or a jump the unit made
+		if (d == 0 || fabsf(d) > 1.5f * _stepDt * p.fps)
+			continue;
+		animate(*p.file, p.animation, *n.model, p.object >= 0 ? p.object : n.object, n.prevFrame + d * alpha);
+		moved = true;
+	}
+	return moved;
 }
 
 void Scene::poseAll() {
