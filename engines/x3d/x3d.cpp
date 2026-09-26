@@ -86,7 +86,7 @@ Common::Error X3DEngine::run() {
 	ConfMan.registerDefault("run_toggle", false);
 	ConfMan.registerDefault("turn_speed", 100);
 	ConfMan.registerDefault("fov", 90);
-	// Modern controls: mouse_sensitivity (percent) has no GUI; set it in the game's config
+	// Modern controls; mouse_sensitivity is a percent of the default look speed
 	ConfMan.registerDefault("modern_controls", false);
 	ConfMan.registerDefault("invert_y", false);
 	ConfMan.registerDefault("mouse_sensitivity", 100);
