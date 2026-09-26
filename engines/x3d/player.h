@@ -90,6 +90,7 @@ private:
 	// sphere offset come back when it ends
 	enum { kStanding, kLowering, kCrouched, kRising } _crouch = kStanding;
 	bool _crouchWas = false;
+	bool _crouchToggle = false, _crouchLatched = false; // the crouch_toggle option
 	float _crouchTime = 0, _standHeight = 0, _standOffset = 0;
 	float _jumpTime = 0, _jumpZ = 0;
 	Math::Vector3d _jumpVelocity;

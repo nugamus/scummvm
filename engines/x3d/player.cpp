@@ -51,6 +51,7 @@ void Player::init(float scale) {
 	_radius = 0.5f * scale;
 	sphereOffset = _eyeHeight - 2 * _radius;
 	_runToggle = ConfMan.getBool("run_toggle");
+	_crouchToggle = ConfMan.getBool("crouch_toggle");
 	_turn = 0.06f * ConfMan.getInt("turn_speed") / 100; // the turn_speed option, percent
 }
 
@@ -117,7 +118,11 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 	const float crouchHeight = 0.5f * _scale + 3;
 	const bool crouchPress = keys.crouch && !_crouchWas;
 	_crouchWas = keys.crouch;
+	// The crouch_toggle option (not in the original): a second press stands up
+	if (_crouchToggle && crouchPress && _crouch != kStanding)
+		_crouchLatched = false;
 	if (crouchPress && _crouch == kStanding) {
+		_crouchLatched = true;
 		_crouch = kLowering;
 		_crouchTime = 0;
 		_standHeight = _eyeHeight;
@@ -140,7 +145,7 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 		}
 		return false;
 	}
-	if (_crouch == kCrouched && !keys.crouch) {
+	if (_crouch == kCrouched && !(_crouchToggle ? _crouchLatched : keys.crouch)) {
 		// Up when the lowest hit above the eye is at least 0.4 s away (headroom)
 		float t;
 		if (!collision.cast(eye, eye + Vector3d(0, 0, 0.4f * _scale), t)) {

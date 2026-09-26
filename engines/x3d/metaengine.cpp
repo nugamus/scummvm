@@ -83,6 +83,17 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 		}
 	},
 	{
+		GAMEOPTION_CROUCH_TOGGLE,
+		{
+			_s("Crouch toggle"),
+			_s("The crouch key switches crouching on and off instead of crouching while held"),
+			"crouch_toggle",
+			false,
+			0,
+			0
+		}
+	},
+	{
 		GAMEOPTION_MODERN_CONTROLS,
 		{
 			_s("Modern controls"),
