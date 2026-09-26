@@ -281,8 +281,12 @@ public:
 	}
 
 	void clear() override {
+		// Alpha too, as begin3D does: a resized window's new buffer starts at alpha 0,
+		// and ScummVM composites the frame by its alpha (else a 2D screen stays black)
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 		glClearColor(0, 0, 0, 1);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
 	}
 
 	void present() override {
