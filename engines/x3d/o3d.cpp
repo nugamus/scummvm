@@ -19,7 +19,6 @@
  *
  */
 
-
 #include "common/stream.h"
 #include "common/textconsole.h"
 
