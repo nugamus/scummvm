@@ -91,6 +91,7 @@ public:
 	bool gaugeExpired();
 	void syncGauge(Common::Serializer &s);
 	void storeHeldItem(); // a held item back into the bar (E-0210)
+	Unit *createUnit(const Common::String &sceneName); // the scene's unit code, or nullptr
 	// The last view redrawn at thumbnail size (save thumbnails in 3D mode), or nullptr
 	Graphics::Surface *thumbnail(int width, int height);
 
