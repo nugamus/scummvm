@@ -140,9 +140,9 @@ public:
 		int selected = -1;
 	};
 	// Shows a frame until a command is chosen (ui.md); returns the command, "escape", or
-	// "enter". The scene, if any, stays frozen underneath. placeholder: the edit's text
-	// until the player types.
-	Common::String runMenu(const Common::String &name, MenuList *list = nullptr, const Common::String &placeholder = "");
+	// "enter". The scene, if any, stays frozen underneath. text: the edit's first text, the
+	// caret at its end (ui.md, Players screen).
+	Common::String runMenu(const Common::String &name, MenuList *list = nullptr, const Common::String &text = "");
 	// The OptionSave and OptionLoad screens over ScummVM's save slots (save.md); load:
 	// true when a game was loaded
 	void saveMenu();
@@ -160,8 +160,8 @@ public:
 	bool loadMenu();
 	// Players (ui.md SelectUser): true when the name is new, which is then added
 	bool selectPlayer(const Common::String &name);
-	Common::StringArray players() const;
-	void readPlayers(Common::StringArray &names, Common::Array<int> &units) const;
+	Common::StringArray players(Common::String *current = nullptr) const; // current: the last selected
+	void readPlayers(Common::StringArray &names, Common::Array<int> &units, Common::String *current = nullptr) const;
 	void writePlayers(const Common::StringArray &names, const Common::Array<int> &units);
 	// The Option menu (ui.md): its chosen command (OptionNouvelleP, OptionEntrenement), or
 	// empty when quitting; afterOptionMenu goes where it leads

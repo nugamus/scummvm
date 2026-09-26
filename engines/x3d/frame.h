@@ -38,6 +38,8 @@ class Renderer;
 // docs/formats/fra.ksy). Coordinates are absolute 640x480 frame pixels.
 class Frame {
 public:
+	static const uint32 kCaretBlink = 530; // ms, the Windows default caret blink time
+
 	~Frame();
 	bool load(const Common::String &name);
 
@@ -46,23 +48,28 @@ public:
 	int cursorAt(int view) const;                    // ucg@, -1 when none
 	const Common::String &commandAt(int view) const; // RCS@, empty when none
 
-	// Text edits (dEU#, dES#, idE#): the first one takes typed characters
+	// Text edits (dEU#, dES#, idE#; ui.md "Players screen"): the first one takes typed
+	// characters at its caret
 	void type(char c);
 	void backspace();
+	void moveCaret(int delta); // Left -1; Right +1 from the selection's end
 	Common::String text() const;
+	// The edit's text, caret at its end
+	void setText(const Common::String &text);
 
-	// The edit's text; a placeholder shows until the player types
-	void setText(const Common::String &text, bool placeholder = false);
-
-	// List views (AOL#, VAS#, cSU#; save.md "Lists"): rows 32 px high, one selected
-	void setList(const Common::Array<Common::String> &rows, int selected);
+	// List views (AOL#, VAS#, cSU#; save.md "Lists"): rows 32 px high, one selected.
+	// names: the players list's names (cSU#), which a row click puts in the edit
+	void setList(const Common::Array<Common::String> &rows, int selected,
+				 const Common::Array<Common::String> &names = Common::Array<Common::String>());
 	int listRowAt(const Common::Point &p) const; // -1 outside the rows
-	void selectRow(int row) { _selected = row; }
+	void selectRow(int row);
+	int selectedRow() const { return _selected; }
 
 	// Views by their file id
 	int indexOf(int id) const;
 	void setBitmap(int id, const Common::String &name); // 2dbit/<name>.bmp, "" for none
 	void setVisible(int id, bool visible);
+	void setEnabled(int id, bool enabled);
 	const Common::String &bitmapName(int view) const { return _views[view].bitmapName; }
 	int idAt(int view) const { return view >= 0 ? _views[view].id : -1; }
 	bool hasEdit() const { return editView() >= 0; }
@@ -71,9 +78,9 @@ public:
 	int sliderValue(int id) const;
 	int sliderMax(int id) const;
 	void setSliderValue(int id, int value);
-	bool press(const Common::Point &p); // true when a slider took it
+	bool press(const Common::Point &p, bool shift = false); // true when a slider, scroll bar or edit took it
 	void drag(const Common::Point &p);
-	void release() { _dragging = -1; _scrollDrag = false; }
+	void release() { _dragging = -1; _scrollDrag = false; _editDrag = false; }
 
 	// Draws the views, the hover highlight of the view under the mouse and edit text
 	void draw(Renderer &r, int xOffset, int hovered);
@@ -89,10 +96,10 @@ private:
 		int hoverDx = 0, hoverDy = 0;
 		int cursor = -1;
 		Common::String command;
+		bool enabled = true; // false: its properties do nothing (ucg@, RCS@, LIH@)
 		bool edit = false;
 		Common::String text;
 		uint maxLength = 30;
-		bool placeholder = false; // the text is the default one, replaced when typing
 		bool list = false;
 		Graphics::Surface *scrollBar = nullptr, *scrollThumb = nullptr; // name_a, name_b
 		Graphics::Surface *caption = nullptr; // GIH@: drawn at an absolute place on hover
@@ -104,12 +111,23 @@ private:
 	};
 	int _dragging = -1;
 
+	// The edit: selection caret..selEnd (caret <= selEnd), where a press started, blink start
+	int _caret = 0, _selEnd = 0, _anchor = 0;
+	bool _editDrag = false;
+	uint32 _caretTime = 0;
+	void setCaret(int pos);
+	void deleteSelection();
+	int charAt(int x) const; // the character boundary nearest edit-relative x
+	void textChanged();
+	Common::Array<Common::String> _names;
+
 	int listView() const;
 	Common::Array<Common::String> _rows;
 	int _selected = -1;
 	int _scroll = 0; // first shown row (save.md Lists, E-0600)
 	bool _scrollDrag = false;
 	int scrollMax() const;
+	int scrollRange() const; // rows - visible rows, may be negative
 	bool pressScroll(const Common::Point &p);
 
 	int editView() const;
