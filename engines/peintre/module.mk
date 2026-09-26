@@ -13,7 +13,17 @@ MODULE_OBJS = \
 	shell.o \
 	sound.o \
 	world.o \
+	scenes/cafe.o \
+	scenes/chambreb.o \
+	scenes/chambrev.o \
+	scenes/hopiext.o \
+	scenes/hopiint.o \
+	scenes/maisonet.o \
+	scenes/maisonj.o \
+	scenes/mangeurs.o \
 	scenes/musee.o \
+	scenes/pont.o \
+	scenes/terrasse.o \
 	scenes/scenes.o
 
 # This module can be built as a plugin
