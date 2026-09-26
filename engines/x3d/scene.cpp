@@ -1006,11 +1006,13 @@ void Scene::setNodeFps(int node, float fps) {
 }
 
 Common::Array<Math::Vector3d> Scene::surfacePoints(const Common::String &name, const Math::Vector3d &eye) const {
-	Common::Array<Math::Vector3d> points;
 	Model *m;
 	uint o;
-	if (!findObject(name, m, o))
-		return points;
+	return findObject(name, m, o) ? surfacePoints(m, o, eye) : Common::Array<Math::Vector3d>();
+}
+
+Common::Array<Math::Vector3d> Scene::surfacePoints(const Model *m, uint o, const Math::Vector3d &eye) const {
+	Common::Array<Math::Vector3d> points;
 	// The faces of the object and of everything below it (a hotspot may be a dummy)
 	for (uint d = 0; d < m->file.objects.size(); d++) {
 		int a = d;
@@ -1037,7 +1039,9 @@ Common::Array<Math::Vector3d> Scene::surfacePoints(const Common::String &name, c
 	Common::sort(points.begin(), points.end(), [&](const Math::Vector3d &a, const Math::Vector3d &b) {
 		return (a - eye).getSquareMagnitude() < (b - eye).getSquareMagnitude();
 	});
-	points.push_back(objectCenter(name));
+	const float *b = &m->bounds[o * 4];
+	const float *w = m->file.objects[o].world;
+	points.push_back(b[3] >= 0 ? Math::Vector3d(b[0], b[1], b[2]) : Math::Vector3d(w[12], w[13], w[14]));
 	return points;
 }
 

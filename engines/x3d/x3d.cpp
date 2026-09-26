@@ -927,13 +927,13 @@ bool X3DEngine::picks(const Common::Point &s, int target) {
 	return _interaction->hotspotFor(names) == target;
 }
 
-bool X3DEngine::aimAt(const Common::String &object, int target, Common::Point &point, bool &hit, uint tries, Math::Vector3d *world) {
+bool X3DEngine::aimAt(const Scene::Model *model, uint object, int target, Common::Point &point, bool &hit, uint tries, Math::Vector3d *world) {
 	// The object's surface points on screen, nearest first; the picks are spread over all
 	// of them, so a partly covered object is tried where it shows
 	const Math::Vector3d eye(_camera.position[0], _camera.position[1], _camera.position[2]);
 	Common::Array<Math::Vector3d> surface;
 	Common::Array<Common::Point> screen;
-	for (const Math::Vector3d &p : _scene->surfacePoints(object, eye)) {
+	for (const Math::Vector3d &p : _scene->surfacePoints(model, object, eye)) {
 		Common::Point s;
 		if (toScreen(p, s)) {
 			surface.push_back(p);
@@ -954,6 +954,11 @@ bool X3DEngine::aimAt(const Common::String &object, int target, Common::Point &p
 			break;
 		}
 	return true;
+}
+
+static Math::Vector3d origin(const Scene::Model *m, uint o) {
+	const float *w = m->file.objects[o].world;
+	return Math::Vector3d(w[12], w[13], w[14]);
 }
 
 void X3DEngine::drawHotspots() {
@@ -989,8 +994,11 @@ void X3DEngine::placeMarkers() {
 	const float w = _renderer->width(), h = _renderer->height();
 	const float ky = (4.0f / 3.0f) / tan(_camera.fov * M_PI / 360.0), kx = ky * h / w;
 	const Common::Point o = _renderer->toWindow(Common::Point(0, 0)), c = _renderer->toWindow(Common::Point(w, h));
+	const Common::Array<Scene::Model *> &models = _scene->models();
 	for (const Marker &m : _markers) {
-		const Math::Vector3d d = _scene->objectPosition(m.object) + m.offset - eye;
+		if (Common::find(models.begin(), models.end(), m.model) == models.end()) // removed since
+			continue;
+		const Math::Vector3d d = origin(m.model, m.object) + m.offset - eye;
 		const float z = Math::Vector3d::dotProduct(d, fwd);
 		if (z <= 0)
 			continue;
@@ -1037,19 +1045,20 @@ void X3DEngine::findHotspots() {
 			Common::Point s;
 			bool hit = false;
 			for (const Marker &l : last)
-				if (l.hotspot == h && l.object == name && toScreen(_scene->objectPosition(name) + l.offset, s) && picks(s, h)) {
+				if (l.model == m && l.object == o && toScreen(origin(m, o) + l.offset, s) && picks(s, h)) {
 					marker = l;
 					hit = true;
 				}
 			if (!hit) {
 				Math::Vector3d p;
 				// ponytail: 8 picks per hotspot; a sliver of an object may not get its marker
-				if (!aimAt(name, h, s, hit, 8, &p) || !hit)
+				if (!aimAt(m, o, h, s, hit, 8, &p) || !hit)
 					continue;
 				const Common::String &label = _interaction->hotspotName(h);
 				marker.hotspot = h;
-				marker.object = name;
-				marker.offset = p - _scene->objectPosition(name);
+				marker.model = m;
+				marker.object = o;
+				marker.offset = p - origin(m, o);
 				marker.label = label.substr(label.findFirstOf('*') + 1);
 			}
 			done[h] = true;
@@ -1118,7 +1127,10 @@ Common::String X3DEngine::command(const Common::String &line) {
 		} else if (a.size() == 2) {
 			Common::Point s;
 			bool hit;
-			if (!aimAt(a[1], _interaction->hotspotFor(Common::StringArray(1, a[1])), s, hit))
+			Scene::Model *model;
+			uint object;
+			if (!_scene->findObject(a[1], model, object) ||
+			    !aimAt(model, object, _interaction->hotspotFor(Common::StringArray(1, a[1])), s, hit))
 				return "behind the camera";
 			_mouse = s;
 			if (!hit)
