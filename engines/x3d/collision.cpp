@@ -92,20 +92,26 @@ void Collision::fill(Object &obj) const {
 	const Scene::Model *m = (const Scene::Model *)obj.model;
 	const Common::Array<O3DObject> &objects = m->file.objects;
 	const O3DObject &o = objects[obj.object];
-	obj.faces.clear();
+	// Refreshes overwrite the faces in place, keeping their storage
+	uint used = 0;
 
 	// Welded objects use the vertices of their top object (animation.md)
 	int owner = obj.object;
 	while (owner >= 0 && objects[owner].vertices.empty())
 		owner = objects[owner].parent;
-	if (owner < 0)
+	if (owner < 0) {
+		obj.faces.clear();
 		return;
+	}
 	const Common::Array<float> &vertices = m->worldVertices[owner];
 	const float *w = objects[owner].world;
 
 	Vector3d lo(1e30f, 1e30f, 1e30f), hi(-1e30f, -1e30f, -1e30f);
 	for (const O3DFace &f : o.faces) {
-		Face face;
+		if (used == obj.faces.size())
+			obj.faces.push_back(Face());
+		Face &face = obj.faces[used];
+		face.vertices.resize(0);
 		for (uint32 index : f.indices) {
 			if (index * 3 + 2 >= vertices.size())
 				break;
@@ -131,8 +137,9 @@ void Collision::fill(Object &obj) const {
 			                n[0] * w[2] + n[1] * w[6] + n[2] * w[10]);
 		}
 		face.normal.normalize();
-		obj.faces.push_back(face);
+		used++;
 	}
+	obj.faces.resize(used);
 	obj.center = (lo + hi) * 0.5f;
 	obj.radius = (hi - lo).getMagnitude() * 0.5f;
 }
@@ -193,7 +200,7 @@ Vector3d Collision::resolveSphere(Vector3d c, float r) const {
 				m = (c - q) * (1.0f / distance);
 			}
 			// Floors and ceilings never push; the ground step handles them
-			if (fabs(m.z()) >= cos45)
+			if (fabsf(m.z()) >= cos45)
 				return c;
 			c = q + m * r;
 		}
@@ -205,7 +212,13 @@ bool Collision::cast(const Vector3d &from, const Vector3d &to, float &t, Common:
 	bool hit = false;
 	t = 1;
 	for (const Object &o : _objects) {
-		if (!o.enabled)
+		if (!o.enabled || o.faces.empty())
+			continue;
+		// Segments passing outside the object's bounding sphere cannot hit it
+		const Vector3d d = to - from;
+		const float length = Vector3d::dotProduct(d, d);
+		const float s = length > 0 ? CLIP(Vector3d::dotProduct(o.center - from, d) / length, 0.0f, 1.0f) : 0.0f;
+		if ((from + d * s - o.center).getMagnitude() > o.radius * 1.001f + 0.01f)
 			continue;
 		for (const Face &f : o.faces) {
 			const float d0 = Vector3d::dotProduct(from - f.vertices[0], f.normal);
