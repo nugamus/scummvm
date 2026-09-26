@@ -112,9 +112,47 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 		return false;
 	}
 
+	// Numpad 0 (press) crouches; the key-down ends the step (movement.md, Keys and Crouch)
+	const float crouchHeight = 0.5f * _scale + 3;
+	const bool crouchPress = keys.crouch && !_crouchWas;
+	_crouchWas = keys.crouch;
+	if (crouchPress && _crouch == kStanding) {
+		_crouch = kLowering;
+		_crouchTime = 0;
+		_standHeight = _eyeHeight;
+		_standOffset = sphereOffset;
+		sphereOffset = crouchHeight - _radius - 1;
+		return false;
+	}
+	if (_crouch == kLowering || _crouch == kRising) {
+		// Down over 1000 ms, up over 2000 ms; nothing else meanwhile
+		_crouchTime += dt;
+		const bool lowering = _crouch == kLowering;
+		const float f = MIN(1.0f, _crouchTime / (lowering ? 1.0f : 2.0f));
+		const float h = lowering ? _standHeight + (crouchHeight - _standHeight) * f : crouchHeight + (_standHeight - crouchHeight) * f;
+		eye.z() += h - _eyeHeight;
+		_eyeHeight = h;
+		if (f >= 1) {
+			_crouch = lowering ? kCrouched : kStanding;
+			if (!lowering)
+				sphereOffset = _standOffset;
+		}
+		return false;
+	}
+	if (_crouch == kCrouched && !keys.crouch) {
+		// Up when the lowest hit above the eye is at least 0.4 s away (headroom)
+		float t;
+		if (!collision.cast(eye, eye + Vector3d(0, 0, 0.4f * _scale), t)) {
+			_crouch = kRising;
+			_crouchTime = 0;
+			return false;
+		}
+	}
+	const bool crouched = _crouch == kCrouched;
+
 	// Walk along the view direction's x and y, not renormalised
 	const Vector3d d(cosf(yaw) * sinf(pitch), -sinf(yaw) * sinf(pitch), -cosf(pitch));
-	const bool running = runAllowed && (_runToggle ? _runOn : keys.ctrl);
+	const bool running = !crouched && runAllowed && (_runToggle ? _runOn : keys.ctrl);
 	Vector3d velocity;
 	if (canMove) {
 		int direction = 0;
@@ -133,7 +171,7 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 			if (fabs(roll) >= 0.4f)
 				_bob = -_bob;
 
-			float step = _speed * _scale * dt * (running ? 2 : 1);
+			float step = _speed * _scale * dt * (running ? 2 : 1) * (crouched ? 0.25f : 1);
 			const Vector3d centre = eye - Vector3d(0, 0, sphereOffset);
 			const Vector3d ahead(10000 * d.x(), 10000 * d.y(), d.z());
 			float t;
@@ -142,7 +180,7 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 			velocity.set(direction * d.x() * step, direction * d.y() * step, 0);
 		}
 		// Shift (press) jumps: the walk at x0.5 when running, x0.25 otherwise
-		if (jumpAllowed && keys.shift && !_shiftWas) {
+		if (jumpAllowed && !crouched && keys.shift && !_shiftWas) {
 			_jumping = true;
 			_jumpTime = 0;
 			_jumpZ = eye.z();
@@ -157,9 +195,9 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 			yaw += 0.06f;
 		if (keys.left)
 			yaw -= 0.06f;
-		if (keys.pageUp && !keys.ctrl && pitch < 2.7f)
+		if (keys.pageUp && !keys.ctrl && !crouched && pitch < 2.7f)
 			pitch += 0.06f;
-		if (keys.pageDown && !keys.ctrl && pitch > 0.6f)
+		if (keys.pageDown && !keys.ctrl && !crouched && pitch > 0.6f)
 			pitch -= 0.06f;
 	}
 

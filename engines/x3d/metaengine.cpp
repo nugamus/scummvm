@@ -117,6 +117,7 @@ Common::KeymapArray X3DMetaEngine::initKeymaps(const char *target) const {
 		{ "INVENTORY", _s("Inventory"), "SPACE", "JOY_X", X3D::kActionInventory },
 		{ "MENU", _s("Menu"), "ESCAPE", "JOY_START", X3D::kActionMenu },
 		{ "SKIP", _s("Skip"), "RETURN", "JOY_BACK", X3D::kActionSkip },
+		{ "CROUCH", _s("Crouch"), "KP0", "JOY_LEFT_STICK", X3D::kActionCrouch },
 	};
 	for (const auto &a : actions) {
 		Action *act = new Action(a.id, _(a.label));
