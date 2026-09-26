@@ -382,8 +382,10 @@ void Scene::advance(float dt) {
 	for (AnimNode &n : _nodes) {
 		if (!n.enabled || !n.model)
 			continue;
-		// A rewound clip hands back to the node's own animation at frame 1 (E-0057)
-		if (n.clipActive && n.clip.backward && !n.clip.running) {
+		// A rewound clip hands back to the node's own animation at frame 1 (E-0057). Only
+		// one that ran back and stopped: U04's rowing clip is paused and stepped backward.
+		if (n.clipActive && n.clip.rewound) {
+			n.clip.rewound = false;
 			n.clipActive = false;
 			const A3DAnimation &a = n.base.file->animations[n.base.animation];
 			n.base.frame = CLIP(1.0f, (float)a.firstFrame, (float)a.lastFrame);
@@ -1074,6 +1076,7 @@ Math::Vector3d Scene::objectPosition(const Common::String &name) const {
 void Scene::Playback::advance(float dt) {
 	if (!running)
 		return;
+	rewound = false;
 	const A3DAnimation &a = file->animations[animation];
 	const float lo = first >= 0 ? first : a.firstFrame;
 	const float hi = last >= 0 ? last : a.lastFrame;
@@ -1097,6 +1100,7 @@ void Scene::Playback::advance(float dt) {
 		running = false;
 		stopAt = -1;
 	}
+	rewound = !running && backward;
 }
 
 void Scene::syncPlayback(Common::Serializer &s, Playback &p) {
@@ -1486,7 +1490,7 @@ void Scene::drawHighlight(const Common::Array<Highlight> &objects) {
 	for (const Highlight &p : objects) {
 		const Model *m = p.model;
 		if (Common::find(_models.begin(), _models.end(), m) == _models.end() || p.object >= m->file.objects.size() ||
-		    m->hidden || m->hiddenObjects[p.object] || !inView(&m->bounds[p.object * 4]))
+		    m->hidden || (m->hiddenObjects[p.object] && !m->pickWhenHidden[p.object]) || !inView(&m->bounds[p.object * 4]))
 			continue;
 		if ((uint)p.group >= opaque.size())
 			opaque.resize(p.group + 1);
