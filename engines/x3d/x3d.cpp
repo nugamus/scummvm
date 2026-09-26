@@ -928,26 +928,32 @@ bool X3DEngine::picks(const Common::Point &s, int target) {
 }
 
 bool X3DEngine::aimAt(const Common::String &object, int target, Common::Point &point, bool &hit, uint tries, Math::Vector3d *world) {
-	// The object's surface points on screen, nearest first
+	// The object's surface points on screen, nearest first; the picks are spread over all
+	// of them, so a partly covered object is tried where it shows
 	const Math::Vector3d eye(_camera.position[0], _camera.position[1], _camera.position[2]);
-	bool found = false;
-	hit = false;
+	Common::Array<Math::Vector3d> surface;
+	Common::Array<Common::Point> screen;
 	for (const Math::Vector3d &p : _scene->surfacePoints(object, eye)) {
 		Common::Point s;
-		if (!toScreen(p, s))
-			continue;
-		if (!found)
-			point = s;
-		found = true;
-		if (target >= 0 && tries-- && picks(s, target)) {
-			point = s;
-			hit = true;
-			if (world)
-				*world = p;
-			break;
+		if (toScreen(p, s)) {
+			surface.push_back(p);
+			screen.push_back(s);
 		}
 	}
-	return found;
+	hit = false;
+	if (screen.empty())
+		return false;
+	point = screen[0];
+	const uint step = MAX<uint>(1, screen.size() / MAX<uint>(1, tries));
+	for (uint i = 0; target >= 0 && i < screen.size(); i += step)
+		if (picks(screen[i], target)) {
+			point = screen[i];
+			hit = true;
+			if (world)
+				*world = surface[i];
+			break;
+		}
+	return true;
 }
 
 void X3DEngine::drawHotspots() {
@@ -1037,7 +1043,7 @@ void X3DEngine::findHotspots() {
 				}
 			if (!hit) {
 				Math::Vector3d p;
-				// ponytail: 8 picks per hotspot; a mostly covered object may not get its marker
+				// ponytail: 8 picks per hotspot; a sliver of an object may not get its marker
 				if (!aimAt(name, h, s, hit, 8, &p) || !hit)
 					continue;
 				const Common::String &label = _interaction->hotspotName(h);
@@ -1062,7 +1068,7 @@ void X3DEngine::findHotspots() {
 				names.push_back(m->file.objects[k].name);
 			const int h = _interaction->hotspotFor(names);
 			if (h >= 0 && (uint)h < done.size() && done[h])
-				_highlight.push_back(Common::Pair<const Scene::Model *, uint>(m, o));
+				_highlight.push_back(Scene::Highlight(m, o, h));
 		}
 	}
 }
@@ -1171,6 +1177,10 @@ Common::String X3DEngine::command(const Common::String &line) {
 		uint i;
 		const bool hidden = _scene->findObject(a[1], model, i) && model->hiddenObjects[i];
 		return Common::String::format("origin %g,%g,%g centre %g,%g,%g%s", o.x(), o.y(), o.z(), m.x(), m.y(), m.z(), hidden ? " hidden" : "");
+	}
+	if (c == "overlay") { // the hotspot overlay on or off, as the key does
+		showHotspots(!_showHotspots);
+		return Common::String::format("%u markers", _markers.size());
 	}
 	if (c == "hotspots") {
 		Common::String out;

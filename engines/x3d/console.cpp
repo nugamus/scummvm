@@ -27,7 +27,7 @@ namespace X3D {
 Console::Console(X3DEngine *vm) : GUI::Debugger(), _vm(vm) {
 	static const char *const commands[] = { "where", "goto", "lookat", "click", "hotspots", "give", "hold", "bar", "press", "probe",
 	                                        "objs", "node", "pos", "act", "exhaust", "gauge", "save", "load", "page", "savemenu",
-	                                        "loadmenu", "view3d" };
+	                                        "loadmenu", "view3d", "overlay" };
 	for (const char *c : commands)
 		registerCmd(c, WRAP_METHOD(Console, cmd));
 }

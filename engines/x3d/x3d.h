@@ -271,7 +271,7 @@ private:
 	};
 	Common::Array<Marker> _markers;
 	Common::Array<Graphics::HotspotInfo> _hotspots; // the markers placed, in window pixels
-	Common::Array<Common::Pair<const Scene::Model *, uint> > _highlight; // their objects, outlined
+	Common::Array<Scene::Highlight> _highlight; // their objects, outlined
 	Common::String _menuText; // the text edit of the last menu
 	bool _escapeNow = false, _escapeBlocked = false;
 	int _frameDepth = 0; // frames nested in blocking sequences: no saving or loading there
