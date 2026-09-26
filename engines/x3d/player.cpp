@@ -29,7 +29,7 @@ namespace X3D {
 
 using Math::Vector3d;
 
-// docs/engine-spec/movement.md, Camera state
+// engines/x3d/docs/spec/movement.md, Camera state
 void Player::syncState(Common::Serializer &s) {
 	for (int k = 0; k < 3; k++)
 		s.syncAsFloatLE(eye.getData()[k]);

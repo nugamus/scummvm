@@ -31,7 +31,7 @@
 
 namespace X3D {
 
-// U04, Monet's garden at Giverny (docs/games/monet/u04.md)
+// U04, Monet's garden at Giverny (games/monet/docs/u04.md)
 class U04 : public Unit {
 public:
 	explicit U04(X3DEngine *vm) : _vm(vm), _random("x3d_u04") {}

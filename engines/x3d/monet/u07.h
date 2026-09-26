@@ -32,7 +32,7 @@ namespace X3D {
 
 class X3DEngine;
 
-// U07, the cellars under the orangery and the end of the game (docs/games/monet/u07.md)
+// U07, the cellars under the orangery and the end of the game (games/monet/docs/u07.md)
 class U07 : public Unit {
 public:
 	explicit U07(X3DEngine *vm) : _vm(vm), _random("x3d_u07") {}

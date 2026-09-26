@@ -37,7 +37,7 @@ namespace X3D {
 
 class Renderer;
 
-// A 2D screen loaded from Data/2DFRA/<name>.fra (docs/engine-spec/ui.md, Frames;
+// A 2D screen loaded from Data/2DFRA/<name>.fra (engines/x3d/docs/spec/ui.md, Frames;
 // docs/formats/fra.ksy). Coordinates are absolute 640x480 frame pixels.
 class Frame {
 public:

@@ -30,7 +30,7 @@ namespace X3D {
 
 class X3DEngine;
 
-// U06, the orangery garden and the clown with the rifle (docs/games/monet/u06.md)
+// U06, the orangery garden and the clown with the rifle (games/monet/docs/u06.md)
 class U06 : public Unit {
 public:
 	explicit U06(X3DEngine *vm) : _vm(vm) {}

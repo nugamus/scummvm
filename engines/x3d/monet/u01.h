@@ -33,7 +33,7 @@ namespace X3D {
 
 class X3DEngine;
 
-// U01, the station: its unit code (docs/games/monet/u01.md)
+// U01, the station: its unit code (games/monet/docs/u01.md)
 class U01 : public Unit {
 public:
 	explicit U01(X3DEngine *vm);

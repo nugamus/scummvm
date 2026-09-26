@@ -20,7 +20,7 @@
  */
 
 // Monet's own game layer: its units, the players, the Option pages, the save and load
-// screens and the gallery (docs/games/monet/, docs/engine-spec/ui.md and save.md)
+// screens and the gallery (games/monet/docs/, engines/x3d/docs/spec/ui.md and save.md)
 
 #include "common/config-manager.h"
 #include "common/memstream.h"

@@ -36,7 +36,7 @@ class X3DEngine;
 void fixU04Names(Scene *scene);
 void disableU04Boxes(Collision *collision);
 
-// U00, the garden with Monet: players screen and tutorial (docs/games/monet/u00.md)
+// U00, the garden with Monet: players screen and tutorial (games/monet/docs/u00.md)
 class U00 : public Unit {
 public:
 	U00(X3DEngine *vm, bool practice) : _vm(vm), _practice(practice) {}

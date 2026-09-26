@@ -31,7 +31,7 @@ namespace X3D {
 class Scene;
 class Sound;
 
-// Characters' voices with lip sync (docs/engine-spec/sound.md, Character talk)
+// Characters' voices with lip sync (engines/x3d/docs/spec/sound.md, Character talk)
 class Talk {
 public:
 	Talk(Scene &scene, Sound &sound, const Common::String &unitDir);

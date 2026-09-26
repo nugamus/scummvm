@@ -45,7 +45,7 @@ class Scene;
 class Sound;
 class Talk;
 
-// Hotspots, cursors and click actions of a unit (docs/engine-spec/interaction.md)
+// Hotspots, cursors and click actions of a unit (engines/x3d/docs/spec/interaction.md)
 class Interaction {
 public:
 	Interaction(Scene &scene, Sound &sound, Talk &talk);

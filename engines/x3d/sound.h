@@ -32,7 +32,7 @@
 
 namespace X3D {
 
-// The sound manager (docs/engine-spec/sound.md): groups with volumes, sounds with their
+// The sound manager (engines/x3d/docs/spec/sound.md): groups with volumes, sounds with their
 // own volume, and the scene's two positional emitters
 class Sound {
 public:

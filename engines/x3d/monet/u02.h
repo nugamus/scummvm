@@ -32,7 +32,7 @@ namespace X3D {
 
 class X3DEngine;
 
-// U02, the level crossing and the ticket office (docs/games/monet/u02.md)
+// U02, the level crossing and the ticket office (games/monet/docs/u02.md)
 class U02 : public Unit {
 public:
 	explicit U02(X3DEngine *vm) : _vm(vm), _random("x3d_u02") {}

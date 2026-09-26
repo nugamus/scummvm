@@ -31,7 +31,7 @@ namespace X3D {
 class X3DEngine;
 
 // U33, the square at night: the projectionist, the caravan, the clown and the bike
-// (docs/games/monet/u33.md)
+// (games/monet/docs/u33.md)
 class U33 : public Unit {
 public:
 	explicit U33(X3DEngine *vm) : _vm(vm) {}

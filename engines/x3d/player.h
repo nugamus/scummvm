@@ -36,7 +36,7 @@ namespace X3D {
 
 class Collision;
 
-// Keys read by the keyboard camera, held state (docs/engine-spec/movement.md, Keys)
+// Keys read by the keyboard camera, held state (engines/x3d/docs/spec/movement.md, Keys)
 struct Keys {
 	bool up = false, down = false, left = false, right = false;
 	bool pageUp = false, pageDown = false, ctrl = false, shift = false, space = false, crouch = false;

@@ -39,7 +39,7 @@ namespace X3D {
 class Interaction;
 class Renderer;
 
-// The Space inventory bar, frame PorteF (docs/engine-spec/ui.md, Inventory bar)
+// The Space inventory bar, frame PorteF (engines/x3d/docs/spec/ui.md, Inventory bar)
 // ponytail: the layout of PorteF.fra is built in; load it with the frame system once the
 // menus need one
 class Inventory {
