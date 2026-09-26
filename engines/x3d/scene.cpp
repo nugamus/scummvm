@@ -174,6 +174,15 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 		return nullptr;
 	}
 
+	// A material whose name was loaded before is that earlier material: texture,
+	// transparency, draw mode, tiling and colours (E-0484)
+	for (O3DMaterial &mat : m->file.materials) {
+		if (_materials.contains(mat.name))
+			mat = _materials[mat.name];
+		else
+			_materials[mat.name] = mat;
+	}
+
 	m->worldVertices.resize(m->file.objects.size());
 	m->lods.resize(m->file.objects.size());
 	m->hiddenObjects.resize(m->file.objects.size());
