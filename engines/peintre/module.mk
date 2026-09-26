@@ -1,11 +1,14 @@
 MODULE := engines/peintre
 
 MODULE_OBJS = \
+	accueil.o \
 	bfg.o \
+	gfx.o \
 	metaengine.o \
 	movie.o \
 	obj3d.o \
-	peintre.o
+	peintre.o \
+	players.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_PEINTRE), DYNAMIC_PLUGIN)

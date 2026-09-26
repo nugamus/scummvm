@@ -194,8 +194,8 @@ bool MoviePlayer::play(const Common::String &name, bool skippable) {
 		}
 		Common::Event event;
 		while (g_system->getEventManager()->pollEvent(event)) {
-			// ScummVM convenience: Escape skips a movie (the original's skip rule: 0x40e4ef, not specced yet).
-			if (skippable && event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE)
+			// A left click skips a skippable movie (boot.md step 8; 0x40e4ef is the left button).
+			if (skippable && event.type == Common::EVENT_LBUTTONDOWN)
 				skipped = true;
 		}
 		g_system->delayMillis(5);
