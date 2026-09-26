@@ -19,14 +19,107 @@
  *
  */
 
-#include "peintre/world.h"
+#include "common/debug.h"
+
+#include "peintre/detection.h"
+#include "peintre/peintre.h"
+#include "peintre/sound.h"
+#include "peintre/scenes/scenes.h"
 
 namespace Peintre {
 
 // The scenes' own code (games/mission-sunlight/docs/<scene>.md): one file per scene.
 
 SceneScript *createSceneScript(int scene, const Common::String &bundle) {
-	return nullptr;
+	switch (scene) {
+	case kSceneMusee: return createMusee();
+	default: return nullptr;
+	}
+}
+
+void setObjects(World &w, const ObjectDef *defs, uint count) {
+	w.objects.clear();
+	for (uint i = 0; i < count; i++) {
+		SceneObject o;
+		o.name = defs[i].name;
+		o.cursorType = defs[i].cursorType;
+		o.startHidden = defs[i].hidden;
+		o.node = -1;
+		w.objects.push_back(o);
+	}
+	w.resolveObjects();
+	for (const SceneObject &o : w.objects)
+		if (o.node < 0)
+			debugC(1, kDebugScript, "Scene object %s is not in the scene", o.name.c_str());
+}
+
+void setAnims(World &w, const AnimDef *defs, uint count) {
+	w.anims.clear();
+	for (uint i = 0; i < count; i++) {
+		AnimRecord a;
+		a.anim = defs[i].anim;
+		a.node = defs[i].node;
+		a.playing = defs[i].playing;
+		w.anims.push_back(a);
+	}
+	w.loadAnims();
+	for (AnimRecord &a : w.anims) {
+		a.frame = 1;
+		if (a.nodeIndex < 0)
+			debugC(1, kDebugScript, "Animation %s: node %s is not in the scene", a.anim.c_str(), a.node.c_str());
+	}
+}
+
+int clickedObject(World &w, int idx) {
+	w.applyHover(-1);
+	if (idx >= 0 && w.click() && w.cursor() == kCursorArrow) {
+		debugC(1, kDebugScript, "Clicked %s", w.objects[idx].name.c_str());
+		return idx;
+	}
+	w.applyHover(idx);
+	return -1;
+}
+
+bool stepAnim(World &w, uint rec, int32 step, int32 end) {
+	AnimRecord &a = w.anims[rec];
+	if (!a.playing)
+		return false;
+	a.frame += step;
+	// Q-0400: whether a track ends on reaching its length or on passing it.
+	const bool ended = a.frame >= end;
+	if (ended)
+		a.frame = end;
+	w.pose(rec, a.frame);
+	return ended;
+}
+
+void poseAt(World &w, uint rec, int32 frame) {
+	w.anims[rec].frame = frame;
+	w.pose(rec, frame);
+}
+
+void takeItem(World &w, int objIdx, int item, uint32 flag) {
+	w.takeItem(node(w, objIdx), item);
+	w.var(flag) = 1;
+}
+
+void startSound(World &w, const Common::String &name, bool loop) {
+	if (!w.vm()->sound()->isStaticPlaying(name))
+		w.playSound(name, loop);
+}
+
+void scrollUVs(World &w, int node, int32 du, int32 dv, uint32 wrap) {
+	if (node < 0)
+		return;
+	Common::Array<int32> &uvs = w.scene3D().nodes[node].uvs;
+	for (uint i = 0; i + 1 < uvs.size(); i += 2) {
+		uvs[i] += du;
+		uvs[i + 1] += dv;
+		if (wrap && du)
+			uvs[i] &= wrap;
+		if (wrap && dv)
+			uvs[i + 1] &= wrap;
+	}
 }
 
 } // End of namespace Peintre
