@@ -62,6 +62,7 @@ namespace Video {
 #define ID_MOVI MKTAG('m','o','v','i')
 #define ID_REC  MKTAG('r','e','c',' ')
 #define ID_VEDT MKTAG('v','e','d','t')
+#define ID_FXTC MKTAG('F','X','T','C')
 #define ID_IDX1 MKTAG('i','d','x','1')
 #define ID_STRD MKTAG('s','t','r','d')
 #define ID_INFO MKTAG('I','N','F','O')
@@ -213,6 +214,7 @@ bool AVIDecoder::parseNextChunk() {
 	case ID_HDRL: // Header list.. what's it doing here? Probably ok to ignore?
 	case ID_STRD: // Extra stream info, safe to ignore
 	case ID_VEDT: // Unknown, safe to ignore
+	case ID_FXTC: // Trailing encoder data, safe to ignore
 	case ID_JUNK: // Alignment bytes, should be ignored
 	case ID_JUNQ: // Same as JUNK, safe to ignore
 	case ID_ISFT: // Metadata, safe to ignore
