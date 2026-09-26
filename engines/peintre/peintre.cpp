@@ -23,6 +23,7 @@
 #include "common/endian.h"
 #include "common/events.h"
 #include "common/system.h"
+#include "common/tokenizer.h"
 
 #include "engines/util.h"
 
@@ -144,6 +145,19 @@ Common::Error PeintreEngine::run() {
 	if (!known || !readResume(_player, in2d)) {
 		_state.clear();
 		in2d = 0;
+	}
+	if (ConfMan.hasKey("dev_zone")) {
+		// Dev harness: straight into a 2D zone holding the objects of dev_held ("all" or
+		// "n,n,..."), then stop.
+		Common::StringTokenizer ids(ConfMan.get("dev_held"), ",");
+		while (!ids.empty()) {
+			const Common::String id = ids.nextToken();
+			for (uint o = 0; o < kNumObjects; o++)
+				if (id == "all" || (uint)atoi(id.c_str()) == o)
+					_state.setHeld(o, 1);
+		}
+		debug("dev_zone: left with %d", enterZone(ConfMan.getInt("dev_zone")));
+		return Common::kNoError;
 	}
 	if (!in2d) {
 		Graphics::Surface loading;

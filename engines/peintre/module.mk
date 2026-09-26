@@ -4,6 +4,7 @@ MODULE_OBJS = \
 	accueil.o \
 	bfg.o \
 	gfx.o \
+	menu.o \
 	metaengine.o \
 	movie.o \
 	obj3d.o \
@@ -28,7 +29,12 @@ MODULE_OBJS = \
 	scenes/musee.o \
 	scenes/pont.o \
 	scenes/terrasse.o \
-	scenes/scenes.o
+	scenes/scenes.o \
+	zones/a01.o \
+	zones/a03.o \
+	zones/a04.o \
+	zones/a13.o \
+	zones/a14.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_PEINTRE), DYNAMIC_PLUGIN)
