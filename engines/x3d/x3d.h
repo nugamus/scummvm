@@ -166,6 +166,7 @@ public:
 	Common::String command(const Common::String &line);
 
 	static constexpr float kKeep = 100.0f;
+	bool u02Warned = false; // U02's gauge warning, said once per process (u02.md)
 
 	// The running scene
 	Scene *scene() { return _scene; }
@@ -184,6 +185,7 @@ public:
 
 protected:
 	Common::Error run() override;
+	void pauseEngineIntern(bool pause) override;
 
 private:
 	void playScene(const Common::String &sceneName);

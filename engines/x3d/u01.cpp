@@ -275,8 +275,7 @@ void U01::call() {
 		// CloseDoor at the eye first (E-0085)
 		_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(_vm->scene()->dir() + "Sound/CloseDoor.wav"), _vm->player().eye, false);
 		closeDoor();
-		_gauge = true;
-		_gaugeStart = g_system->getMillis();
+		_vm->startGauge(20000); // the escape timer, visible
 		interaction->setCursorKind("*U01_08", 4);
 	}
 	_vm->suspend(false);
@@ -286,7 +285,7 @@ void U01::climb() {
 	// MonterSurToit (u01.md, E-0086)
 	Player &player = _vm->player();
 	_vm->suspend(true);
-	_gauge = false;
+	_vm->stopGauge();
 	_vm->scene()->hideObject("*U01_10", false);
 	const float p1[3] = { 439.833f, -50.66f, 28.2052f };
 	_vm->moveTo(1000, p1, X3DEngine::kKeep, kHalfPi);
@@ -418,10 +417,8 @@ void U01::leave() {
 }
 
 void U01::afterFrame() {
-	if (_gauge && g_system->getMillis() - _gaugeStart >= 20000) {
-		_gauge = false;
+	if (_vm->gaugeExpired())
 		caught();
-	}
 }
 
 void U01::caught() {
@@ -454,17 +451,17 @@ void U01::syncState(Common::Serializer &s) {
 	s.syncAsByte(_train2Loaded);
 	s.syncAsByte(_onTrain);
 	s.syncAsByte(_firstMaire);
-	s.syncAsByte(_gauge);
-	uint32 elapsed = g_system->getMillis() - _gaugeStart;
-	s.syncAsUint32LE(elapsed);
-	if (s.isLoading())
-		_gaugeStart = g_system->getMillis() - elapsed;
-}
-
-void U01::draw() {
-	if (!_gauge)
-		return;
-	drawGauge(_vm->renderer(), MIN(1.0f, (g_system->getMillis() - _gaugeStart) / 20000.0f));
+	// Versions up to 3 kept the escape timer here; it is the engine's gauge since
+	byte oldGauge = 0;
+	uint32 oldElapsed = 0;
+	s.syncAsByte(oldGauge, 0, 3);
+	s.syncAsUint32LE(oldElapsed, 0, 3);
+	if (s.isLoading() && oldGauge) {
+		_vm->startGauge(20000);
+		X3DEngine::Gauge g = _vm->gauge();
+		g.start = _vm->logicMs() - MIN<uint32>(oldElapsed, 20000);
+		_vm->setGauge(g);
+	}
 }
 
 } // End of namespace X3D

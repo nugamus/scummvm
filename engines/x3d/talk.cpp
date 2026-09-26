@@ -22,6 +22,7 @@
 #include "common/debug.h"
 #include "common/stream.h"
 
+#include "x3d/detection.h"
 #include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
@@ -64,7 +65,7 @@ bool Talk::say(const Common::String &character, const Common::String &name) {
 	if (!_sound.emit(Sound::kVoiceEmitter, Common::Path(sound), _scene.objectPosition(_talkers[talker].face), false))
 		return true;
 
-	debug(1, "%s says %s", character.c_str(), name.c_str());
+	debugC(1, kDebugSound, "%s says %s", character.c_str(), name.c_str());
 	_current = talker;
 	_selected = 0;
 	_start = _lastChange = _nextRandom = _now;
