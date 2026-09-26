@@ -71,6 +71,12 @@ void U04::run(uint32 id) {
 		_vm->addUnitAction(a);
 }
 
+// A hotspot's hide: invisible and out of collision (E-0272)
+void U04::hide(const char *object) {
+	_vm->scene()->hideObject(object);
+	_vm->collision()->setEnabled(object, false);
+}
+
 void U04::say(const char *line) {
 	_vm->talk()->say("U04_03", line);
 }
@@ -377,7 +383,7 @@ void U04::finishPainting() {
 	_painted = true;
 	_vm->suspend(false);
 	_vm->interaction()->setCursorKind(kMonet, 5);
-	scene->hideObject("*U04_50");
+	hide("*U04_50");
 	monetClip("range.A3D", true);
 	_vm->interaction()->setCondition(17, "TRUE");
 	paintingActions(true);
@@ -474,7 +480,7 @@ void U04::mazout() {
 	const float p4[3] = { 75.9f, 261.43f, 15 };
 	_vm->moveTo(1000, p4, 2.071f, kKeep);
 	_vm->suspend(false);
-	_vm->scene()->hideObject("*U04_04");
+	hide("*U04_04");
 	scene->hideObject("*U04_44", false);
 	_vm->collision()->setEnabled("*U04_44", true);
 	if (mazout)
@@ -489,7 +495,7 @@ void U04::kidnapping() {
 	_vm->interaction()->exhaust(18);
 	voiceAt("d3_21", _vm->player().eye - Vector3d(8 * scene->scale, 0, 0));
 	monetClip("evanoui.A3D", true);
-	scene->hideObject("*U04_08");
+	hide("*U04_08");
 	faceMap(true);
 	scene->setClip(kDoor, "Anim/U04_02/SENVAT.A3D"); // paused at 1
 	scene->setNodeFrame(kDoor, 1);
@@ -628,12 +634,12 @@ void U04::row(bool forward) {
 	const bool left = interaction->exhausted(35) || interaction->exhausted(36);
 	if (!right && !left)
 		return;
-	const Common::String clip = right && left ? "Traj" : "Rond";
-	if (_boatClip != clip || scene->activeSlot(kBoat) == 0) {
-		scene->setClip(kBoat, clip == "Traj" ? "Anim/BARKE_TRAJECTOIRE1.A3D" : "Anim/BARKE_TOURNEROND.A3D");
+	// The clip is reloaded only if slot 1 holds another (it is saved with the node)
+	const Common::String path = right && left ? "Anim/BARKE_TRAJECTOIRE1.A3D" : "Anim/BARKE_TOURNEROND.A3D";
+	if (!scene->clipPath(kBoat).equalsIgnoreCase(path)) {
+		scene->setClip(kBoat, path);
 		scene->setNodeLoop(kBoat, true);
 		scene->setNodeFps(kBoat, 30);
-		_boatClip = clip;
 		_vm->runFor(0);
 	}
 	const bool backward = right && left ? !forward : right ? !forward : forward;
@@ -715,9 +721,8 @@ void U04::useKey() {
 		_vm->lookAt(1000, at("*U04_44"));
 		player.canMove = player.canTurn = false;
 		_vm->suspend(false);
-		while (!interaction->exhausted(32) && !_vm->shouldQuit())
-			_vm->frameWithInput();
-		_vm->suspend(true);
+		while (!interaction->exhausted(32) && !_vm->shouldQuit() && !_vm->sceneChanging())
+			_vm->frameWithInput(); // Escape disallowed
 		player.canMove = player.canTurn = true;
 		say("d3_35");
 	}
@@ -778,7 +783,7 @@ bool U04::handle(const Common::String &action) {
 		enterStudio();
 	} else if (action.equalsIgnoreCase("UsePot")) {
 		scene->enableNode("*U04_06", false);
-		scene->hideObject("*U04_06");
+		hide("*U04_06");
 		scene->hideObject("*U04_53", false);
 		_vm->sound()->stopEmitter(Sound::kUnitEmitter1);
 		effect("s3_06", at("*U04_06"));
@@ -808,11 +813,10 @@ bool U04::handle(const Common::String &action) {
 	} else if (action.equalsIgnoreCase("UseBouchon")) {
 		// The cork: the boat no longer sinks
 		scene->setPickWhenHidden("*U04_43", false);
-		if (_vm->gaugeLabel() == "ecroule") {
-			_vm->stopGauge();
-			if (_savedGauge.ms)
-				_vm->setGauge(_savedGauge);
-		}
+		_vm->stopGauge();
+		if (_savedGauge.ms)
+			_vm->setGauge(_savedGauge);
+		_savedGauge = X3DEngine::Gauge();
 		_vm->sound()->stopGroup(Sound::kEffects);
 	} else if (action.equalsIgnoreCase("UseCle")) {
 		useKey();

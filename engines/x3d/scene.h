@@ -179,6 +179,7 @@ public:
 	             int slot = 1, bool activate = true);
 	void activateSlot(const Common::String &name, int slot); // 0: the node's own animation
 	int activeSlot(const Common::String &name);
+	const Common::String &clipPath(const Common::String &name); // the active clip's .A3D, or ""
 	void endClip(const Common::String &name);
 	void setNodePingPong(const Common::String &name, bool pingPong);
 	void enableNode(const Common::String &name, bool enabled);

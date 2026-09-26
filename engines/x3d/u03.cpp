@@ -84,7 +84,8 @@ void U03::start(bool newGame, bool video) {
 	collision->setEnabled("pedaledrt", false);
 	_vm->player().setSphere(30.5f, 10.5f);
 	scene->pauseNode("*U03_08");
-	scene->setNodeFps(kFlic, 15);
+	if (scene->activeSlot(kFlic) == 0)
+		scene->setNodeFps(kFlic, 15); // the node's own marche, not a restored clip
 	scene->setNodeLoop("*path", false);
 	scene->setNodePingPong("*path", false);
 	scene->setNodeFps("*path", 4);
@@ -131,7 +132,8 @@ void U03::afterAnimate() {
 	// The policeman walks the recorded route turned by 180 degrees, the walk cycle on top
 	// (U03::FlicFollowPath, E-0302)
 	Scene *scene = _vm->scene();
-	if (!_follow || !scene->nodeRunning(kFlic))
+	// Not in scripted waits: the hook belongs to the unit's own frames (u03.md)
+	if (!_follow || _vm->suspended() || !scene->nodeRunning(kFlic))
 		return;
 	O3DObject *flic = scene->object(kFlic), *path = scene->object("*path");
 	if (!flic || !path)
@@ -190,6 +192,7 @@ void U03::clownTrick() {
 
 	// The juggler gives way to the magician (U03::SwapClownModel)
 	scene->hideObject(kClown);
+	_vm->collision()->setEnabled(kClown, false, true); // the juggler's meshes go too
 	scene->renameNode(kClown, "ClownDeleted");
 	scene->enableNode("ClownDeleted", false);
 	scene->addModel("Anim/U03_02/U03_02.O3D", "Anim/U03_02/magie.A3D", 15);
@@ -241,8 +244,11 @@ void U03::clownTrick() {
 	scene->setNodeFps(kClown, 15);
 	scene->runNodeTo(kClown, -1, false);
 	while (scene->nodeRunning(kClown) && !_vm->shouldQuit()) {
+		// One extra frame per logic step, on top of the clip's own advance
 		scene->setNodeFrame(kClown, scene->nodeFrame(kClown) + 1);
-		_vm->runFor(0);
+		const uint32 t = _vm->logicMs();
+		while (_vm->logicMs() == t && !_vm->shouldQuit())
+			_vm->runFor(0);
 	}
 	scene->hideObject(kClown);
 	_vm->collision()->setEnabled(kClown, false);
@@ -389,9 +395,11 @@ void U03::cutscene() {
 		} else if (f > 20 && k == 1) {
 			k = 2;
 		}
-		_vm->runFor(0);
+		const uint32 t = _vm->logicMs();
+		while (_vm->logicMs() == t && !_vm->shouldQuit())
+			_vm->runFor(0);
 		if (player.fov > 50)
-			player.fov += fovStep;
+			player.fov += fovStep; // one step per logic tick
 	}
 	scene->pauseNode(camNode);
 	scene->pauseNode(cineNode);

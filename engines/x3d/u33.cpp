@@ -192,7 +192,13 @@ void U33::walkToScreen() {
 	const float z0 = player.eye.z();
 	walkG(6000, 699, 61, z0, 0);
 	const Vector3d start = player.eye, to(825.89f, 60.1939f, 62);
-	const float yaw0 = player.yaw, pitch0 = player.pitch;
+	// Yaw to 0 the short way round (WalkPath)
+	float yaw0 = fmod(player.yaw, 2 * (float)M_PI);
+	if (yaw0 > M_PI)
+		yaw0 -= 2 * (float)M_PI;
+	else if (yaw0 < -M_PI)
+		yaw0 += 2 * (float)M_PI;
+	const float pitch0 = player.pitch;
 	const uint n = MAX<uint>(1, 6000 * X3DEngine::kStepsPerSecond / 1000);
 	const uint k = MAX<uint>(1, n / 15);
 	for (uint i = 1; i <= n && !_vm->shouldQuit(); i++) {

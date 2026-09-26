@@ -711,6 +711,12 @@ void Scene::activateSlot(const Common::String &name, int slot) {
 	n->clipActive = n->clip.file != nullptr;
 }
 
+const Common::String &Scene::clipPath(const Common::String &name) {
+	static const Common::String none;
+	AnimNode *n = findNode(name);
+	return n && n->clipActive ? n->clip.path : none;
+}
+
 int Scene::activeSlot(const Common::String &name) {
 	AnimNode *n = findNode(name);
 	return n && n->clipActive ? n->slot : 0;
@@ -734,8 +740,12 @@ Scene::Model *Scene::addModel(const Common::String &path, const Common::String &
 			o.name = o.name.substr(star);
 	}
 	_models.push_back(m);
-	if (!animation.empty())
-		bindAnimation(animation, fps);
+	// One node for the whole file on the whole tree (u03.md cutscene step 2), whatever the
+	// root's name
+	if (!animation.empty()) {
+		if (const A3DFile *file = clipFile(animation))
+			addNode(file, 0, m, 0, fps);
+	}
 	return m;
 }
 
