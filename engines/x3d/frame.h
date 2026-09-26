@@ -23,8 +23,11 @@
 #define X3D_FRAME_H
 
 #include "common/array.h"
+#include "common/ptr.h"
 #include "common/rect.h"
 #include "common/str.h"
+
+#include "graphics/font.h"
 
 namespace Graphics {
 struct Surface;
@@ -86,6 +89,9 @@ public:
 	void draw(Renderer &r, int xOffset, int hovered);
 
 private:
+	const Graphics::Font *textFont() const;
+	int textWidth(const Common::String &text, int chars) const;
+	mutable Common::ScopedPtr<Graphics::Font> _font; // loaded on first use
 	struct View {
 		Common::String tag;
 		int id, x, y, w, h, parent;
