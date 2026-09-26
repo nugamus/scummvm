@@ -27,13 +27,13 @@
 
 #include "math/vector3d.h"
 
+#include "x3d/scene.h"
+
 namespace Common {
 class Serializer;
 }
 
 namespace X3D {
-
-class Scene;
 
 // World-space collision against a scene's objects (docs/engine-spec/movement.md, Collision)
 class Collision {
@@ -60,7 +60,7 @@ private:
 	};
 
 	struct Object {
-		const void *model; // Scene::Model
+		const Scene::Model *model;
 		uint object;
 		bool enabled = true;
 		Math::Vector3d center;
