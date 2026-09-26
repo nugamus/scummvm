@@ -19,7 +19,6 @@
  *
  */
 
-
 #ifndef X3D_O3D_H
 #define X3D_O3D_H
 

@@ -23,9 +23,9 @@
 #define X3D_U01_H
 
 #include "common/random.h"
+#include "common/str.h"
 
 #include "x3d/unit.h"
-#include "common/str.h"
 
 #include "math/vector3d.h"
 

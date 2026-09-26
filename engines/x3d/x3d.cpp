@@ -82,15 +82,10 @@ Common::Error X3DEngine::run() {
 	// has already added to SearchMan
 	// The original frames every mode as 4:3 (E-0040); widescreen keeps its height and view
 	// and shows more to the sides. 2D images stay 640x480, centred.
-	_renderer = Renderer::create(ConfMan.hasKey("widescreen") && ConfMan.getBool("widescreen") ? 854 : 640, 480);
+	ConfMan.registerDefault("widescreen", false);
+	_renderer = Renderer::create(ConfMan.getBool("widescreen") ? 854 : 640, 480);
 	_sound = new Sound(_mixer);
 	_inventory = new Inventory();
-	if (ConfMan.hasKey("music_level"))
-		_musicVolume = ConfMan.getInt("music_level");
-	if (ConfMan.hasKey("voice_level")) {
-		_sound->setGroupVolume(Sound::kVoice, ConfMan.getInt("voice_level"));
-		_sound->setGroupVolume(Sound::kEffects, ConfMan.getInt("voice_level"));
-	}
 	setDebugger(new Console(this));
 
 	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
@@ -321,6 +316,8 @@ void X3DEngine::pauseEngineIntern(bool pause) {
 		_last = _system->getMillis(); // the paused time is not game time
 }
 
+	if (_video)
+		_video->pauseVideo(pause);
 void X3DEngine::gameOver() {
 	_sound->stopAll();
 	storeHeldItem(); // the caught path stores it (E-0210)
@@ -365,7 +362,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_scene = &scene;
 
 	// Sound (sound.md): mode 0 group volumes, the scene's emitters
-	_sound->setGroupVolume(Sound::kAmbient, _musicVolume);
+	_sound->setGroupVolume(Sound::kAmbient, 85);
 	_sound->setGroupVolume(4, 80);
 	_sound->setGroupVolume(5, 80);
 	_sound->setScale(scene.scale);
@@ -943,27 +940,24 @@ void X3DEngine::credits() {
 }
 
 void X3DEngine::settings() {
-	// OptionReglages (ui.md Settings): music is group 1, voice groups 2 and 3
+	// OptionReglages (ui.md Settings): music is group 1, voice groups 2 and 3. The sliders
+	// are ScummVM's music and speech/effects volumes, so they agree with the launcher's
 	Frame frame;
 	if (!frame.load("OptionReglages"))
 		return;
 	const int max = frame.sliderMax(4);
-	frame.setSliderValue(4, (int)(max * 0.01f * _musicVolume));
-	frame.setSliderValue(5, (int)(max * 0.01f * _sound->groupVolume(Sound::kVoice)));
+	frame.setSliderValue(4, ConfMan.getInt("music_volume") * max / Audio::Mixer::kMaxMixerVolume);
+	frame.setSliderValue(5, ConfMan.getInt("speech_volume") * max / Audio::Mixer::kMaxMixerVolume);
 	for (;;) {
 		const Common::String c = runFrame(frame);
 		if (shouldQuit() || c == "ReglageAnnuler" || c == "escape")
 			return;
 		if (c == "ReglageOK" || c == "enter") {
-			// ponytail: the original's music value is lost at the next mode change
-			// (Q-0190); here it is kept as the level of group 1 in play
-			_musicVolume = frame.sliderValue(4) * 100 / MAX(1, max);
-			const int voice = frame.sliderValue(5) * 100 / MAX(1, max);
-			_sound->setGroupVolume(Sound::kVoice, voice);
-			_sound->setGroupVolume(Sound::kEffects, voice);
-			ConfMan.setInt("music_level", _musicVolume);
-			ConfMan.setInt("voice_level", voice);
-			ConfMan.flushToDisk();
+			const int voice = frame.sliderValue(5) * Audio::Mixer::kMaxMixerVolume / MAX(1, max);
+			ConfMan.setInt("music_volume", frame.sliderValue(4) * Audio::Mixer::kMaxMixerVolume / MAX(1, max));
+			ConfMan.setInt("speech_volume", voice);
+			ConfMan.setInt("sfx_volume", voice);
+			syncSoundSettings();
 			return;
 		}
 	}
@@ -1481,7 +1475,7 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 	if (file->open(Common::Path("Video/" + (wav.empty() ? name : wav) + ".wav"))) {
 		Audio::RewindableAudioStream *stream = Audio::makeWAVStream(file, DisposeAfterUse::YES);
 		if (stream)
-			_mixer->playStream(Audio::Mixer::kSFXSoundType, &sound, stream);
+			_mixer->playStream(Audio::Mixer::kSpeechSoundType, &sound, stream);
 	} else {
 		delete file;
 	}
@@ -1503,6 +1497,7 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 			const Graphics::Surface *frame = video.decodeNextFrame();
 			if (frame) {
 				_renderer->clear();
+	_video = &video; // paused with the engine
 				_renderer->drawImage(*frame, (_renderer->width() - 640) / 2, 0, false);
 				_renderer->present();
 			}
@@ -1514,3 +1509,4 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 }
 
 } // End of namespace X3D
+	_video = nullptr;

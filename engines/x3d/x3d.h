@@ -36,6 +36,10 @@ namespace Graphics {
 struct Surface;
 }
 
+namespace Video {
+class VideoDecoder;
+}
+
 namespace X3D {
 
 class Collision;
@@ -211,6 +215,7 @@ private:
 	Inventory *_inventory = nullptr;
 	Talk *_talk = nullptr;
 	Unit *_unit = nullptr;
+	Video::VideoDecoder *_video = nullptr; // the video playing, if any
 	bool _practice = false; // Practice was chosen (u00.md): U00 without the players screen
 	Player _player, _previous;
 	Keys _keys;
@@ -238,7 +243,6 @@ private:
 	bool _walk = false; // runFor with walking input
 	Gauge _gauge;
 	int _menuView = -1;  // the view index of the last frame click
-	int _musicVolume = 85; // group 1 in play (Settings)
 	Common::String _playerName;
 	Common::String _gallery3D; // the painting whose 3D scene the next scene is
 };

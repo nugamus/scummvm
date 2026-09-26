@@ -56,7 +56,7 @@ const char *X3DMetaEngine::getName() const {
 
 void X3DMetaEngine::getSavegameThumbnail(Graphics::Surface &thumb) {
 	// The 3D screen cannot be read back by ScummVM: the engine redraws its last view
-	if (X3D::X3DEngine *engine = (X3D::X3DEngine *)g_engine) {
+	if (X3D::X3DEngine *engine = static_cast<X3D::X3DEngine *>(g_engine)) {
 		if (Graphics::Surface *small = engine->thumbnail(160, 120)) {
 			thumb.copyFrom(*small);
 			small->free();

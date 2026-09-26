@@ -19,7 +19,6 @@
  *
  */
 
-
 #ifndef X3D_DMF_H
 #define X3D_DMF_H
 
