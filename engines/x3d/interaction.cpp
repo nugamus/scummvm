@@ -204,8 +204,27 @@ void Interaction::setCursor(uint kind) {
 	if (_shownCursor == (int)kind || kind >= ARRAYSIZE(_cursors) || !_cursors[kind])
 		return;
 	const Graphics::Surface *s = _cursors[kind];
-	CursorMan.replaceCursor(*s, kCursorHotspots[kind][0], kCursorHotspots[kind][1], s->format.RGBToColor(255, 255, 255));
+	replaceCursor(*s, kCursorHotspots[kind][0], kCursorHotspots[kind][1]);
 	_shownCursor = kind;
+}
+
+void Interaction::setCursorScale(int scale) {
+	if (scale == _cursorScale)
+		return;
+	_cursorScale = scale;
+	_shownCursor = -2; // shown again at the new size
+}
+
+void Interaction::replaceCursor(const Graphics::Surface &s, int hotspotX, int hotspotY) {
+	const uint32 key = s.format.RGBToColor(255, 255, 255);
+	if (_cursorScale <= 1) {
+		CursorMan.replaceCursor(s, hotspotX, hotspotY, key);
+		return;
+	}
+	Graphics::Surface *big = s.scale(s.w * _cursorScale, s.h * _cursorScale); // nearest: the key stays exact
+	CursorMan.replaceCursor(*big, hotspotX * _cursorScale, hotspotY * _cursorScale, key);
+	big->free();
+	delete big;
 }
 
 void Interaction::hover(int hotspot, uint32 millis) {
@@ -216,7 +235,7 @@ void Interaction::hover(int hotspot, uint32 millis) {
 		if (shown != _shownCursor) {
 			CursorMan.showMouse(!blinkOff);
 			if (!blinkOff)
-				CursorMan.replaceCursor(*_heldImage, 16, 16, _heldImage->format.RGBToColor(255, 255, 255));
+				replaceCursor(*_heldImage, 16, 16);
 			_shownCursor = shown;
 		}
 		return;

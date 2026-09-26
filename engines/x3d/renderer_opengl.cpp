@@ -75,6 +75,10 @@ public:
 		                     (p.y - _viewport.top) * _height / _viewport.height());
 	}
 
+	int pixelScale() const override {
+		return MAX(1, (_viewport.height() + 240) / 480);
+	}
+
 	void setViewport() {
 		glViewport(_viewport.left, _windowHeight - _viewport.bottom, _viewport.width(), _viewport.height());
 	}
