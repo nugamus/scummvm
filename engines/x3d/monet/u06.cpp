@@ -94,14 +94,17 @@ void U06::afterFrame() {
 }
 
 bool U06::input(float dt) {
-	// While the player walks, the clown turns toward the eye (Hotspot_TurnToYaw)
+	// The generic input first, then, while the player walks, the clown turns toward the
+	// new eye (Hotspot_TurnToYaw; movement.md, Unit input hooks)
 	const Keys &keys = _vm->keys();
+	if (_vm->player().tick(dt, keys, *_vm->collision()))
+		_vm->sound()->emit(Sound::kEffectsEmitter, "SAUT.WAV", _vm->player().eye, false);
 	if (keys.up || keys.down) {
 		const Vector3d d = _vm->player().eye - _vm->scene()->objectPosition(kClown);
 		_clownYaw = atan2f(-d.y(), d.x());
 		_turned = true;
 	}
-	return false;
+	return true;
 }
 
 void U06::afterAnimate() {
