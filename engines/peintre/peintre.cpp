@@ -29,6 +29,7 @@
 #include "graphics/pixelformat.h"
 
 #include "peintre/bfg.h"
+#include "peintre/movie.h"
 #include "peintre/obj3d.h"
 #include "peintre/peintre.h"
 
@@ -49,6 +50,12 @@ Common::Error PeintreEngine::run() {
 
 	if (ConfMan.getBool("dev_load_all"))
 		loadAllScenes();
+
+	MoviePlayer movies(this);
+	if (!movies.loadTable())
+		warning("Cannot read the movie table from mission.___");
+	if (ConfMan.hasKey("dev_movie"))
+		movies.play(ConfMan.get("dev_movie"));
 
 	while (!shouldQuit()) {
 		Common::Event event;
