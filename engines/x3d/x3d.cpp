@@ -401,8 +401,10 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 			_unit->syncState(s);
 		syncGauge(s);
 		_pendingLoad.clear();
+		_restoring = true;
 		if (_unit)
 			_unit->start(false, false);
+		_restoring = false;
 	} else if (ConfMan.hasKey("start_camera")) {
 		sscanf(ConfMan.get("start_camera").c_str(), "%f,%f,%f,%f,%f", &_player.eye.x(),
 		       &_player.eye.y(), &_player.eye.z(), &_player.yaw, &_player.pitch);
