@@ -32,7 +32,6 @@
 
 #include "math/vector3d.h"
 
-
 #include "x3d/a3d.h"
 #include "x3d/o3d.h"
 
@@ -87,8 +86,6 @@ public:
 
 	Camera camera; // #CAMERA# values; position and angles are set by the unit
 	float scale = 1; // #SCENE# unit length (eye height and collision sphere derive from it)
-
-	struct Model;
 
 	// A lower-detail stand-in for a base object (docs/engine-spec/scene.md, Levels of detail)
 	struct Lod {
@@ -182,7 +179,7 @@ public:
 	             int slot = 1, bool activate = true);
 	void activateSlot(const Common::String &name, int slot); // 0: the node's own animation
 	int activeSlot(const Common::String &name);
-	const Common::String &clipPath(const Common::String &name); // the active clip's .A3D, or ""
+	Common::String clipPath(const Common::String &name); // the active clip's .A3D, or ""
 	void endClip(const Common::String &name);
 	void setNodePingPong(const Common::String &name, bool pingPong);
 	void enableNode(const Common::String &name, bool enabled);

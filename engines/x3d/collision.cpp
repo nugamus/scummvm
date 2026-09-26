@@ -61,7 +61,7 @@ void Collision::build(const Scene &scene) {
 
 void Collision::refresh() {
 	for (Object &obj : _objects)
-		if (((const Scene::Model *)obj.model)->animated)
+		if (obj.model->animated)
 			fill(obj);
 }
 
@@ -78,7 +78,7 @@ void Collision::syncState(Common::Serializer &s) {
 
 void Collision::setEnabled(const Common::String &name, bool enabled, bool subtree) {
 	for (Object &obj : _objects) {
-		const Common::Array<O3DObject> &objects = ((const Scene::Model *)obj.model)->file.objects;
+		const Common::Array<O3DObject> &objects = obj.model->file.objects;
 		for (int o = obj.object; o >= 0; o = subtree ? objects[o].parent : -1) {
 			if (objects[o].name.equalsIgnoreCase(name)) {
 				obj.enabled = enabled;
@@ -89,7 +89,7 @@ void Collision::setEnabled(const Common::String &name, bool enabled, bool subtre
 }
 
 void Collision::fill(Object &obj) const {
-	const Scene::Model *m = (const Scene::Model *)obj.model;
+	const Scene::Model *m = obj.model;
 	const Common::Array<O3DObject> &objects = m->file.objects;
 	const O3DObject &o = objects[obj.object];
 	// Refreshes overwrite the faces in place, keeping their storage
@@ -231,7 +231,7 @@ bool Collision::cast(const Vector3d &from, const Vector3d &to, float &t, Common:
 			t = u;
 			hit = true;
 			if (hitName)
-				*hitName = ((const Scene::Model *)o.model)->file.objects[o.object].name;
+				*hitName = o.model->file.objects[o.object].name;
 		}
 	}
 	return hit;

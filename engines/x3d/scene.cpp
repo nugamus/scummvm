@@ -717,10 +717,9 @@ void Scene::activateSlot(const Common::String &name, int slot) {
 	n->clipActive = n->clip.file != nullptr;
 }
 
-const Common::String &Scene::clipPath(const Common::String &name) {
-	static const Common::String none;
+Common::String Scene::clipPath(const Common::String &name) {
 	AnimNode *n = findNode(name);
-	return n && n->clipActive ? n->clip.path : none;
+	return n && n->clipActive ? n->clip.path : Common::String();
 }
 
 int Scene::activeSlot(const Common::String &name) {
