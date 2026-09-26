@@ -210,7 +210,8 @@ private:
 	bool _restoring = false;
 	uint32 _devUp = 0, _devDown = 0, _devShift = 0; // console "press": held until these times (ms)
 	uint32 _sceneStart = 0, _devStart = 0;
-	bool _devParsed = false;
+	bool _devParsed = false, _devMenuParsed = false;
+	Common::StringArray _devMenu; // dev_menu answers for the next menus
 	Common::String _nextScene, _sceneName;
 	Common::Array<byte> _pendingLoad; // a save's scene state, restored by playScene
 	uint32 _pendingVersion = 1;

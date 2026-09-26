@@ -763,6 +763,24 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 	const uint32 start = _system->getMillis();
 	_menuView = -1;
 	Common::String result;
+	// Development shortcut: dev_menu=cmd,cmd,... answers the next menus in order after
+	// 1.5 s each ("key" for any key, "text:<name>" types into the edit then Enter)
+	if (!_devMenuParsed) {
+		_devMenuParsed = true;
+		const Common::String all = ConfMan.get("dev_menu");
+		Common::String c;
+		for (const char *p = all.c_str(); ; p++) {
+			if (*p == ',' || !*p) {
+				if (!c.empty())
+					_devMenu.push_back(c);
+				c.clear();
+				if (!*p)
+					break;
+			} else {
+				c += *p;
+			}
+		}
+	}
 	while (result.empty() && !shouldQuit()) {
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
@@ -801,6 +819,16 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 		}
 		if (timeout && result.empty() && _system->getMillis() - start >= timeout)
 			result = "timeout";
+		if (result.empty() && !_devMenu.empty() && _system->getMillis() - start >= 1500) {
+			const Common::String c = _devMenu.remove_at(0);
+			if (c.hasPrefix("text:")) {
+				frame.setText(c.substr(5));
+				result = "enter";
+			} else {
+				result = c;
+			}
+			debug(1, "dev menu: %s", c.c_str());
+		}
 
 		const int hovered = frame.viewAt(Common::Point(_mouse.x - x2d, _mouse.y));
 		if (_interaction)
