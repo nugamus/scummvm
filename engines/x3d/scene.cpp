@@ -145,7 +145,9 @@ bool Scene::load(const Common::String &scriptName) {
 			if (lod) {
 				const float d = MAX(0.0, atof(value.c_str()));
 				_lodModels.push_back(lod);
-				if (!_models.back()->file.objects.empty() && !lod->file.objects.empty())
+				// Only a LOD whose root is welded as the base's is attached (E-0530)
+				if (!_models.back()->file.objects.empty() && !lod->file.objects.empty() &&
+				    _models.back()->file.objects[0].welded == lod->file.objects[0].welded)
 					attachLod(_models.back(), 0, lod, 0, d * d);
 			}
 		}
