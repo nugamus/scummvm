@@ -23,6 +23,7 @@
 #define X3D_X3D_H
 
 #include "common/array.h"
+#include "common/events.h"
 #include "common/rect.h"
 #include "common/scummsys.h"
 #include "common/str.h"
@@ -66,7 +67,8 @@ public:
 
 	bool hasFeature(EngineFeature f) const override {
 		return f == kSupportsReturnToLauncher || f == kSupportsLoadingDuringRuntime ||
-		       f == kSupportsSavingDuringRuntime;
+		       f == kSupportsSavingDuringRuntime ||
+		       (f == kSupportsArbitraryResolutions && _nativeResolution);
 	}
 
 	// Saves (docs/engine-spec/save.md): the scene's state as the original stores it, in
@@ -95,6 +97,7 @@ public:
 	bool gaugeExpired();
 	void syncGauge(Common::Serializer &s);
 	void storeHeldItem(); // a held item back into the bar (E-0210)
+	void actionToKey(Common::Event &e);
 	Unit *createUnit(const Common::String &sceneName); // the scene's unit code, or nullptr
 	// The last view redrawn at thumbnail size (save thumbnails in 3D mode), or nullptr
 	Graphics::Surface *thumbnail(int width, int height);
@@ -215,6 +218,7 @@ private:
 	Inventory *_inventory = nullptr;
 	Talk *_talk = nullptr;
 	Unit *_unit = nullptr;
+	bool _nativeResolution = false; // the renderer draws at the window's size
 	Video::VideoDecoder *_video = nullptr; // the video playing, if any
 	bool _practice = false; // Practice was chosen (u00.md): U00 without the players screen
 	Player _player, _previous;

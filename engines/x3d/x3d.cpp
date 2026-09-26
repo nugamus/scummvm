@@ -88,7 +88,8 @@ Common::Error X3DEngine::run() {
 	ConfMan.registerDefault("widescreen", false);
 	ConfMan.registerDefault("max_detail", false);
 	ConfMan.registerDefault("filter_textures", false);
-	_renderer = Renderer::create(ConfMan.getBool("widescreen") ? 854 : 640, 480);
+	_renderer = Renderer::create(ConfMan.getBool("widescreen") ? 854 : 640, 480, _nativeResolution);
+	_renderer->updateSize(ConfMan.getBool("widescreen"));
 	_renderer->filterTextures = ConfMan.getBool("filter_textures");
 	_sound = new Sound(_mixer);
 	_inventory = new Inventory();
@@ -119,8 +120,14 @@ Common::Error X3DEngine::run() {
 	return Common::kNoError;
 }
 
-// A keymapper action event as the key it stands for, so key handling stays in one place
-static void actionToKey(Common::Event &e) {
+// Every event as the engine takes it: mouse positions in the logical frame, a resized
+// window resizes the frame, and a keymapper action becomes the key it stands for, so key
+// handling stays in one place
+void X3DEngine::actionToKey(Common::Event &e) {
+	if (Common::isMouseEvent(e))
+		e.mouse = _renderer->toLogical(e.mouse);
+	if (e.type == Common::EVENT_SCREEN_CHANGED)
+		_renderer->updateSize(ConfMan.getBool("widescreen"));
 	if (e.type != Common::EVENT_CUSTOM_ENGINE_ACTION_START && e.type != Common::EVENT_CUSTOM_ENGINE_ACTION_END)
 		return;
 	static const Common::KeyCode keys[] = {
