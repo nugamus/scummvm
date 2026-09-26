@@ -19,6 +19,9 @@
  *
  */
 
+#include "common/debug.h"
+
+#include "peintre/detection.h"
 #include "peintre/peintre.h"
 #include "peintre/sound.h"
 #include "peintre/scenes/scenes.h"
@@ -204,6 +207,7 @@ void Musee::init(World &w) {
 }
 
 void Musee::speak(World &w) {
+	debugC(1, kDebugScript, "Musee: the robot speaks");
 	w.vm()->sound()->playStream(kLines[0]);
 	_line = 1;
 	_speaking = true;
@@ -212,6 +216,7 @@ void Musee::speak(World &w) {
 void Musee::dialogue(World &w) {
 	if (!_speaking || w.vm()->sound()->isStreamPlaying())
 		return;
+	debugC(1, kDebugScript, "Musee: robot line %d ended", _line - 1);
 	if (_line == 1) {
 		w.vm()->sound()->playStream(kLines[1]);
 		w.retexture(node(w, kEcran), "ROBI3N", "ROBI3");
@@ -253,6 +258,7 @@ void Musee::hints(World &w) {
 			play = true;
 	}
 	if (play) {
+		debugC(1, kDebugScript, "Musee: hint at %d, %d", x, z);
 		w.vm()->sound()->playStream(kLines[2]);
 		_hint = true;
 	}
@@ -344,15 +350,12 @@ void Musee::frame(World &w) {
 		w.var(kRobotMet) = 1;
 		setParts(w, 0xFF);
 	}
-	// Back from the option menu (0x4e3120, set by 0x42f515). Q-0406: who clears it;
-	// cleared here once used.
-	if (w.localVar(0x4e3120)) {
+	// Back from the option menu (0x4e3120, set by 0x42f515): cleared only when acted on
+	// (E-0017).
+	if (w.localVar(0x4e3120) == 1 && !w.var(kFlown)) {
+		setParts(w, 4);
+		_speaking = false;
 		w.localVar(0x4e3120) = 0;
-		if (!w.var(kFlown)) {
-			setParts(w, 4);
-			_speaking = false;
-			_line = 0;
-		}
 	}
 	dialogue(w);
 	hints(w);

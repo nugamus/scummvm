@@ -19,7 +19,9 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/debug.h"
+#include "common/tokenizer.h"
 
 #include "peintre/detection.h"
 #include "peintre/peintre.h"
@@ -30,7 +32,58 @@ namespace Peintre {
 
 // The scenes' own code (games/mission-sunlight/docs/<scene>.md): one file per scene.
 
-SceneScript *createSceneScript(int scene, const Common::String &bundle) {
+namespace {
+
+/**
+ * Dev harness around the first scene loaded (game domain of the dev ini):
+ * dev_vars=addr=value,... sets 3D block words before its init, dev_camera=x,y,z,pitch,yaw
+ * places the viewer after it; with debug level 3 the camera is logged every 15 ticks.
+ */
+class DevScript : public SceneScript {
+public:
+	DevScript(SceneScript *s) : _s(s) {}
+
+	void init(World &w) override {
+		static bool first = true;
+		if (first && ConfMan.hasKey("dev_vars")) {
+			Common::StringTokenizer t(ConfMan.get("dev_vars"), ",");
+			while (!t.empty()) {
+				const Common::String v = t.nextToken();
+				const size_t eq = v.findFirstOf('=');
+				if (eq != Common::String::npos)
+					w.var(strtoul(v.c_str(), nullptr, 0)) = strtoul(v.c_str() + eq + 1, nullptr, 0);
+			}
+		}
+		_s->init(w);
+		if (first && ConfMan.hasKey("dev_camera")) {
+			int32 c[5] = { 0, 0, 0, 0, 0 };
+			Common::StringTokenizer t(ConfMan.get("dev_camera"), ",");
+			for (int i = 0; i < 5 && !t.empty(); i++)
+				c[i] = atoi(t.nextToken().c_str());
+			Camera &cam = w.camera();
+			cam.x = c[0];
+			cam.y = c[1];
+			cam.z = c[2];
+			cam.pitch = c[3];
+			cam.yaw = c[4];
+		}
+		first = false;
+	}
+
+	void frame(World &w) override {
+		_s->frame(w);
+		if (gDebugLevel >= 3 && ++_ticks % 15 == 0) {
+			const Camera &c = w.camera();
+			debugC(3, kDebugScript, "Camera %d,%d,%d,%d,%d", c.x, c.y, c.z, c.pitch, c.yaw);
+		}
+	}
+
+private:
+	Common::ScopedPtr<SceneScript> _s;
+	uint _ticks = 0;
+};
+
+SceneScript *createScript(int scene, const Common::String &bundle) {
 	switch (scene) {
 	case kSceneMusee: return createMusee();
 	case kSceneAuberge: return createAuberge();
@@ -48,6 +101,13 @@ SceneScript *createSceneScript(int scene, const Common::String &bundle) {
 	case kSceneEglise: return createEglise();
 	default: return nullptr;
 	}
+}
+
+} // End of anonymous namespace
+
+SceneScript *createSceneScript(int scene, const Common::String &bundle) {
+	SceneScript *s = createScript(scene, bundle);
+	return s && (ConfMan.hasKey("dev_vars") || ConfMan.hasKey("dev_camera") || gDebugLevel >= 3) ? new DevScript(s) : s;
 }
 
 void setObjects(World &w, const ObjectDef *defs, uint count) {
@@ -84,6 +144,12 @@ void setAnims(World &w, const AnimDef *defs, uint count) {
 }
 
 int clickedObject(World &w, int idx) {
+	static int hovered = -1;
+	if (idx != hovered && idx >= 0 && gDebugLevel >= 2) {
+		const Common::Point m = w.vm()->mouse();
+		debugC(2, kDebugScript, "Hover %s at %d, %d", w.objects[idx].name.c_str(), m.x, m.y);
+	}
+	hovered = idx;
 	w.applyHover(-1);
 	if (idx >= 0 && w.click() && w.cursor() == kCursorArrow) {
 		debugC(1, kDebugScript, "Clicked %s", w.objects[idx].name.c_str());

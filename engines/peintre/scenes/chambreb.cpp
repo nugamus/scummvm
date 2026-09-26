@@ -146,10 +146,9 @@ public:
 			w.retexture(node(w, kTab01), "TOILES", "RASOIR");
 			w.objects[kOreiller].cursorType = 0x3C;
 		}
-		// 0x4e30f4: set by the return from zone 11 while 0x4abd5c = 0 (scene.md).
-		// Q-0406: who clears it; cleared here once used.
+		// 0x4e30f4: set by the return from zone 11 while 0x4abd5c = 0, never cleared
+		// (E-0017); the saved 0x4abd5c prevents a replay.
 		if (w.localVar(0x4e30f4) == 1 && !w.var(kMirrorSound)) {
-			w.localVar(0x4e30f4) = 0;
 			w.var(kMirrorSound) = 1;
 			startSound(w, "miroir");
 		}
