@@ -316,12 +316,12 @@ void X3DEngine::storeHeldItem() {
 
 void X3DEngine::pauseEngineIntern(bool pause) {
 	Engine::pauseEngineIntern(pause);
+	if (_video)
+		_video->pauseVideo(pause);
 	if (!pause)
 		_last = _system->getMillis(); // the paused time is not game time
 }
 
-	if (_video)
-		_video->pauseVideo(pause);
 void X3DEngine::gameOver() {
 	_sound->stopAll();
 	storeHeldItem(); // the caught path stores it (E-0210)
@@ -1497,6 +1497,7 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 		delete file;
 	}
 
+	_video = &video; // paused with the engine
 	bool skip = false;
 	while (!shouldQuit() && !skip && !video.endOfVideo()) {
 		Common::Event e;
@@ -1514,7 +1515,6 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 			const Graphics::Surface *frame = video.decodeNextFrame();
 			if (frame) {
 				_renderer->clear();
-	_video = &video; // paused with the engine
 				_renderer->drawImage(*frame, (_renderer->width() - 640) / 2, 0, false);
 				_renderer->present();
 			}
@@ -1522,8 +1522,8 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 		_system->delayMillis(5);
 	}
 
+	_video = nullptr;
 	_mixer->stopHandle(sound);
 }
 
 } // End of namespace X3D
-	_video = nullptr;
