@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/endian.h"
 #include "common/system.h"
@@ -466,9 +467,12 @@ bool World::load(int scene, int prevScene, bool keepCamera) {
 	_reload = false;
 	_exit = kExitNone;
 
-	_script.reset(createSceneScript(scene, bundle));
+	_script.reset(ConfMan.getBool("dev_noscript") ? nullptr : createSceneScript(scene, bundle));
 	if (_script)
 		_script->init(*this);
+	for (uint i = 0; i < _scene3D.nodes.size(); i++)
+		if (_scene3D.nodes[i].flags & 5)
+			debugC(2, kDebugLoad, "World: node %s hidden (flags 0x%x)", _scene3D.nodes[i].name.c_str(), _scene3D.nodes[i].flags);
 	debugC(1, kDebugLoad, "World: scene %d (%s) from %d, %d nodes, %d textures", scene,
 		   bundle.c_str(), prevScene, _scene3D.nodes.size(), _textures.size());
 	return true;
@@ -522,7 +526,9 @@ void World::requestMovie(const Common::String &name) {
 }
 
 void World::startFlight(int target) {
-	// Mode 4: 20 steps to the painting's spot, the short way round for angles.
+	// Mode 4: 20 steps to the painting's spot, the short way round for angles. The flight
+	// marks the robot as no longer talking (0x4aba48, musee.md).
+	var(0x4aba48) = 1;
 	_prevScene = kSceneMusee;
 	_scene = target;
 	const StartPos &t = kMuseumSpot[target];
@@ -594,6 +600,8 @@ void World::afterZone(int code) {
 		break;
 	case 11:
 		var(0x4abd4c) = 1;
+		if (!var(0x4abd5c))
+			localVar(0x4e30f4) = 1;
 		break;
 	case 21:
 		var(kAfterEnd) = 1;
