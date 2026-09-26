@@ -19,6 +19,7 @@ MODULE_OBJS = \
 	talk.o \
 	x3d.o \
 	monet/gallery3d.o \
+	monet/menus.o \
 	monet/u00.o \
 	monet/u01.o \
 	monet/u02.o \
