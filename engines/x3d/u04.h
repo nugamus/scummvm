@@ -46,6 +46,7 @@ public:
 private:
 	void run(uint32 id);
 	void say(const char *line); // Monet
+	void hide(const char *object);
 	void voiceAt(const char *name, const Math::Vector3d &position);
 	void effect(const char *name, const Math::Vector3d &position);
 	Math::Vector3d at(const char *object) const;
@@ -82,7 +83,6 @@ private:
 	Common::RandomSource _random;
 	bool _onBoat = false, _faceSwapped = false, _painted = false;
 	X3DEngine::Gauge _savedGauge;
-	Common::String _boatClip; // the boat's slot-1 clip: Traj or Rond
 };
 
 } // End of namespace X3D

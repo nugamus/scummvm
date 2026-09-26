@@ -499,7 +499,7 @@ void X3DEngine::frame(bool input) {
 		case Common::KEYCODE_RSHIFT: _keys.shift = down; break;
 		case Common::KEYCODE_ESCAPE:
 		case Common::KEYCODE_F5: // the same in play (ui.md, Escape)
-			if (down && input && !_suspended)
+			if (down && input && !_suspended && !_escapeBlocked)
 				_escapeNow = true;
 			break;
 		default: break;

@@ -93,7 +93,8 @@ public:
 	// "RunFor + generic input" waits), clicks and Escape do not.
 	void runFor(uint32 ms, bool walk = false);
 	// One frame with full input, clicks included (U04 waits for the glove to be taken)
-	void frameWithInput() { frame(true); }
+	// Escape and F5 are ignored in it
+	void frameWithInput() { _escapeBlocked = true; frame(true); _escapeBlocked = false; }
 	// Moves the camera over ms; nullptr keeps the position, kKeep keeps an angle / the FOV
 	void moveTo(uint32 ms, const float *position, float yaw, float pitch, float fov = kKeep);
 	void lookAt(uint32 ms, const Math::Vector3d &target);
@@ -102,7 +103,9 @@ public:
 	uint32 logicMs() const { return _logicMs; } // logic time in the scene (ms)
 	// Suspend: no cursor, camera keys or clicks (u01.md)
 	void suspend(bool suspended);
+	bool suspended() const { return _suspended; }
 	void gotoScene(const Common::String &name) { _nextScene = name; }
+	bool sceneChanging() const { return !_nextScene.empty(); }
 	void addUnitAction(const Common::String &name) { _unitActions.push_back(name); }
 	// Video/<name>.avi with its soundtrack Video/<wav>.wav (the video's name when empty).
 	// action: an INFOACT action run once the video starts (U33's film and its speech);
@@ -206,7 +209,7 @@ private:
 	Common::String _clickedHotspot; // the hotspot of this frame's click, for Unit::afterClick
 	Camera _camera; // the last one drawn, for frames over a frozen scene
 	Common::String _menuText; // the text edit of the last menu
-	bool _escapeNow = false;
+	bool _escapeNow = false, _escapeBlocked = false;
 	bool _walk = false; // runFor with walking input
 	Gauge _gauge;
 	int _menuView = -1;  // the view index of the last frame click
