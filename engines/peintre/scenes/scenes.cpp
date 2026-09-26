@@ -37,7 +37,8 @@ namespace {
 /**
  * Dev harness around the first scene loaded (game domain of the dev ini):
  * dev_vars=addr=value,... sets 3D block words before its init, dev_camera=x,y,z,pitch,yaw
- * places the viewer after it; with debug level 3 the camera is logged every 15 ticks.
+ * places the viewer after it. Debug level 2 lists where the table objects show every 150
+ * ticks, level 3 logs the camera every 15 ticks.
  */
 class DevScript : public SceneScript {
 public:
@@ -72,13 +73,44 @@ public:
 
 	void frame(World &w) override {
 		_s->frame(w);
-		if (gDebugLevel >= 3 && ++_ticks % 15 == 0) {
+		if (gDebugLevel >= 2 && ++_ticks % 150 == 20)
+			listObjects(w);
+		if (gDebugLevel >= 3 && _ticks % 15 == 0) {
 			const Camera &c = w.camera();
 			debugC(3, kDebugScript, "Camera %d,%d,%d,%d,%d", c.x, c.y, c.z, c.pitch, c.yaw);
 		}
 	}
 
 private:
+	/** Logs where each table object shows on screen: the hit pixel nearest its centre. */
+	void listObjects(World &w) {
+		for (const SceneObject &o : w.objects) {
+			if (o.node < 0)
+				continue;
+			int n = 0;
+			int32 sx = 0, sy = 0;
+			for (int y = 2; y < 480; y += 4)
+				for (int x = 2; x < 640; x += 4)
+					if (w.pickAt(x, y) == o.node) {
+						n++;
+						sx += x;
+						sy += y;
+					}
+			if (!n)
+				continue;
+			const int cx = sx / n, cy = sy / n;
+			int bx = cx, by = cy, best = INT32_MAX;
+			for (int y = 2; y < 480; y += 4)
+				for (int x = 2; x < 640; x += 4)
+					if (w.pickAt(x, y) == o.node && (x - cx) * (x - cx) + (y - cy) * (y - cy) < best) {
+						best = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+						bx = x;
+						by = y;
+					}
+			debugC(2, kDebugScript, "Object %s at %d, %d (%d samples)", o.name.c_str(), bx, by, n);
+		}
+	}
+
 	Common::ScopedPtr<SceneScript> _s;
 	uint _ticks = 0;
 };
@@ -107,7 +139,7 @@ SceneScript *createScript(int scene, const Common::String &bundle) {
 
 SceneScript *createSceneScript(int scene, const Common::String &bundle) {
 	SceneScript *s = createScript(scene, bundle);
-	return s && (ConfMan.hasKey("dev_vars") || ConfMan.hasKey("dev_camera") || gDebugLevel >= 3) ? new DevScript(s) : s;
+	return s && (ConfMan.hasKey("dev_vars") || ConfMan.hasKey("dev_camera") || gDebugLevel >= 2) ? new DevScript(s) : s;
 }
 
 void setObjects(World &w, const ObjectDef *defs, uint count) {
@@ -163,11 +195,15 @@ bool stepAnim(World &w, uint rec, int32 step, int32 end) {
 	AnimRecord &a = w.anims[rec];
 	if (!a.playing)
 		return false;
+	if (a.frame <= 1)
+		debugC(1, kDebugScript, "Track %s runs", a.anim.c_str());
 	a.frame += step;
 	// Q-0400: whether a track ends on reaching its length or on passing it.
 	const bool ended = a.frame >= end;
-	if (ended)
+	if (ended) {
 		a.frame = end;
+		debugC(2, kDebugScript, "Track %s at its end (%d)", a.anim.c_str(), end);
+	}
 	w.pose(rec, a.frame);
 	return ended;
 }
