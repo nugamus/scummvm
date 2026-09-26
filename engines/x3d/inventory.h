@@ -55,6 +55,7 @@ public:
 	void toggle();              // Space
 	void show() { slide(true); }
 	void hide() { slide(false); }
+	bool shown() const { return _step < 0; } // up or on its way up
 	void tick(uint32 ms);       // logic time; the slide steps every 50 ms
 	void add(const Common::String &item); // "U02_01P"
 	bool has(const Common::String &item) const;

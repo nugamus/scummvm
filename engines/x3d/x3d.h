@@ -53,11 +53,13 @@ class Sound;
 class Talk;
 class Unit;
 
-// Keymapper actions (metaengine.cpp); each stands for the original's key
+// Keymapper actions (metaengine.cpp); each up to Crouch stands for the original's key,
+// the strafes (modern controls only) for none
 enum Action {
 	kActionNone,
 	kActionForward, kActionBackward, kActionTurnLeft, kActionTurnRight, kActionLookUp,
-	kActionLookDown, kActionRun, kActionJump, kActionInventory, kActionMenu, kActionSkip, kActionCrouch
+	kActionLookDown, kActionRun, kActionJump, kActionInventory, kActionMenu, kActionSkip, kActionCrouch,
+	kActionStrafeLeft, kActionStrafeRight
 };
 
 class X3DEngine : public Engine {
@@ -250,6 +252,13 @@ private:
 	int _menuView = -1;  // the view index of the last frame click
 	Common::String _playerName;
 	Common::String _gallery3D; // the painting whose 3D scene the next scene is
+
+	// Modern controls (an option, not in the original): in free play the mouse is captured,
+	// turns the view, and clicks and hovers act at the centre of the screen
+	bool _modern = false, _invertY = false, _mouseCaptured = false;
+	float _lookScale = 0.0025f; // radians per mouse count, times mouse_sensitivity / 100
+	const char *keymapName() const { return _modern ? "x3d-modern" : "x3d-default"; }
+	void captureMouse(bool capture);
 };
 
 } // End of namespace X3D

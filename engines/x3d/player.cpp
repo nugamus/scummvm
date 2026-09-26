@@ -165,7 +165,9 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 				_speed = 1;
 			direction = -1;
 		}
-		if (direction) {
+		// Modern controls: sideways at the walking speed, through the same slide
+		const int strafe = (keys.strafeRight ? 1 : 0) - (keys.strafeLeft ? 1 : 0);
+		if (direction || strafe) {
 			// Head bob: roll 1 degree per second, turning back at +-0.4
 			roll += _bob * dt;
 			if (fabs(roll) >= 0.4f)
@@ -177,7 +179,7 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 			float t;
 			if (collision.cast(centre, centre + ahead, t) && t * ahead.getMagnitude() < 2 * _radius)
 				step /= 2;
-			velocity.set(direction * d.x() * step, direction * d.y() * step, 0);
+			velocity.set(direction * d.x() * step - strafe * sinf(yaw) * step, direction * d.y() * step - strafe * cosf(yaw) * step, 0);
 		}
 		// Shift (press) jumps: the walk at x0.5 when running, x0.25 otherwise
 		if (jumpAllowed && !crouched && keys.shift && !_shiftWas) {

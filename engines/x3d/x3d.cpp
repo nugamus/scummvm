@@ -83,6 +83,16 @@ Common::Error X3DEngine::run() {
 	ConfMan.registerDefault("max_detail", false);
 	ConfMan.registerDefault("filter_textures", false);
 	ConfMan.registerDefault("run_toggle", false);
+	// Modern controls: mouse_sensitivity (percent) has no GUI; set it in the game's config
+	ConfMan.registerDefault("modern_controls", false);
+	ConfMan.registerDefault("invert_y", false);
+	ConfMan.registerDefault("mouse_sensitivity", 100);
+	_modern = ConfMan.getBool("modern_controls");
+	_invertY = ConfMan.getBool("invert_y");
+	_lookScale *= ConfMan.getInt("mouse_sensitivity") / 100.0f;
+	Common::Keymapper *keymapper = _system->getEventManager()->getKeymapper();
+	keymapper->getKeymap("x3d-default")->setEnabled(!_modern);
+	keymapper->getKeymap("x3d-modern")->setEnabled(_modern);
 	_renderer = Renderer::create(ConfMan.getBool("widescreen") ? 854 : 640, 480, _nativeResolution);
 	_renderer->updateSize(ConfMan.getBool("widescreen"));
 	_renderer->filterTextures = ConfMan.getBool("filter_textures");
@@ -214,6 +224,8 @@ void X3DEngine::storeHeldItem() {
 
 void X3DEngine::pauseEngineIntern(bool pause) {
 	Engine::pauseEngineIntern(pause);
+	if (pause)
+		captureMouse(false); // the next frame in free play captures it again
 	if (_video)
 		_video->pauseVideo(pause);
 	if (!pause)
@@ -393,9 +405,31 @@ void X3DEngine::frame(bool input) {
 		debugC(1, kDebugScript, "dev command %s: %s", c.c_str(), command(c.substr(c.findFirstOf(':') + 1)).c_str());
 	}
 
+	// Modern controls: the mouse is captured in free play, the bar closed. A click at a
+	// given point (dev_click, dev_commands) keeps its point.
+	captureMouse(_modern && (input || _walk) && !_suspended && !_inventory->shown());
+	const bool pointClick = _clickNow;
+	const Common::Point centre(_renderer->width() / 2, _renderer->height() / 2);
+	bool looked = false;
+
 	Common::Event e;
 	while (_system->getEventManager()->pollEvent(e)) {
 		actionToKey(e);
+		if (e.type == Common::EVENT_MOUSEMOVE && _mouseCaptured) {
+			// Mouse look, within the original's pitch limits (movement.md, Keys); the
+			// last step turns too, so the drawn view follows at once
+			if (_player.canTurn && (e.relMouse.x || e.relMouse.y)) {
+				const float dYaw = e.relMouse.x * _lookScale;
+				const float pitch = _player.pitch - (_invertY ? -1 : 1) * e.relMouse.y * _lookScale;
+				const float dPitch = CLIP(pitch, MIN(_player.pitch, 0.6f), MAX(_player.pitch, 2.7f)) - _player.pitch;
+				_player.yaw += dYaw;
+				_previous.yaw += dYaw;
+				_player.pitch += dPitch;
+				_previous.pitch += dPitch;
+			}
+			looked |= e.relMouse.x || e.relMouse.y;
+			continue;
+		}
 		if (e.type == Common::EVENT_MOUSEMOVE) {
 			_mouse = e.mouse;
 			_hoverNow = true;
@@ -403,8 +437,16 @@ void X3DEngine::frame(bool input) {
 		}
 		if (e.type == Common::EVENT_LBUTTONDOWN) {
 			debugC(1, kDebugInput, "click %d,%d", e.mouse.x, e.mouse.y);
-			_mouse = e.mouse;
+			_mouse = _mouseCaptured ? centre : e.mouse;
 			_clickNow = true;
+			continue;
+		}
+		if (e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START || e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_END) {
+			const bool down = e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START;
+			if (e.customType == kActionStrafeLeft)
+				_keys.strafeLeft = down;
+			else if (e.customType == kActionStrafeRight)
+				_keys.strafeRight = down;
 			continue;
 		}
 		if (e.type != Common::EVENT_KEYDOWN && e.type != Common::EVENT_KEYUP)
@@ -483,6 +525,14 @@ void X3DEngine::frame(bool input) {
 	camera.pitch = _previous.pitch + (_player.pitch - _previous.pitch) * alpha;
 	camera.fov = _player.fov;
 	camera.roll = _player.roll;
+	if (_mouseCaptured && looked) // the cursor stays at the centre, as the crosshair
+		_system->warpMouse(_system->getWidth() / 2, _system->getHeight() / 2);
+	if (_mouseCaptured && !pointClick) {
+		// Hover again whenever the view moved
+		_hoverNow |= _mouse != centre || camera.yaw != _camera.yaw || camera.pitch != _camera.pitch ||
+		             memcmp(camera.position, _camera.position, sizeof(camera.position));
+		_mouse = centre;
+	}
 
 	// Hover and click (interaction.md): clicks closer together than one frame + 10 ms are
 	// ignored; nothing counts beyond 4 scene units of depth
@@ -699,7 +749,8 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 	uint32 lastPress = 0; // a second press on a players row within 500 ms and 4 px selects
 	Common::Point lastPoint;
 	// A text edit takes every key as typed (Space is the inventory action otherwise)
-	Common::Keymap *keymap = _system->getEventManager()->getKeymapper()->getKeymap("x3d-default");
+	captureMouse(false);
+	Common::Keymap *keymap = _system->getEventManager()->getKeymapper()->getKeymap(keymapName());
 	const bool keymapOff = keymap && keymap->isEnabled() && frame.hasEdit();
 	if (keymapOff)
 		keymap->setEnabled(false);
@@ -987,6 +1038,18 @@ Common::String X3DEngine::command(const Common::String &line) {
 	return "unknown command " + c;
 }
 
+void X3DEngine::captureMouse(bool capture) {
+	if (capture == _mouseCaptured)
+		return;
+	_mouseCaptured = capture;
+	_system->lockMouse(capture);
+	if (capture) {
+		_system->warpMouse(_system->getWidth() / 2, _system->getHeight() / 2);
+		_mouse = Common::Point(_renderer->width() / 2, _renderer->height() / 2);
+		_hoverNow = true;
+	}
+}
+
 void X3DEngine::suspend(bool suspended) {
 	_suspended = suspended;
 	CursorMan.showMouse(!suspended);
@@ -1076,6 +1139,7 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 	}
 
 	_video = &video; // paused with the engine
+	captureMouse(false);
 	bool skip = false;
 	while (!shouldQuit() && !skip && !video.endOfVideo()) {
 		Common::Event e;

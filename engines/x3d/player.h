@@ -40,6 +40,7 @@ class Collision;
 struct Keys {
 	bool up = false, down = false, left = false, right = false;
 	bool pageUp = false, pageDown = false, ctrl = false, shift = false, space = false, crouch = false;
+	bool strafeLeft = false, strafeRight = false; // modern controls only
 };
 
 // The first-person camera: movement, turning, collision and falls
