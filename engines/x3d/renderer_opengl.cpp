@@ -84,6 +84,7 @@ public:
 		glEnable(GL_ALPHA_TEST);
 		glAlphaFunc(GL_GREATER, 0.5f);
 		_texture = ~0u;
+		_blend = -1;
 	}
 
 	void setTexture(uint32 texture) override {
@@ -92,6 +93,7 @@ public:
 		if (texture) {
 			glEnable(GL_TEXTURE_2D);
 			glBindTexture(GL_TEXTURE_2D, texture);
+			_clamp = -1; // wrapping is per texture
 		} else {
 			glDisable(GL_TEXTURE_2D);
 		}
@@ -99,12 +101,19 @@ public:
 	}
 
 	void setClamp(bool clamp) override {
+		if (clamp == _clamp)
+			return;
+		_clamp = clamp;
 		const int mode = clamp ? GL_CLAMP_TO_EDGE : GL_REPEAT;
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, mode);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, mode);
 	}
 
 	void setBlend(Blend blend, bool keyed) override {
+		const int state = blend * 2 + keyed;
+		if (state == _blend)
+			return;
+		_blend = state;
 		if (blend == kOpaque) {
 			glDisable(GL_BLEND);
 			glDepthMask(GL_TRUE);
@@ -197,6 +206,7 @@ public:
 		glEnd();
 		deleteTexture(texture);
 		_texture = ~0u;
+		_blend = -1;
 	}
 
 	void clear() override {
@@ -219,6 +229,7 @@ public:
 
 private:
 	uint32 _texture = ~0u;
+	int _blend = -1, _clamp = -1; // the last setBlend (blend * 2 + keyed) and setClamp; -1: unknown
 };
 
 Renderer *createOpenGLRenderer(int width, int height) {
