@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef X3D_U00_H
-#define X3D_U00_H
+#ifndef X3D_MONET_U00_H
+#define X3D_MONET_U00_H
 
 #include "math/vector3d.h"
 
@@ -36,7 +36,7 @@ class X3DEngine;
 void fixU04Names(Scene *scene);
 void disableU04Boxes(Collision *collision);
 
-// U00, the garden with Monet: players screen and tutorial (docs/engine-spec/u00.md)
+// U00, the garden with Monet: players screen and tutorial (docs/games/monet/u00.md)
 class U00 : public Unit {
 public:
 	U00(X3DEngine *vm, bool practice) : _vm(vm), _practice(practice) {}
@@ -68,4 +68,4 @@ private:
 
 } // End of namespace X3D
 
-#endif // X3D_U00_H
+#endif // X3D_MONET_U00_H

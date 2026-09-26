@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef X3D_U07_H
-#define X3D_U07_H
+#ifndef X3D_MONET_U02_H
+#define X3D_MONET_U02_H
 
 #include "common/random.h"
 
@@ -32,33 +32,52 @@ namespace X3D {
 
 class X3DEngine;
 
-// U07, the cellars under the orangery and the end of the game (docs/engine-spec/u07.md)
-class U07 : public Unit {
+// U02, the level crossing and the ticket office (docs/games/monet/u02.md)
+class U02 : public Unit {
 public:
-	explicit U07(X3DEngine *vm) : _vm(vm), _random("x3d_u07") {}
+	explicit U02(X3DEngine *vm) : _vm(vm), _random("x3d_u02") {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
-	bool input(float dt) override;
 	bool handle(const Common::String &action) override;
 	void afterFrame() override;
-	void syncState(Common::Serializer &s) override; // PLANCHE
+	void draw() override; // the train gauge
+	void syncState(Common::Serializer &s) override; // TIMEVENDEUSE and the gauge
 
 private:
+	void say(const char *character, const char *line);
+	void show(const char *object);
 	void effect(const char *name, const Math::Vector3d &position);
-	float heightAboveGround(const Math::Vector3d &p);
-	void switchAndDescent();
-	void tipPlank();
-	void fallInWater();
-	void explosion();
-	void end();
+	Math::Vector3d hotspotPosition(const char *hotspot);
+	void resetCalls();
+	void waitClip(const char *node);
+	void waitGroup(int group, bool walk = false);
+	void startSnore();
+	void walkPath(uint32 ms, const Math::Vector3d &target);
+	void follow(const char *object, float untilFrame);
+
+	void refuseCoin();
+	void retakeCoin();
+	void buyChestnuts();
+	void magpieSteals();
+	void magpieFlies();
+	void feedMagpie();
+	void ringBell();
+	void buyTicket();
+	void takeTicket();
+	void board();
+	void fall();
+	void gameOver();
 
 	X3DEngine *_vm;
 	Common::RandomSource _random;
-	bool _plankTipped = false;
-	bool _upWas = false, _downWas = false; // one rung per key press
+	uint32 _callStart = 0, _callPeriod = 10000; // the seller's calls, in logic ms
+	bool _callOff = false;
+	int _magpie = 0; // 0 idle, 1 perched and waiting, 2 flown
+	bool _gauge = false;
+	uint32 _gaugeStart = 0;
 };
 
 } // End of namespace X3D
 
-#endif // X3D_U07_H
+#endif // X3D_MONET_U02_H

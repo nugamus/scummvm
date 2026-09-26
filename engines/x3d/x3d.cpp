@@ -49,7 +49,7 @@
 #include "x3d/collision.h"
 #include "x3d/console.h"
 #include "x3d/frame.h"
-#include "x3d/gallery3d.h"
+#include "x3d/monet/gallery3d.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
 #include "x3d/player.h"
@@ -57,15 +57,15 @@
 #include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
-#include "x3d/u00.h"
-#include "x3d/u01.h"
-#include "x3d/u02.h"
-#include "x3d/u03.h"
-#include "x3d/u04.h"
-#include "x3d/u05.h"
-#include "x3d/u06.h"
-#include "x3d/u07.h"
-#include "x3d/u33.h"
+#include "x3d/monet/u00.h"
+#include "x3d/monet/u01.h"
+#include "x3d/monet/u02.h"
+#include "x3d/monet/u03.h"
+#include "x3d/monet/u04.h"
+#include "x3d/monet/u05.h"
+#include "x3d/monet/u06.h"
+#include "x3d/monet/u07.h"
+#include "x3d/monet/u33.h"
 #include "x3d/x3d.h"
 
 namespace X3D {
@@ -88,6 +88,7 @@ Common::Error X3DEngine::run() {
 	ConfMan.registerDefault("widescreen", false);
 	ConfMan.registerDefault("max_detail", false);
 	ConfMan.registerDefault("filter_textures", false);
+	ConfMan.registerDefault("run_toggle", false);
 	_renderer = Renderer::create(ConfMan.getBool("widescreen") ? 854 : 640, 480, _nativeResolution);
 	_renderer->updateSize(ConfMan.getBool("widescreen"));
 	_renderer->filterTextures = ConfMan.getBool("filter_textures");

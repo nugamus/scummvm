@@ -19,47 +19,56 @@
  *
  */
 
-#ifndef X3D_U03_H
-#define X3D_U03_H
+#ifndef X3D_MONET_U05_H
+#define X3D_MONET_U05_H
+
+#include "common/random.h"
 
 #include "math/vector3d.h"
 
-#include "x3d/scene.h"
 #include "x3d/unit.h"
 
 namespace X3D {
 
 class X3DEngine;
 
-// U03, the street, the clown and the policeman (docs/engine-spec/u03.md)
-class U03 : public Unit {
+// U05, the Saint-Lazare waiting room, the dog and Mazout (docs/games/monet/u05.md)
+class U05 : public Unit {
 public:
-	explicit U03(X3DEngine *vm) : _vm(vm) {}
+	explicit U05(X3DEngine *vm) : _vm(vm), _random("x3d_u05") {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
 	bool handle(const Common::String &action) override;
-	void afterAnimate() override; // the policeman's round
+	void afterFrame() override;
 
 private:
 	void run(uint32 id);
-	Math::Vector3d ground(float x, float y, float z); // G(x, y, z)
+	void effect(const char *name, const Math::Vector3d &position);
+	void voice(const char *name);
+	void noCollisionFamily(const Common::String &object);
 	float facing(const Math::Vector3d &target, const Math::Vector3d &from) const;
 	Math::Vector3d at(const char *object) const;
-	void waitVoice(bool enterSkips = true);
-	void transition(int n);
+	bool near(const char *object, float distance) const;
 
-	void clownTrick();
-	void salute();
-	void cutscene();
-	void aimAtTarget();
-	void cut();
+	bool barkAndSit();
+	bool waitLoop();
+	bool chefNotices();
+	bool mazoutConfronts();
+	void gaugeExpired();
+	void leave();
+
+	void testSpeakChef();
+	void dogToDoor();
+	void maskGrille();
+	void lampFalls();
 
 	X3DEngine *_vm;
-	bool _follow = true;
-	Scene::Model *_camera = nullptr, *_cine = nullptr; // the cutscene's models
+	Common::RandomSource _random;
+	uint32 _timer = 0;   // the dog's wait, then the station master's chatter (logic ms)
+	bool _leaving = false;
 };
 
 } // End of namespace X3D
 
-#endif // X3D_U03_H
+#endif // X3D_MONET_U05_H

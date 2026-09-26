@@ -6,7 +6,6 @@ MODULE_OBJS = \
 	console.o \
 	dmf.o \
 	frame.o \
-	gallery3d.o \
 	interaction.o \
 	inventory.o \
 	metaengine.o \
@@ -18,16 +17,17 @@ MODULE_OBJS = \
 	scene.o \
 	sound.o \
 	talk.o \
-	u00.o \
-	u01.o \
-	u02.o \
-	u03.o \
-	u04.o \
-	u05.o \
-	u06.o \
-	u07.o \
-	u33.o \
-	x3d.o
+	x3d.o \
+	monet/gallery3d.o \
+	monet/u00.o \
+	monet/u01.o \
+	monet/u02.o \
+	monet/u03.o \
+	monet/u04.o \
+	monet/u05.o \
+	monet/u06.o \
+	monet/u07.o \
+	monet/u33.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_X3D), DYNAMIC_PLUGIN)

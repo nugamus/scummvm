@@ -19,8 +19,10 @@
  *
  */
 
-#ifndef X3D_GALLERY3D_H
-#define X3D_GALLERY3D_H
+#ifndef X3D_MONET_U06_H
+#define X3D_MONET_U06_H
+
+#include "math/vector3d.h"
 
 #include "x3d/unit.h"
 
@@ -28,27 +30,32 @@ namespace X3D {
 
 class X3DEngine;
 
-// The painting's 3D scene from the gallery: unit class 50 (ui.md Gallery, 3D view)
-class Gallery3D : public Unit {
+// U06, the orangery garden and the clown with the rifle (docs/games/monet/u06.md)
+class U06 : public Unit {
 public:
-	Gallery3D(X3DEngine *vm, const Common::String &painting) : _vm(vm), _painting(painting) {}
+	explicit U06(X3DEngine *vm) : _vm(vm) {}
 
-	// The U0nD.X3D scene of a painting, or "" when it has none
-	static Common::String sceneFor(const Common::String &painting);
-
-	void afterLoad() override;
 	void start(bool newGame, bool video) override;
-	bool beforeClick() override { return true; } // the mouse does nothing
-	bool gameStarted() const override { return false; }
-	bool escape() override;
+	bool input(float dt) override;
+	bool handle(const Common::String &action) override;
+	void afterFrame() override;
+	void afterAnimate() override; // the clown turns
 
 private:
-	int unit() const; // 1..6, 33
+	void effect(const char *name, const Math::Vector3d &position);
+	void startShooting();
+	void stopShooting();
+	void shotDown();
+	void wakeMan();
+	void drain();
 
 	X3DEngine *_vm;
-	Common::String _painting;
+	bool _shooting = true; // never written by the original: debug-heap fill, so true (E-0534)
+	int _shots = 0;
+	float _clownYaw = 3 * (float)M_PI / 2;
+	bool _turned = false;
 };
 
 } // End of namespace X3D
 
-#endif // X3D_GALLERY3D_H
+#endif // X3D_MONET_U06_H

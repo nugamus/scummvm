@@ -20,11 +20,11 @@
  */
 
 #include "x3d/collision.h"
-#include "x3d/gallery3d.h"
+#include "x3d/monet/gallery3d.h"
 #include "x3d/interaction.h"
 #include "x3d/scene.h"
 #include "x3d/sound.h"
-#include "x3d/u00.h"
+#include "x3d/monet/u00.h"
 #include "x3d/x3d.h"
 
 namespace X3D {

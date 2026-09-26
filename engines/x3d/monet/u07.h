@@ -19,72 +19,46 @@
  *
  */
 
-#ifndef X3D_U04_H
-#define X3D_U04_H
+#ifndef X3D_MONET_U07_H
+#define X3D_MONET_U07_H
 
 #include "common/random.h"
 
 #include "math/vector3d.h"
 
 #include "x3d/unit.h"
-#include "x3d/x3d.h"
 
 namespace X3D {
 
-// U04, Monet's garden at Giverny (docs/engine-spec/u04.md)
-class U04 : public Unit {
+class X3DEngine;
+
+// U07, the cellars under the orangery and the end of the game (docs/games/monet/u07.md)
+class U07 : public Unit {
 public:
-	explicit U04(X3DEngine *vm) : _vm(vm), _random("x3d_u04") {}
+	explicit U07(X3DEngine *vm) : _vm(vm), _random("x3d_u07") {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
 	bool input(float dt) override;
 	bool handle(const Common::String &action) override;
 	void afterFrame() override;
-	void syncState(Common::Serializer &s) override; // PARAMS
+	void syncState(Common::Serializer &s) override; // PLANCHE
 
 private:
-	void run(uint32 id);
-	void say(const char *line); // Monet
-	void hide(const char *object);
-	void voiceAt(const char *name, const Math::Vector3d &position);
 	void effect(const char *name, const Math::Vector3d &position);
-	Math::Vector3d at(const char *object) const;
-	Math::Vector3d head() const; // Monet's TETE
-	void monetClip(const char *file, bool loop, int slot = 1);
-	void waitVoice(bool enterStops = false);
-	void waitMonet(bool walk = false);
-	void paintingActions(bool on);
-	void studioEmitter();
-	void beeEmitter();
-	void faceMap(bool gagged);
-
-	void openDoor();
-	void enterStudio();
-	void useTube();
-	void finishPainting();
-	void painting();
-	void mazout();
-	void kidnapping();
-	void ernest();
-	void ungag();
-	void climbOut();
-	void climbIn();
-	void stepOntoBoat();
-	void jumpOffBoat();
-	void row(bool forward);
-	void boatSinks();
-	void useKey();
-	void leave();
-	void hintsAfterGag();
-	void hintsAfterHammer();
+	float heightAboveGround(const Math::Vector3d &p);
+	void switchAndDescent();
+	void tipPlank();
+	void fallInWater();
+	void explosion();
+	void end();
 
 	X3DEngine *_vm;
 	Common::RandomSource _random;
-	bool _onBoat = false, _faceSwapped = false, _painted = false;
-	X3DEngine::Gauge _savedGauge;
+	bool _plankTipped = false;
+	bool _upWas = false, _downWas = false; // one rung per key press
 };
 
 } // End of namespace X3D
 
-#endif // X3D_U04_H
+#endif // X3D_MONET_U07_H

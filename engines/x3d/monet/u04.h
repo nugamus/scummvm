@@ -19,65 +19,72 @@
  *
  */
 
-#ifndef X3D_U02_H
-#define X3D_U02_H
+#ifndef X3D_MONET_U04_H
+#define X3D_MONET_U04_H
 
 #include "common/random.h"
 
 #include "math/vector3d.h"
 
 #include "x3d/unit.h"
+#include "x3d/x3d.h"
 
 namespace X3D {
 
-class X3DEngine;
-
-// U02, the level crossing and the ticket office (docs/engine-spec/u02.md)
-class U02 : public Unit {
+// U04, Monet's garden at Giverny (docs/games/monet/u04.md)
+class U04 : public Unit {
 public:
-	explicit U02(X3DEngine *vm) : _vm(vm), _random("x3d_u02") {}
+	explicit U04(X3DEngine *vm) : _vm(vm), _random("x3d_u04") {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
+	bool input(float dt) override;
 	bool handle(const Common::String &action) override;
 	void afterFrame() override;
-	void draw() override; // the train gauge
-	void syncState(Common::Serializer &s) override; // TIMEVENDEUSE and the gauge
+	void syncState(Common::Serializer &s) override; // PARAMS
 
 private:
-	void say(const char *character, const char *line);
-	void show(const char *object);
+	void run(uint32 id);
+	void say(const char *line); // Monet
+	void hide(const char *object);
+	void voiceAt(const char *name, const Math::Vector3d &position);
 	void effect(const char *name, const Math::Vector3d &position);
-	Math::Vector3d hotspotPosition(const char *hotspot);
-	void resetCalls();
-	void waitClip(const char *node);
-	void waitGroup(int group, bool walk = false);
-	void startSnore();
-	void walkPath(uint32 ms, const Math::Vector3d &target);
-	void follow(const char *object, float untilFrame);
+	Math::Vector3d at(const char *object) const;
+	Math::Vector3d head() const; // Monet's TETE
+	void monetClip(const char *file, bool loop, int slot = 1);
+	void waitVoice(bool enterStops = false);
+	void waitMonet(bool walk = false);
+	void paintingActions(bool on);
+	void studioEmitter();
+	void beeEmitter();
+	void faceMap(bool gagged);
 
-	void refuseCoin();
-	void retakeCoin();
-	void buyChestnuts();
-	void magpieSteals();
-	void magpieFlies();
-	void feedMagpie();
-	void ringBell();
-	void buyTicket();
-	void takeTicket();
-	void board();
-	void fall();
-	void gameOver();
+	void openDoor();
+	void enterStudio();
+	void useTube();
+	void finishPainting();
+	void painting();
+	void mazout();
+	void kidnapping();
+	void ernest();
+	void ungag();
+	void climbOut();
+	void climbIn();
+	void stepOntoBoat();
+	void jumpOffBoat();
+	void row(bool forward);
+	void boatSinks();
+	void useKey();
+	void leave();
+	void hintsAfterGag();
+	void hintsAfterHammer();
 
 	X3DEngine *_vm;
 	Common::RandomSource _random;
-	uint32 _callStart = 0, _callPeriod = 10000; // the seller's calls, in logic ms
-	bool _callOff = false;
-	int _magpie = 0; // 0 idle, 1 perched and waiting, 2 flown
-	bool _gauge = false;
-	uint32 _gaugeStart = 0;
+	bool _onBoat = false, _faceSwapped = false, _painted = false;
+	X3DEngine::Gauge _savedGauge;
 };
 
 } // End of namespace X3D
 
-#endif // X3D_U02_H
+#endif // X3D_MONET_U04_H

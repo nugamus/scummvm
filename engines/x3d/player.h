@@ -74,6 +74,7 @@ private:
 	// A jump in progress (movement.md, Jump): z = z0 + s t - s t^2 / 2, the walk sampled
 	// once at the start
 	bool _jumping = false, _shiftWas = false;
+	bool _runToggle = false, _runOn = false, _ctrlWas = false; // the run_toggle option
 	float _jumpTime = 0, _jumpZ = 0;
 	Math::Vector3d _jumpVelocity;
 

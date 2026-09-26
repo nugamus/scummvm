@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/serializer.h"
 
 #include "x3d/collision.h"
@@ -49,6 +50,7 @@ void Player::init(float scale) {
 	_eyeHeight = 1.5f * scale;
 	_radius = 0.5f * scale;
 	sphereOffset = _eyeHeight - 2 * _radius;
+	_runToggle = ConfMan.getBool("run_toggle");
 }
 
 Vector3d Player::slide(const Vector3d &from, const Vector3d &velocity, const Collision &collision) const {
@@ -74,6 +76,11 @@ bool Player::ground(const Collision &collision) {
 }
 
 bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
+	// The run_toggle option (not in the original): each Ctrl press flips running
+	if (_runToggle && keys.ctrl && !_ctrlWas)
+		_runOn = !_runOn;
+	_ctrlWas = keys.ctrl;
+
 	// A fall blocks input until it lands
 	if (_falling) {
 		_fallTime += dt;
@@ -106,7 +113,7 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 
 	// Walk along the view direction's x and y, not renormalised
 	const Vector3d d(cosf(yaw) * sinf(pitch), -sinf(yaw) * sinf(pitch), -cosf(pitch));
-	const bool running = runAllowed && keys.ctrl;
+	const bool running = runAllowed && (_runToggle ? _runOn : keys.ctrl);
 	Vector3d velocity;
 	if (canMove) {
 		int direction = 0;
