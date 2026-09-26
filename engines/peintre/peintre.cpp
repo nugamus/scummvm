@@ -277,7 +277,11 @@ Common::Error PeintreEngine::run() {
 				if (id == "all" || (uint)atoi(id.c_str()) == o)
 					_state.setHeld(o, 1);
 		}
-		debug("dev_zone: left with %d", enterZone(ConfMan.getInt("dev_zone")));
+		_state.block3D[0x3E] = ConfMan.getInt("dev_zone");
+		int code = enterZone(_state.currentZone());
+		while (code >= 0 && readGame(code / 100, code % 100))
+			code = enterZone(_state.currentZone()); // a loaded game resumes in its zone
+		debug("dev_zone: left with %d", code);
 		return Common::kNoError;
 	}
 	if (!in2d) {
