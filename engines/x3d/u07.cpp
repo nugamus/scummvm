@@ -267,7 +267,7 @@ void U07::end() {
 	// CouperDynamite: the fuse is cut, the epilogue, the Option menu (E-0399)
 	Scene *scene = _vm->scene();
 	_vm->stopGauge();
-	_vm->interaction()->useUp("*U06_26");
+	_vm->interaction()->useUp(""); // only the held item goes (E-0539)
 	scene->hideObject("*U06_26");
 	_vm->collision()->setEnabled("*U06_26", false);
 	_vm->sound()->stopEmitter(Sound::kUnitEmitter1);
@@ -292,7 +292,7 @@ bool U07::handle(const Common::String &action) {
 		effect("s4_21", _vm->player().eye);
 		scene->hideObject("*U06_29");
 		collision->setEnabled("*U06_29", false);
-		_vm->interaction()->useUp("*U06_29"); // Q-0173
+		_vm->interaction()->useUp(""); // only the held item goes, no cursor changes (E-0539)
 		collision->setEnabled("mursecreth", false);
 	} else if (action.equalsIgnoreCase("CouperDynamite")) {
 		end();
