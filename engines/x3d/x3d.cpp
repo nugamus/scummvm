@@ -113,6 +113,22 @@ Common::Error X3DEngine::run() {
 	return Common::kNoError;
 }
 
+// A keymapper action event as the key it stands for, so key handling stays in one place
+static void actionToKey(Common::Event &e) {
+	if (e.type != Common::EVENT_CUSTOM_ENGINE_ACTION_START && e.type != Common::EVENT_CUSTOM_ENGINE_ACTION_END)
+		return;
+	static const Common::KeyCode keys[] = {
+		Common::KEYCODE_INVALID, Common::KEYCODE_UP, Common::KEYCODE_DOWN, Common::KEYCODE_LEFT,
+		Common::KEYCODE_RIGHT, Common::KEYCODE_PAGEUP, Common::KEYCODE_PAGEDOWN, Common::KEYCODE_LCTRL,
+		Common::KEYCODE_LSHIFT, Common::KEYCODE_SPACE, Common::KEYCODE_ESCAPE, Common::KEYCODE_RETURN
+	};
+	if (e.customType <= kActionNone || e.customType > kActionSkip)
+		return;
+	const bool down = e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START;
+	e.kbd = Common::KeyState(keys[e.customType]);
+	e.type = down ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
+}
+
 static const uint32 kSaveVersion = 3; // 2: numbered clip slots; 3: the scene gauge
 
 bool X3DEngine::canSaveGameStateCurrently(Common::U32String *msg) {
@@ -473,6 +489,7 @@ void X3DEngine::frame(bool input) {
 
 	Common::Event e;
 	while (_system->getEventManager()->pollEvent(e)) {
+		actionToKey(e);
 		if (e.type == Common::EVENT_MOUSEMOVE) {
 			_mouse = e.mouse;
 			_hoverNow = true;
@@ -784,6 +801,7 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 	while (result.empty() && !shouldQuit()) {
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
+			actionToKey(e);
 			if (e.type == Common::EVENT_MOUSEMOVE || e.type == Common::EVENT_LBUTTONDOWN) {
 				_mouse = e.mouse;
 				frame.drag(Common::Point(_mouse.x - x2d, _mouse.y));
@@ -1055,6 +1073,7 @@ void X3DEngine::magnifier(const Common::String &painting) {
 	while (!done && !shouldQuit()) {
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
+			actionToKey(e);
 			if (e.type == Common::EVENT_MOUSEMOVE)
 				_mouse = e.mouse;
 			if (e.type == Common::EVENT_LBUTTONDOWN || (e.type == Common::EVENT_KEYDOWN && e.kbd.keycode == Common::KEYCODE_ESCAPE))
@@ -1418,6 +1437,7 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 	while (!shouldQuit() && !skip && !video.endOfVideo()) {
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
+			actionToKey(e);
 			if (e.type == Common::EVENT_KEYDOWN &&
 			    (e.kbd.keycode == Common::KEYCODE_RETURN || (!action && e.kbd.keycode == Common::KEYCODE_ESCAPE))) {
 				skip = true;
