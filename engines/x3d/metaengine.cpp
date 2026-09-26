@@ -54,6 +54,17 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 			0
 		}
 	},
+	{
+		GAMEOPTION_FILTER_TEXTURES,
+		{
+			_s("Improved texture filtering"),
+			_s("Smooth and sharpen distant and slanted textures (mipmaps and anisotropic filtering; OpenGL only)"),
+			"filter_textures",
+			false,
+			0,
+			0
+		}
+	},
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 

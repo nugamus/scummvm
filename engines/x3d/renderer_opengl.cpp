@@ -48,8 +48,17 @@ public:
 		GLuint id;
 		glGenTextures(1, &id);
 		glBindTexture(GL_TEXTURE_2D, id);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterTextures ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		if (filterTextures) {
+			glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
+			const char *extensions = (const char *)glGetString(GL_EXTENSIONS);
+			if (extensions && strstr(extensions, "GL_EXT_texture_filter_anisotropic")) {
+				GLfloat most = 1;
+				glGetFloatv(0x84FF, &most); // GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
+				glTexParameterf(GL_TEXTURE_2D, 0x84FE, MIN<GLfloat>(most, 8)); // GL_TEXTURE_MAX_ANISOTROPY_EXT
+			}
+		}
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rgba.w, rgba.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.getPixels());
 		return id;

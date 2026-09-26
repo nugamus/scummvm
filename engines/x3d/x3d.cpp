@@ -87,7 +87,9 @@ Common::Error X3DEngine::run() {
 	// and shows more to the sides. 2D images stay 640x480, centred.
 	ConfMan.registerDefault("widescreen", false);
 	ConfMan.registerDefault("max_detail", false);
+	ConfMan.registerDefault("filter_textures", false);
 	_renderer = Renderer::create(ConfMan.getBool("widescreen") ? 854 : 640, 480);
+	_renderer->filterTextures = ConfMan.getBool("filter_textures");
 	_sound = new Sound(_mixer);
 	_inventory = new Inventory();
 	setDebugger(new Console(this));

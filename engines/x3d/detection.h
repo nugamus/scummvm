@@ -41,6 +41,7 @@ extern const ADGameDescription gameDescriptions[];
 
 #define GAMEOPTION_WIDESCREEN GUIO_GAMEOPTIONS1
 #define GAMEOPTION_MAX_DETAIL GUIO_GAMEOPTIONS2
+#define GAMEOPTION_FILTER_TEXTURES GUIO_GAMEOPTIONS4
 
 } // End of namespace X3D
 
