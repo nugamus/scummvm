@@ -13,6 +13,7 @@ MODULE_OBJS = \
 	shell.o \
 	sound.o \
 	world.o \
+	scenes/musee.o \
 	scenes/scenes.o
 
 # This module can be built as a plugin
