@@ -85,6 +85,7 @@ Common::Error X3DEngine::run() {
 	ConfMan.registerDefault("filter_textures", false);
 	ConfMan.registerDefault("run_toggle", false);
 	ConfMan.registerDefault("turn_speed", 100);
+	ConfMan.registerDefault("fov", 90);
 	// Modern controls: mouse_sensitivity (percent) has no GUI; set it in the game's config
 	ConfMan.registerDefault("modern_controls", false);
 	ConfMan.registerDefault("invert_y", false);
@@ -98,6 +99,7 @@ Common::Error X3DEngine::run() {
 	_renderer = Renderer::create(ConfMan.getBool("widescreen") ? 854 : 640, 480, _nativeResolution);
 	_renderer->updateSize(ConfMan.getBool("widescreen"));
 	_renderer->filterTextures = ConfMan.getBool("filter_textures");
+	_fovExtra = ConfMan.getInt("fov") - 90;
 	_sound = new Sound(_mixer);
 	_inventory = new Inventory();
 	setDebugger(new Console(this));
@@ -529,7 +531,9 @@ void X3DEngine::frame(bool input) {
 		camera.position[k] = _previous.eye.getData()[k] + (_player.eye.getData()[k] - _previous.eye.getData()[k]) * alpha;
 	camera.yaw = _previous.yaw + (_player.yaw - _previous.yaw) * alpha;
 	camera.pitch = _previous.pitch + (_player.pitch - _previous.pitch) * alpha;
-	camera.fov = _player.fov;
+	// The fov option widens free play's 90 degrees; scripted views (70 and below) keep
+	// theirs, and zooms between blend
+	camera.fov = _player.fov + _fovExtra * CLIP((_player.fov - 70) / 20, 0.0f, 1.0f);
 	camera.roll = _player.roll;
 	if (_mouseCaptured && looked) // the cursor stays at the centre, as the crosshair
 		_system->warpMouse(_system->getWidth() / 2, _system->getHeight() / 2);

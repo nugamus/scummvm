@@ -252,6 +252,7 @@ private:
 	Common::String _clickedHotspot; // the hotspot of this frame's click, for Unit::afterClick
 	Camera _camera; // the last one drawn, for frames over a frozen scene
 	bool _freePlay = false; // the last frame took clicks
+	float _fovExtra = 0; // the fov option's degrees beyond the original's 90
 	Camera _hotspotCamera; // the view of the last hotspot overlay
 	uint32 _hotspotTime = 0;
 	uint _hotspotCount = 0; // markers in it
