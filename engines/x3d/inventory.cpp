@@ -154,7 +154,8 @@ void Inventory::click(const Common::Point &p) {
 	const Common::String held = _interaction->heldItem();
 	for (uint i = 0; i < _items.size(); i++) {
 		const int x = 86 + 70 * ((int)i + _offset);
-		if (!Common::Rect(x, _y + 5, x + 51, _y + 56).contains(p))
+		// Clipped to the strip: only the visible part takes clicks (E-0602)
+		if (!Common::Rect(MAX(x, kStripLeft), _y + 5, MIN(x + 51, kStripRight), _y + 56).contains(p))
 			continue;
 		const Common::String item = _items.remove_at(i);
 		if (!held.empty())
@@ -176,12 +177,15 @@ void Inventory::draw(Renderer &r, int xOffset) {
 	if (_background)
 		r.drawImage(*_background, xOffset, _y, false);
 	for (uint i = 0; i < _items.size(); i++) {
-		// ponytail: items scrolled out of the strip are not drawn (clipping is Q-0062)
+		// Items are clipped to the strip (57..592, E-0602)
 		const int x = 86 + 70 * ((int)i + _offset);
-		if (x < kStripLeft || x + 51 > kStripRight)
+		const int left = MAX(x, kStripLeft), right = MIN(x + 51, kStripRight);
+		if (left >= right)
 			continue;
-		if (Graphics::Surface *s = image(_items[i]))
-			r.drawImage(*s, xOffset + x, _y + 5, false);
+		if (Graphics::Surface *s = image(_items[i])) {
+			const Graphics::Surface part = s->getSubArea(Common::Rect(left - x, 0, MIN(right - x, (int)s->w), s->h));
+			r.drawImage(part, xOffset + left, _y + 5, false);
+		}
 	}
 }
 

@@ -73,7 +73,7 @@ public:
 	void setSliderValue(int id, int value);
 	bool press(const Common::Point &p); // true when a slider took it
 	void drag(const Common::Point &p);
-	void release() { _dragging = -1; }
+	void release() { _dragging = -1; _scrollDrag = false; }
 
 	// Draws the views, the hover highlight of the view under the mouse and edit text
 	void draw(Renderer &r, int xOffset, int hovered);
@@ -94,6 +94,9 @@ private:
 		uint maxLength = 30;
 		bool placeholder = false; // the text is the default one, replaced when typing
 		bool list = false;
+		Graphics::Surface *scrollBar = nullptr, *scrollThumb = nullptr; // name_a, name_b
+		Graphics::Surface *caption = nullptr; // GIH@: drawn at an absolute place on hover
+		int captionX = 0, captionY = 0;
 		Common::String bitmapName;
 		bool slider = false;
 		int margin = 0, value = 0;
@@ -104,6 +107,10 @@ private:
 	int listView() const;
 	Common::Array<Common::String> _rows;
 	int _selected = -1;
+	int _scroll = 0; // first shown row (save.md Lists, E-0600)
+	bool _scrollDrag = false;
+	int scrollMax() const;
+	bool pressScroll(const Common::Point &p);
 
 	int editView() const;
 
