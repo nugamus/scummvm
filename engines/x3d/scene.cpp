@@ -1190,11 +1190,18 @@ uint32 Scene::texture(const Common::String &mapName) {
 void Scene::draw(const Camera &cam, int width, int height) {
 	// Projection: x by 1/tan(fov/2) in a 4:3 frame, y by 4/3 of that (E-0040). Wider
 	// outputs keep the 4:3 frame's vertical extent. The original's near/far are 0.1 and
-	// 1,000,000; TinyGL's depth buffer needs a tighter range.
-	// ponytail: fixed 1..20000 depth range, derive it from the scene bounds if a unit is larger
+	// 1,000,000 (nothing is cut off); TinyGL's depth buffer needs a tighter range: 1 to
+	// 20000, or out to the farthest object
 	const float sy = (4.0f / 3.0f) / tanf(cam.fov * (float)M_PI / 360.0f);
 	const float sx = sy * height / width;
-	const float n = 1, f = 20000;
+	const float n = 1;
+	float f = 20000;
+	for (const Model *m : _models)
+		for (uint i = 0; !m->hidden && i < m->file.objects.size(); i++) {
+			const float *b = &m->bounds[i * 4];
+			const float d[3] = { b[0] - cam.position[0], b[1] - cam.position[1], b[2] - cam.position[2] };
+			f = MAX(f, sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) + b[3]);
+		}
 	const float projection[16] = {
 		sx, 0, 0, 0,
 		0, sy, 0, 0,
