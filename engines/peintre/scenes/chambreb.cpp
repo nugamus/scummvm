@@ -146,9 +146,10 @@ public:
 			w.retexture(node(w, kTab01), "TOILES", "RASOIR");
 			w.objects[kOreiller].cursorType = 0x3C;
 		}
-		// 0x4e30f4 is set by the return from zone 11 while 0x4abd5c = 0 (scene.md); the
-		// world does not keep it, so the broken mirror stands for it here.
-		if (w.var(kMirrorBroken) && !w.var(kMirrorSound)) {
+		// 0x4e30f4: set by the return from zone 11 while 0x4abd5c = 0 (scene.md).
+		// Q-0406: who clears it; cleared here once used.
+		if (w.localVar(0x4e30f4) == 1 && !w.var(kMirrorSound)) {
+			w.localVar(0x4e30f4) = 0;
 			w.var(kMirrorSound) = 1;
 			startSound(w, "miroir");
 		}

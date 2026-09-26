@@ -313,7 +313,6 @@ void Musee::frame(World &w) {
 		}
 		if (kPaintingScene[clicked] == kSceneChambre)
 			w.var(0x4abd14) = 1;
-		w.var(kFlown) = 1; // set by the flight (0x41f506)
 		w.startFlight(kPaintingScene[clicked]);
 	} else if (clicked == kVase) {
 		if (w.var(kStarClicked)) {
@@ -344,6 +343,16 @@ void Musee::frame(World &w) {
 		startSound(w, "robot2", true);
 		w.var(kRobotMet) = 1;
 		setParts(w, 0xFF);
+	}
+	// Back from the option menu (0x4e3120, set by 0x42f515). Q-0406: who clears it;
+	// cleared here once used.
+	if (w.localVar(0x4e3120)) {
+		w.localVar(0x4e3120) = 0;
+		if (!w.var(kFlown)) {
+			setParts(w, 4);
+			_speaking = false;
+			_line = 0;
+		}
 	}
 	dialogue(w);
 	hints(w);
