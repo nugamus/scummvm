@@ -368,6 +368,15 @@ void Scene::animate(const A3DFile &file, uint animation, Model &m, uint object, 
 	}
 }
 
+void Scene::beginStep() {
+	// The frames the step starts from, so a node the unit moves in the step (stepNode) is
+	// drawn in between as well
+	for (AnimNode &n : _nodes) {
+		n.prevFrame = (n.clipActive ? n.clip : n.base).frame;
+		n.prevClip = n.clipActive;
+	}
+}
+
 void Scene::advance(float dt) {
 	_stepDt = dt;
 	for (AnimNode &n : _nodes) {
@@ -381,8 +390,6 @@ void Scene::advance(float dt) {
 			n.base.running = true;
 		}
 		Playback &p = n.clipActive ? n.clip : n.base;
-		n.prevFrame = p.frame;
-		n.prevClip = n.clipActive;
 		p.advance(dt);
 		animate(*p.file, p.animation, *n.model, p.object >= 0 ? p.object : n.object, p.frame);
 	}

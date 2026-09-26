@@ -424,7 +424,6 @@ void U33::policeman() {
 void U33::ride() {
 	// TransitionVelo: on the bike to U04 (E-0430)
 	Scene *scene = _vm->scene();
-	Player &player = _vm->player();
 	Sound *sound = _vm->sound();
 	_vm->suspend(true);
 	_vm->stopGauge();
@@ -438,28 +437,21 @@ void U33::ride() {
 	scene->hideObject("*selle");
 	scene->hideObject("*guidon");
 	sound->play(Common::Path(scene->dir() + "Sound/s2_24.wav"), 4, 85, true);
-	float roll = 0, rho = 2;
+	// The camera follows the bike in each step (afterStep), so it is drawn in between
+	// steps with the bike
+	_roll = 0;
+	_rho = 2;
+	_riding = true;
+	afterStep();
 	bool second = false;
 	while (scene->nodeFrame("*U03_25") < 260 && scene->nodeRunning("*U03_25") && !_vm->shouldQuit()) {
-		const float dt = 1.0f / X3DEngine::kStepsPerSecond;
-		roll += rho * dt;
-		if (fabs(roll) > 1) {
-			roll = CLIP(roll, -1.0f, 1.0f);
-			rho = -rho;
-		}
-		player.roll = roll;
 		if (!second && scene->nodeFrame("*U03_25") > 170) {
 			second = true;
 			sound->play(Common::Path(scene->dir() + "Sound/S2_23.wav"), 4, 90, true);
 		}
-		player.eye = at("*U03_25") + Vector3d(0, 0, 33);
-		const Vector3d d = at("*guidon") - at("*selle");
-		player.yaw = atan2f(-d.y(), d.x());
-		player.pitch = kHalfPi;
-		const uint32 t = _vm->logicMs();
-		while (_vm->logicMs() == t && !_vm->shouldQuit())
-			_vm->runFor(0);
+		_vm->runFor(0);
 	}
+	_riding = false;
 	scene->pauseNode("*U03_25");
 	sound->stopGroup(4);
 	_vm->fadeToBlack(2000);
@@ -467,6 +459,22 @@ void U33::ride() {
 	sound->stopGroup(Sound::kVoice);
 	_vm->suspend(false);
 	_vm->gotoScene("U04.x3d");
+}
+
+void U33::afterStep() {
+	if (!_riding)
+		return;
+	Player &player = _vm->player();
+	_roll += _rho / X3DEngine::kStepsPerSecond;
+	if (fabs(_roll) > 1) {
+		_roll = CLIP(_roll, -1.0f, 1.0f);
+		_rho = -_rho;
+	}
+	player.roll = _roll;
+	player.eye = at("*U03_25") + Vector3d(0, 0, 33);
+	const Vector3d d = at("*guidon") - at("*selle");
+	player.yaw = atan2f(-d.y(), d.x());
+	player.pitch = kHalfPi;
 }
 
 bool U33::handle(const Common::String &action) {

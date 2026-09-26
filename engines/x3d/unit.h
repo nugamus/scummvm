@@ -43,6 +43,7 @@ public:
 	virtual bool handle(const Common::String &action) { return false; } // a queued click action
 	virtual void afterFrame() {}                     // per-frame checks after rendering
 	virtual void afterAnimate() {}                   // each logic step, before the pose
+	virtual void afterStep() {}                      // each logic step, after the pose
 	virtual void afterClick(const Common::String &hotspot) {} // after a click's queued actions
 	virtual bool beforeClick() { return false; }     // true: the click is taken, no pick
 	virtual bool escape() { return false; }          // true: the unit handled Escape

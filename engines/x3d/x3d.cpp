@@ -385,6 +385,16 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 
 void X3DEngine::logicStep(bool input) {
 	const uint32 stepMs = 1000 / kStepsPerSecond;
+	// The last render may have left the scene posed between two steps: the step reads
+	// object positions from its own pose (the train and bike rides follow them)
+	if (_posedBetween) {
+		_posedBetween = false;
+		_scene->interpolate(1);
+		if (_unit)
+			_unit->afterAnimate();
+		_scene->poseAll();
+	}
+	_scene->beginStep();
 	_previous = _player;
 	if (input && !_suspended) {
 		const bool handled = _unit && _unit->input(stepMs / 1000.0f);
@@ -399,6 +409,8 @@ void X3DEngine::logicStep(bool input) {
 	if (_unit)
 		_unit->afterAnimate();
 	_scene->poseAll();
+	if (_unit)
+		_unit->afterStep();
 	_collision->refresh();
 	_sound->updateVolumes(_player.eye);
 	_interaction->eye = _player.eye;
@@ -619,10 +631,12 @@ void X3DEngine::frame(bool input) {
 		_interaction->hover(_hotspot, now);
 
 	_camera = camera;
-	if (alpha > 0 && _scene->interpolate(alpha)) {
+	// At alpha 0 too: the camera is then at the step's start, and so must the objects be
+	if (_scene->interpolate(alpha)) {
 		if (_unit)
 			_unit->afterAnimate();
 		_scene->poseAll();
+		_posedBetween = true;
 	}
 	_scene->draw(camera, _renderer->width(), _renderer->height());
 	if (_showHotspots && _freePlay)
