@@ -32,6 +32,8 @@
 
 #include "graphics/managed_surface.h"
 
+#include "ring/rotation.h"
+
 namespace Graphics {
 class WinFont;
 }
@@ -62,6 +64,10 @@ public:
 
 	/** `PuzSetAct` (games/ring/docs/sy.md): the puzzle becomes the current one. */
 	void puzSetAct(int puzzle);
+	/** `RotSetAct` (0x4025b0, spec/rotation.md): the rotation becomes the current view. */
+	void rotSetAct(int rotation);
+	/** 0x402280: enter a zone at an entry point (the zone's GameSetZone). */
+	void setZone(int zone, int entry);
 	/** `PuzSetMod`: refused (false) when mode 2 is asked of a puzzle already in mode 2. */
 	bool puzSetMod(int puzzle, int mode, int object);
 	/** `StartMenu` (sy.md, "Flow"). */
@@ -110,12 +116,17 @@ private:
 	int _zone = 1;
 	int _menuZone = 0;   ///< app+0x6f: the zone the menu returns to, 0 when the menu is down
 	int _puzzle = 0;     ///< the current puzzle (app+0x81)
+	int _rotation = 0;   ///< the current rotation (app+0x89)
+	int _mode = 2;       ///< 1 rotation, 2 puzzle (0x40b7c0)
+	RotationView _view;
+	uint32 _panTime = 0; ///< looking around advances once per 1/60 s (Q-0011)
 	Common::Point _mouse;
 	bool _clicked = false; ///< a left button press at _clickPos not handled yet
 	Common::Point _clickPos;
 	Common::Array<int> _keys; ///< key codes not handled yet
 	Common::String _languageFolder;
 	bool _escapeDown = false;
+	bool _scripted = false; ///< dev_input drives the mouse
 };
 
 } // End of namespace Ring

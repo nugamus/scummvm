@@ -70,7 +70,7 @@ void RingEngine::pollEvents(uint32 ms) {
 				_keys.push_back(event.kbd.ascii);
 		} else if (event.type == Common::EVENT_KEYUP && event.kbd.keycode == Common::KEYCODE_ESCAPE)
 			_escapeDown = false;
-		else if (event.type == Common::EVENT_MOUSEMOVE)
+		else if (event.type == Common::EVENT_MOUSEMOVE && !_scripted)
 			_mouse = event.mouse;
 		else if (event.type == Common::EVENT_LBUTTONDOWN && event.mouse.y < 465) {
 			_mouse = event.mouse;
@@ -214,6 +214,7 @@ Common::Error RingEngine::run() {
 	Common::StringArray script;
 	for (const Common::String &step : Common::StringTokenizer(ConfMan.get("dev_input"), ";").split())
 		script.push_back(step);
+	_scripted = !script.empty(); // the real mouse's moves are ignored while scripted
 	uint32 menuStart = g_system->getMillis();
 	while (!shouldQuit()) {
 		pollEvents();
@@ -320,8 +321,42 @@ void RingEngine::addCursors() {
 
 void RingEngine::puzSetAct(int puzzle) {
 	// ponytail: the puzzle's ambient sounds start here (spec/sound.md, to come)
-	if (_world->puzzle(puzzle))
+	if (_world->puzzle(puzzle)) {
 		_puzzle = puzzle;
+		_mode = 2;
+	}
+}
+
+void RingEngine::rotSetAct(int rotation) {
+	// ponytail: ambient sounds (RotSetAct's other two arguments) come with spec/sound.md
+	Rotation *r = _world->rotation(rotation);
+	if (!r)
+		return;
+	if (!r->panorama) {
+		Common::File f;
+		Common::Path path = Common::Path("DATA").appendComponent(zoneFolder(r->zone)).appendComponent("NODE").appendComponent(r->name + ".aqc");
+		r->panorama.reset(new Panorama());
+		if (!f.open(path) || !r->panorama->load(f)) {
+			warning("Ring: cannot load the node %s", path.toString().c_str());
+			r->panorama.reset();
+			return;
+		}
+	}
+	_rotation = rotation;
+	_mode = 1;
+	_mouse = Common::Point(320, 240);
+	g_system->warpMouse(320, 240);
+	_panTime = g_system->getMillis();
+}
+
+void RingEngine::setZone(int zone, int entry) {
+	// ponytail: the CD check, the zone's archive (ART_x) and the saved-game entry (1000) come with their specs
+	_zone = zone;
+	_menuZone = 0;
+	if (zone == kZoneAS)
+		AS::enter(this, entry);
+	else
+		warning("Ring: zone %d is not implemented yet", zone);
 }
 
 bool RingEngine::puzSetMod(int puzzle, int mode, int object) {
@@ -357,8 +392,25 @@ void RingEngine::requestClose() {
 void RingEngine::frame() {
 	_screen.fillRect(Common::Rect(0, 0, 640, 16), 0);
 	_screen.fillRect(Common::Rect(0, 464, 640, 480), 0);
-	if (Puzzle *p = _world->puzzle(_puzzle))
+	Rotation *r = _mode == 1 ? _world->rotation(_rotation) : nullptr;
+	if (r && !r->paused && r->panorama) {
+		// Looking around, per frame in the original (0x4107f0); here per 1/60 s (Q-0011).
+		uint32 now = g_system->getMillis();
+		for (int steps = 0; now - _panTime >= 17 && steps < 10; steps++, _panTime += 17) {
+			float dx = _mouse.x / 640.0f - 0.5f, dy = _mouse.y / 480.0f - 0.5f;
+			if (ABS(dx) > 0.25f)
+				r->alpha += dx * (ABS(dx) - 0.25f) * 48.0f;
+			if (ABS(dy) > 0.25f)
+				r->beta += dy * (ABS(dy) - 0.25f) * 48.0f;
+			_view.update(*r, *r->panorama);
+		}
+		if (now - _panTime >= 17)
+			_panTime = now;
+		_view.update(*r, *r->panorama);
+		_view.draw(*r->panorama, _screen, 16);
+	} else if (Puzzle *p = _world->puzzle(_puzzle)) {
 		_world->draw(*p, *_resources, _screen);
+	}
 	if (Puzzle *p1 = _world->puzzle(1))
 		_world->draw(*p1, *_resources, _screen);
 	track(_mouse.x, _mouse.y);
@@ -396,10 +448,26 @@ void RingEngine::track(int x, int y) {
 			return;
 		}
 	}
-	if (Puzzle *p = _world->puzzle(_puzzle)) {
+	Rotation *r = _mode == 1 ? _world->rotation(_rotation) : nullptr;
+	if (r && !r->paused && r->panorama) {
+		Common::Point pt = _view.toPanorama(*r->panorama, x, y);
+		if (const Accessibility *acc = World::hit(r->accessibilities, pt.x, pt.y)) {
+			_cursors->set(acc->hotSpot.cursor);
+			onAccessibility(this, _zone, acc->object, acc->hotSpot.value);
+			return;
+		}
+		if (const Movability *m = World::hit(r->movabilities, pt.x, pt.y)) {
+			_cursors->set(m->hotSpot.cursor); // ponytail: the "on a movability" event comes with the zone handlers
+			return;
+		}
+	} else if (Puzzle *p = _world->puzzle(_puzzle)) {
 		if (const Accessibility *acc = _world->hit(*p, x, y)) {
 			_cursors->set(acc->hotSpot.cursor);
 			onAccessibility(this, _zone, acc->object, acc->hotSpot.value);
+			return;
+		}
+		if (const Movability *m = World::hit(p->movabilities, x, y)) {
+			_cursors->set(m->hotSpot.cursor);
 			return;
 		}
 	}
@@ -408,8 +476,9 @@ void RingEngine::track(int x, int y) {
 }
 
 void RingEngine::click(int x, int y) {
+	// ponytail: clicks on rotations and movabilities come with the movement spec
 	Puzzle *p1 = _world->puzzle(1);
-	Puzzle *p = _world->puzzle(_puzzle);
+	Puzzle *p = _mode == 2 ? _world->puzzle(_puzzle) : nullptr;
 	for (Puzzle *q : { p1, p }) {
 		if (!q)
 			continue;

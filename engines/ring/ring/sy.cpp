@@ -24,6 +24,7 @@
 #include "common/textconsole.h"
 
 #include "ring/cursor.h"
+#include "ring/resources.h"
 #include "ring/ring.h"
 #include "ring/world.h"
 #include "ring/ring/zones.h"
@@ -130,10 +131,10 @@ void onClick(RingEngine *vm, int object, int value) {
 		}
 		break;
 	case kObjQuestion:
-		if (value == 2)
-			warning("Ring: starting a new game (zone AS) is not implemented yet");
 		if (value <= 3)
 			closeQuestion(vm, value >= 2 ? 2 : 0);
+		if (value == 2) // 0x431140: a new game starts in zone AS
+			vm->setZone(kZoneAS, 999);
 		break;
 	default:
 		break;
