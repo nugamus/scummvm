@@ -44,7 +44,7 @@ namespace X3D {
 // Chunk `name` (e.g. "#SCENE#") of a .BIN chunk container, or nullptr
 Common::SeekableReadStream *openBinChunk(const Common::Path &file, const char *name);
 
-// docs/engine-spec/scene.md, Camera and projection
+// engines/x3d/docs/spec/scene.md, Camera and projection
 struct Camera {
 	float position[3] = {};
 	float yaw = 0;           // a, radians
@@ -91,7 +91,7 @@ public:
 	bool maxDetail = false; // enhancement: never switch to a distant level of detail
 	float scale = 1; // #SCENE# unit length (eye height and collision sphere derive from it)
 
-	// A lower-detail stand-in for a base object (docs/engine-spec/scene.md, Levels of detail)
+	// A lower-detail stand-in for a base object (engines/x3d/docs/spec/scene.md, Levels of detail)
 	struct Lod {
 		const Model *model;
 		uint object;
@@ -205,7 +205,7 @@ public:
 	const Common::Array<Model *> &models() const { return _models; }
 
 	// The object under output pixel (x, y) and the camera-space depth of the hit
-	// (docs/engine-spec/interaction.md, Picking). Returns false when nothing is hit.
+	// (engines/x3d/docs/spec/interaction.md, Picking). Returns false when nothing is hit.
 	bool pick(const Camera &cam, int width, int height, float x, float y,
 	          const Model *&model, uint &object, float &depth);
 

@@ -1235,7 +1235,7 @@ void Scene::draw(const Camera &cam, int width, int height) {
 		0, 0, 2 * f * n / (n - f), 0
 	};
 
-	// View: camera axes right, up, forward (docs/engine-spec/scene.md); GL looks down -z
+	// View: camera axes right, up, forward (engines/x3d/docs/spec/scene.md); GL looks down -z
 	const float a = cam.yaw, e = cam.pitch;
 	const float r = cam.roll * M_PI / 180;
 	const float right0[3] = { -sinf(a), -cosf(a), 0 };

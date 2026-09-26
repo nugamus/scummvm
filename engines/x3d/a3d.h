@@ -33,7 +33,7 @@ namespace X3D {
 
 struct O3DObject;
 
-// .A3D keyframe animation (docs/formats/a3d.ksy, docs/engine-spec/animation.md)
+// .A3D keyframe animation (docs/formats/a3d.ksy, engines/x3d/docs/spec/animation.md)
 
 struct A3DTrack {
 	Common::Array<uint32> frames;

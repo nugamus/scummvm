@@ -32,7 +32,7 @@ namespace X3D {
 
 class X3DEngine;
 
-// U05, the Saint-Lazare waiting room, the dog and Mazout (docs/games/monet/u05.md)
+// U05, the Saint-Lazare waiting room, the dog and Mazout (games/monet/docs/u05.md)
 class U05 : public Unit {
 public:
 	explicit U05(X3DEngine *vm) : _vm(vm), _random("x3d_u05") {}

@@ -35,7 +35,7 @@ class Serializer;
 
 namespace X3D {
 
-// World-space collision against a scene's objects (docs/engine-spec/movement.md, Collision)
+// World-space collision against a scene's objects (engines/x3d/docs/spec/movement.md, Collision)
 class Collision {
 public:
 	// Every object of every loaded file, visible or hidden

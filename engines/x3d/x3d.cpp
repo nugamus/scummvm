@@ -108,7 +108,7 @@ Common::Error X3DEngine::run() {
 	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
 	// sequence and the scene's entry video
 	if (!ConfMan.hasKey("start_scene") && !ConfMan.hasKey("save_slot")) {
-		// Boot sequence: docs/engine-spec/boot.md
+		// Boot sequence: engines/x3d/docs/spec/boot.md
 		showBitmap("2dbit/Intro1.bmp");
 		wait(3000);
 		showBitmap("2dbit/Intro2.bmp");

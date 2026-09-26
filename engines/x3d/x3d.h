@@ -74,7 +74,7 @@ public:
 		       (f == kSupportsArbitraryResolutions && _nativeResolution);
 	}
 
-	// Saves (docs/engine-spec/save.md): the scene's state as the original stores it, in
+	// Saves (engines/x3d/docs/spec/save.md): the scene's state as the original stores it, in
 	// ScummVM's save files; a load switches to the saved scene and restores it there
 	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
 	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;

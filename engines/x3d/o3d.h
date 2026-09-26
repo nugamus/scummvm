@@ -66,7 +66,7 @@ struct O3DObject {
 	bool welded = false;
 	uint32 weldFirst = 0, ownCount = 0;
 
-	// Object-local to world, row-vector form (docs/engine-spec/scene.md, Geometry)
+	// Object-local to world, row-vector form (engines/x3d/docs/spec/scene.md, Geometry)
 	float world[16];
 };
 

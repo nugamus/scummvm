@@ -31,7 +31,7 @@ namespace X3D {
 
 class X3DEngine;
 
-// U03, the street, the clown and the policeman (docs/games/monet/u03.md)
+// U03, the street, the clown and the policeman (games/monet/docs/u03.md)
 class U03 : public Unit {
 public:
 	explicit U03(X3DEngine *vm) : _vm(vm) {}
