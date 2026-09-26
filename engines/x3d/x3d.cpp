@@ -1230,6 +1230,12 @@ Common::String X3DEngine::command(const Common::String &line) {
 		gotoScene(Gallery3D::sceneFor(a[1]));
 		return "ok";
 	}
+	if (c == "gauge" && a.size() >= 2) {
+		// Development: the running gauge ends after ms
+		if (_gauge.ms)
+			_gauge.start = _logicMs + atoi(a[1].c_str()) - _gauge.ms;
+		return _gauge.ms ? "ok" : "no gauge";
+	}
 	if (c == "exhaust" && a.size() >= 2) {
 		_interaction->exhaust(atoi(a[1].c_str()));
 		return "ok";
