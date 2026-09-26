@@ -75,27 +75,43 @@ namespace X3D {
 
 void X3DEngine::saveMenu() {
 	// OptionSave (save.md): slots 1..98, the first free one selected; OK saves and stays
+	Frame frame;
+	if (!frame.load("OptionSave"))
+		return;
+	// ponytail: the original appends typing to "Save without name"; here typing replaces it
+	frame.setText("Save without name");
+	Common::StringArray names;
+	names.resize(99);
+	for (const SaveStateDescriptor &d : getMetaEngine()->listSaves(_targetName.c_str()))
+		if (d.getSaveSlot() >= 1 && d.getSaveSlot() <= 98)
+			names[d.getSaveSlot()] = d.getDescription();
+	MenuList list;
+	for (int s = 1; s <= 98; s++) {
+		list.rows.push_back(Common::String::format("%d - %s", s + 1, names[s].empty() ? "Empty" : names[s].c_str()));
+		if (list.selected < 0 && names[s].empty())
+			list.selected = s - 1;
+	}
+	if (list.selected < 0)
+		list.selected = 0;
 	for (;;) {
-		Common::StringArray names;
-		names.resize(99);
-		for (const SaveStateDescriptor &d : getMetaEngine()->listSaves(_targetName.c_str()))
-			if (d.getSaveSlot() >= 1 && d.getSaveSlot() <= 98)
-				names[d.getSaveSlot()] = d.getDescription();
-		MenuList list;
-		for (int s = 1; s <= 98; s++) {
-			list.rows.push_back(Common::String::format("%d - %s", s + 1, names[s].empty() ? "Empty" : names[s].c_str()));
-			if (list.selected < 0 && names[s].empty())
-				list.selected = s - 1;
-		}
-		if (list.selected < 0)
-			list.selected = 0;
-		// ponytail: the original appends typing to "Save without name"; here typing replaces it
-		const Common::String c = runMenu("OptionSave", &list, "Save without name");
+		const Common::String c = runFrame(frame, &list);
 		if (shouldQuit())
 			return;
 		if (c == "OptionSelectSave" || c == "enter") {
+			// The frame stays open with the saved row selected and the edit's text kept;
+			// Back, Main menu and Quit switch to their ...N bitmaps (E-0622)
 			const Common::String name = _menuText.empty() ? "Save without name" : _menuText;
-			saveGameState(list.selected + 1, name);
+			const int s = list.selected + 1;
+			if (saveGameState(s, name).getCode() == Common::kNoError)
+				list.rows[s - 1] = Common::String::format("%d - %s", s + 1, name.c_str());
+			for (int id : {2, 3, 5}) {
+				const int v = frame.indexOf(id);
+				Common::String bmp = v >= 0 ? frame.bitmapName(v) : "";
+				if (bmp.size() >= 5) {
+					bmp.setChar('N', bmp.size() - 5);
+					frame.setBitmap(id, bmp);
+				}
+			}
 			continue;
 		}
 		if (c == "OptionSaveSommaire" || c == "escape") {
