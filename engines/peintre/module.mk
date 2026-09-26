@@ -8,7 +8,9 @@ MODULE_OBJS = \
 	movie.o \
 	obj3d.o \
 	peintre.o \
-	players.o
+	players.o \
+	shell.o \
+	sound.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_PEINTRE), DYNAMIC_PLUGIN)
