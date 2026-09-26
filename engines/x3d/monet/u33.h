@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef X3D_U06_H
-#define X3D_U06_H
+#ifndef X3D_MONET_U33_H
+#define X3D_MONET_U33_H
 
 #include "math/vector3d.h"
 
@@ -30,32 +30,48 @@ namespace X3D {
 
 class X3DEngine;
 
-// U06, the orangery garden and the clown with the rifle (docs/engine-spec/u06.md)
-class U06 : public Unit {
+// U33, the square at night: the projectionist, the caravan, the clown and the bike
+// (docs/games/monet/u33.md)
+class U33 : public Unit {
 public:
-	explicit U06(X3DEngine *vm) : _vm(vm) {}
+	explicit U33(X3DEngine *vm) : _vm(vm) {}
 
+	void afterLoad() override;
 	void start(bool newGame, bool video) override;
-	bool input(float dt) override;
 	bool handle(const Common::String &action) override;
 	void afterFrame() override;
-	void afterAnimate() override; // the clown turns
+	bool beforeClick() override; // the curtain trap
 
 private:
+	void run(uint32 id);
+	Math::Vector3d ground(float x, float y, float z);
+	void walk(uint32 ms, const Math::Vector3d &to, float yaw);
+	void walkG(uint32 ms, float x, float y, float z, float yaw);
+	float facing(const Math::Vector3d &target, const Math::Vector3d &from) const;
+	Math::Vector3d at(const char *object) const;
 	void effect(const char *name, const Math::Vector3d &position);
-	void startShooting();
-	void stopShooting();
-	void shotDown();
-	void wakeMan();
-	void drain();
+	void waitNode(const char *node, float frame); // until the node pauses or reaches frame
+	void voiceWait(bool enterStops);
+
+	void walkToScreen();
+	void afterFilm();
+	void firstFilm();
+	void secondFilm();
+	void shutter();
+	void enterCaravan();
+	void leaveCaravan();
+	void hide();
+	void unhide();
+	void caughtBehindCurtain();
+	void gameOverClown();
+	void talkProjectionist();
+	void policeman();
+	void ride();
 
 	X3DEngine *_vm;
-	bool _shooting = true; // never written by the original: debug-heap fill, so true (E-0534)
-	int _shots = 0;
-	float _clownYaw = 3 * (float)M_PI / 2;
-	bool _turned = false;
+	uint32 _timer = 0; // the nag's and the clown search's shared clock (E-0422)
 };
 
 } // End of namespace X3D
 
-#endif // X3D_U06_H
+#endif // X3D_MONET_U33_H

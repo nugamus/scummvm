@@ -26,7 +26,7 @@
 #include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
-#include "x3d/u00.h"
+#include "x3d/monet/u00.h"
 #include "x3d/x3d.h"
 
 namespace X3D {

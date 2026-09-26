@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef X3D_U01_H
-#define X3D_U01_H
+#ifndef X3D_MONET_U01_H
+#define X3D_MONET_U01_H
 
 #include "common/random.h"
 #include "common/str.h"
@@ -33,7 +33,7 @@ namespace X3D {
 
 class X3DEngine;
 
-// U01, the station: its unit code (docs/engine-spec/u01.md)
+// U01, the station: its unit code (docs/games/monet/u01.md)
 class U01 : public Unit {
 public:
 	explicit U01(X3DEngine *vm);
@@ -68,4 +68,4 @@ private:
 
 } // End of namespace X3D
 
-#endif // X3D_U01_H
+#endif // X3D_MONET_U01_H

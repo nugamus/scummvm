@@ -19,59 +19,47 @@
  *
  */
 
-#ifndef X3D_U33_H
-#define X3D_U33_H
+#ifndef X3D_MONET_U03_H
+#define X3D_MONET_U03_H
 
 #include "math/vector3d.h"
 
+#include "x3d/scene.h"
 #include "x3d/unit.h"
 
 namespace X3D {
 
 class X3DEngine;
 
-// U33, the square at night: the projectionist, the caravan, the clown and the bike
-// (docs/engine-spec/u33.md)
-class U33 : public Unit {
+// U03, the street, the clown and the policeman (docs/games/monet/u03.md)
+class U03 : public Unit {
 public:
-	explicit U33(X3DEngine *vm) : _vm(vm) {}
+	explicit U03(X3DEngine *vm) : _vm(vm) {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
 	bool handle(const Common::String &action) override;
-	void afterFrame() override;
-	bool beforeClick() override; // the curtain trap
+	void afterAnimate() override; // the policeman's round
 
 private:
 	void run(uint32 id);
-	Math::Vector3d ground(float x, float y, float z);
-	void walk(uint32 ms, const Math::Vector3d &to, float yaw);
-	void walkG(uint32 ms, float x, float y, float z, float yaw);
+	Math::Vector3d ground(float x, float y, float z); // G(x, y, z)
 	float facing(const Math::Vector3d &target, const Math::Vector3d &from) const;
 	Math::Vector3d at(const char *object) const;
-	void effect(const char *name, const Math::Vector3d &position);
-	void waitNode(const char *node, float frame); // until the node pauses or reaches frame
-	void voiceWait(bool enterStops);
+	void waitVoice(bool enterSkips = true);
+	void transition(int n);
 
-	void walkToScreen();
-	void afterFilm();
-	void firstFilm();
-	void secondFilm();
-	void shutter();
-	void enterCaravan();
-	void leaveCaravan();
-	void hide();
-	void unhide();
-	void caughtBehindCurtain();
-	void gameOverClown();
-	void talkProjectionist();
-	void policeman();
-	void ride();
+	void clownTrick();
+	void salute();
+	void cutscene();
+	void aimAtTarget();
+	void cut();
 
 	X3DEngine *_vm;
-	uint32 _timer = 0; // the nag's and the clown search's shared clock (E-0422)
+	bool _follow = true;
+	Scene::Model *_camera = nullptr, *_cine = nullptr; // the cutscene's models
 };
 
 } // End of namespace X3D
 
-#endif // X3D_U33_H
+#endif // X3D_MONET_U03_H

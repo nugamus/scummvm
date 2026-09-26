@@ -65,6 +65,17 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 			0
 		}
 	},
+	{
+		GAMEOPTION_RUN_TOGGLE,
+		{
+			_s("Run toggle"),
+			_s("The run key switches running on and off instead of running while held"),
+			"run_toggle",
+			false,
+			0,
+			0
+		}
+	},
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 

@@ -19,12 +19,8 @@
  *
  */
 
-#ifndef X3D_U05_H
-#define X3D_U05_H
-
-#include "common/random.h"
-
-#include "math/vector3d.h"
+#ifndef X3D_MONET_GALLERY3D_H
+#define X3D_MONET_GALLERY3D_H
 
 #include "x3d/unit.h"
 
@@ -32,43 +28,27 @@ namespace X3D {
 
 class X3DEngine;
 
-// U05, the Saint-Lazare waiting room, the dog and Mazout (docs/engine-spec/u05.md)
-class U05 : public Unit {
+// The painting's 3D scene from the gallery: unit class 50 (ui.md Gallery, 3D view)
+class Gallery3D : public Unit {
 public:
-	explicit U05(X3DEngine *vm) : _vm(vm), _random("x3d_u05") {}
+	Gallery3D(X3DEngine *vm, const Common::String &painting) : _vm(vm), _painting(painting) {}
+
+	// The U0nD.X3D scene of a painting, or "" when it has none
+	static Common::String sceneFor(const Common::String &painting);
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
-	bool handle(const Common::String &action) override;
-	void afterFrame() override;
+	bool beforeClick() override { return true; } // the mouse does nothing
+	bool gameStarted() const override { return false; }
+	bool escape() override;
 
 private:
-	void run(uint32 id);
-	void effect(const char *name, const Math::Vector3d &position);
-	void voice(const char *name);
-	void noCollisionFamily(const Common::String &object);
-	float facing(const Math::Vector3d &target, const Math::Vector3d &from) const;
-	Math::Vector3d at(const char *object) const;
-	bool near(const char *object, float distance) const;
-
-	bool barkAndSit();
-	bool waitLoop();
-	bool chefNotices();
-	bool mazoutConfronts();
-	void gaugeExpired();
-	void leave();
-
-	void testSpeakChef();
-	void dogToDoor();
-	void maskGrille();
-	void lampFalls();
+	int unit() const; // 1..6, 33
 
 	X3DEngine *_vm;
-	Common::RandomSource _random;
-	uint32 _timer = 0;   // the dog's wait, then the station master's chatter (logic ms)
-	bool _leaving = false;
+	Common::String _painting;
 };
 
 } // End of namespace X3D
 
-#endif // X3D_U05_H
+#endif // X3D_MONET_GALLERY3D_H

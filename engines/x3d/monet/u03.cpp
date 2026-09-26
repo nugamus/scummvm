@@ -24,7 +24,7 @@
 #include "x3d/inventory.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
-#include "x3d/u03.h"
+#include "x3d/monet/u03.h"
 #include "x3d/x3d.h"
 
 namespace X3D {
