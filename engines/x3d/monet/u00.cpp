@@ -249,7 +249,7 @@ bool U00::input(float dt) {
 		stopGauge();
 		_moved = true;
 	}
-	if (_state == 2 && (keys.left || keys.right || keys.pageUp || keys.pageDown)) {
+	if (_state == 2 && (keys.left || keys.right || keys.pageUp || keys.pageDown || keys.mouseTurn)) {
 		stopGauge();
 		_turned = true;
 	}
