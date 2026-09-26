@@ -42,6 +42,7 @@ public:
 	void afterFrame() override;
 	bool beforeClick() override; // the curtain trap
 	void afterStep() override;   // the bike ride's camera
+	void syncState(Common::Serializer &s) override; // the clock (not in the original)
 
 private:
 	void run(uint32 id);

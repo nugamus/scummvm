@@ -227,7 +227,7 @@ void U05::afterFrame() {
 		if (!_timer)
 			_timer = now;
 		if (!interaction->exhausted(4)) {
-			if (now > _timer + 4000 && barkAndSit())
+			if (now - _timer > 4000 && barkAndSit())
 				interaction->exhaust(4);
 		} else if (!interaction->exhausted(5)) {
 			if (waitLoop())
@@ -249,7 +249,7 @@ void U05::afterFrame() {
 	if (interaction->exhausted(24) && !interaction->exhausted(25)) {
 		if (!_timer)
 			_timer = now;
-		if (!sound->isGroupPlaying(Sound::kVoice) && now >= _timer + 20000 && near(kChef, 220)) {
+		if (!sound->isGroupPlaying(Sound::kVoice) && now - _timer >= 20000 && near(kChef, 220)) {
 			_timer = now;
 			run(_random.getRandomNumber(1) == 1 ? 26 : 27);
 		}
@@ -347,6 +347,15 @@ void U05::lampFalls() {
 	_vm->collision()->setEnabled("*U05_09", true);
 	_vm->interaction()->exhaust(14);
 	_vm->suspend(false);
+}
+
+void U05::syncState(Common::Serializer &s) {
+	// The original saves no chunk for this unit (save.md), so its clock restarted on every
+	// load; kept here as the time since it started (save version 5)
+	uint32 since = _timer ? _vm->logicMs() - _timer : 0;
+	s.syncAsUint32LE(since, 5);
+	if (s.isLoading())
+		_timer = since ? _vm->logicMs() - since : 0;
 }
 
 bool U05::handle(const Common::String &action) {
