@@ -405,9 +405,10 @@ void X3DEngine::frame(bool input) {
 		debugC(1, kDebugScript, "dev command %s: %s", c.c_str(), command(c.substr(c.findFirstOf(':') + 1)).c_str());
 	}
 
-	// Modern controls: the mouse is captured in free play, the bar closed. A click at a
-	// given point (dev_click, dev_commands) keeps its point.
-	captureMouse(_modern && (input || _walk) && !_suspended && !_inventory->shown());
+	// Modern controls: the mouse is captured in free play, the bar closed; a locked view
+	// (no turning, as in close-ups) points with a free cursor. A click at a given point
+	// (dev_click, dev_commands) keeps its point.
+	captureMouse(_modern && (input || _walk) && !_suspended && !_inventory->shown() && _player.canTurn);
 	const bool pointClick = _clickNow;
 	const Common::Point centre(_renderer->width() / 2, _renderer->height() / 2);
 	bool looked = false;
@@ -418,6 +419,9 @@ void X3DEngine::frame(bool input) {
 		if (e.type == Common::EVENT_MOUSEMOVE && _mouseCaptured) {
 			// Mouse look, within the original's pitch limits (movement.md, Keys); the
 			// last step turns too, so the drawn view follows at once
+			// Motion queued before the capture, or from its warp, does not turn
+			if (_system->getMillis() - _captureStart < 100)
+				continue;
 			if (_player.canTurn && (e.relMouse.x || e.relMouse.y)) {
 				const float dYaw = e.relMouse.x * _lookScale;
 				const float pitch = _player.pitch - (_invertY ? -1 : 1) * e.relMouse.y * _lookScale;
@@ -1044,6 +1048,7 @@ void X3DEngine::captureMouse(bool capture) {
 	_mouseCaptured = capture;
 	_system->lockMouse(capture);
 	if (capture) {
+		_captureStart = _system->getMillis();
 		_system->warpMouse(_system->getWidth() / 2, _system->getHeight() / 2);
 		_mouse = Common::Point(_renderer->width() / 2, _renderer->height() / 2);
 		_hoverNow = true;
