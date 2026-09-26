@@ -98,6 +98,7 @@ bool Scene3D::load(const Common::Array<byte> &entry) {
 		Material m;
 		m.name = b.str(matOff + kMaterialSize * i, 16);
 		m.texture = b.str(matOff + kMaterialSize * i + 16, 16);
+		m.colour = (uint16)b.s32(matOff + kMaterialSize * i + 32);
 		materials.push_back(m);
 	}
 	// Tree pointers are 1-based offsets from the root node, 0 = none.
@@ -105,6 +106,29 @@ bool Scene3D::load(const Common::Array<byte> &entry) {
 	auto tree = [root](int32 v) -> uint32 { return root + v - 1; };
 
 	nodes.resize(n);
+	// Vertex arrays of every node, to resolve corners that use another node's vertices
+	// (flag 0x10 nodes use their parent's, render.md "Node culling and node flags").
+	Common::Array<uint32> vertBase(n), vertCount(n);
+	for (int32 i = 0; i < n; i++) {
+		vertCount[i] = b.s32(offsets[i] + 0x7C);
+		vertBase[i] = tree(b.s32(offsets[i] + 0x80));
+	}
+	auto resolveVertex = [&](int32 self, uint32 ptr, int32 &owner) -> int32 {
+		int32 k = indexOf(ptr, vertBase[self], kVertexSize, vertCount[self]);
+		if (k >= 0) {
+			owner = self;
+			return k;
+		}
+		for (int32 j = 0; j < n; j++) {
+			k = indexOf(ptr, vertBase[j], kVertexSize, vertCount[j]);
+			if (k >= 0) {
+				owner = j;
+				return k;
+			}
+		}
+		owner = -1;
+		return -1;
+	};
 	for (int32 i = 0; i < n && b.ok(); i++) {
 		Node &nd = nodes[i];
 		const uint32 o = offsets[i];
@@ -151,8 +175,9 @@ bool Scene3D::load(const Common::Array<byte> &entry) {
 			for (int32 k = 0; k < count && b.ok(); k++) {
 				const uint32 po = polys + stride * k;
 				Poly p;
+				p.word0 = b.s32(po);
 				for (int c = 0; c < 3; c++) {
-					p.vertex[c] = indexOf(tree(b.s32(po + 8 + 12 * c)), tree(pv), kVertexSize, nv);
+					p.vertex[c] = resolveVertex(i, tree(b.s32(po + 8 + 12 * c)), p.vertexNode[c]);
 					const int32 vn = b.s32(po + 12 + 12 * c);
 					p.normal[c] = vn ? indexOf(tree(vn), tree(pvn), kNormalSize, nvn) : -1;
 					const int32 uv = textured ? b.s32(po + 0x34 + 4 * c) : 0;
@@ -160,7 +185,7 @@ bool Scene3D::load(const Common::Array<byte> &entry) {
 				}
 				const int32 fn = b.s32(po + 0x2C);
 				p.faceNormal = fn ? indexOf(tree(fn), tree(pfn), kNormalSize, nfn) : -1;
-				p.unk30 = b.s32(po + 0x30);
+				p.planeDistance = b.s32(po + 0x30);
 				fg.polys.push_back(p);
 			}
 			nd.faceGroups.push_back(fg);
