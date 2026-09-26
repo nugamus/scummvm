@@ -1343,8 +1343,9 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 			continue;
 		const Common::Array<O3DObject> &objects = m->file.objects;
 		for (uint i = 0; i < objects.size(); i++) {
-			// Welded objects are tested with their top object, whose vertices they share
-			if ((m->hiddenObjects[i] && !m->pickWhenHidden[i]) || m->unpickable[i] || objects[i].vertices.empty())
+			// Welded objects are tested with their top object, whose vertices they share;
+			// each is skipped when hidden, as the draw skips it
+			if (m->unpickable[i] || objects[i].vertices.empty())
 				continue;
 
 			// The drawn level of detail supplies the faces
@@ -1402,6 +1403,9 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 				while (owner >= 0 && dobjects[owner].vertices.empty())
 					owner = dobjects[owner].parent;
 				if (owner != (int)top || (o != top && !dobjects[o].welded))
+					continue;
+				const uint base = drawn == m ? o : i;
+				if ((m->hiddenObjects[base] && !m->pickWhenHidden[base]) || m->unpickable[base])
 					continue;
 				for (const O3DFace &f : dobjects[o].faces) {
 					const uint n = f.indices.size();

@@ -1241,6 +1241,10 @@ Common::String X3DEngine::command(const Common::String &line) {
 		_inventory->add(a[1]);
 		return "ok";
 	}
+	if (c == "bar") {
+		_inventory->toggle(); // as Space
+		return "ok";
+	}
 	if (c == "hold" && a.size() >= 2) {
 		_interaction->holdItem(a[1] == "-" ? "" : a[1]); // "-": nothing
 		return "ok";
