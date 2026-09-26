@@ -521,6 +521,21 @@ void X3DEngine::frame(bool input) {
 	// (movement.md, Engine model)
 	const uint32 stepMs = 1000 / kStepsPerSecond;
 	const uint32 now = _system->getMillis();
+	if (_devUp) {
+		_keys.up = now < _devUp;
+		if (!_keys.up)
+			_devUp = 0;
+	}
+	if (_devDown) {
+		_keys.down = now < _devDown;
+		if (!_keys.down)
+			_devDown = 0;
+	}
+	if (_devShift) {
+		_keys.shift = now < _devShift;
+		if (!_keys.shift)
+			_devShift = 0;
+	}
 	_pending += now - _last;
 	_last = now;
 	while (_pending >= stepMs && !shouldQuit()) {
@@ -1240,6 +1255,29 @@ Common::String X3DEngine::command(const Common::String &line) {
 	if (c == "give" && a.size() >= 2) {
 		_inventory->add(a[1]);
 		return "ok";
+	}
+	if (c == "objs" && a.size() >= 2) { // every object whose name contains the text
+		Common::String out;
+		for (uint mi = 0; mi < _scene->models().size(); mi++) {
+			const Scene::Model *m = _scene->models()[mi];
+			for (uint o = 0; o < m->file.objects.size(); o++)
+				if (m->file.objects[o].name.contains(a[1]))
+					out += Common::String::format("m%u o%u %s hid %d mhid %d at %g,%g,%g;", mi, o, m->file.objects[o].name.c_str(), (int)m->hiddenObjects[o], (int)m->hidden, m->file.objects[o].world[12], m->file.objects[o].world[13], m->file.objects[o].world[14]);
+		}
+		return out;
+	}
+	if (c == "node" && a.size() >= 2) // an animation node's frame
+		return Common::String::format("frame %g running %d", _scene->nodeFrame(a[1]), (int)_scene->nodeRunning(a[1]));
+	if (c == "press" && a.size() >= 3) { // hold up, down or shift for ms, for scripted play
+		const uint32 until = _system->getMillis() + atoi(a[2].c_str());
+		(a[1] == "shift" ? _devShift : a[1] == "down" ? _devDown : _devUp) = until;
+		return "ok";
+	}
+	if (c == "probe" && a.size() >= 4) { // the ground below a point, without moving
+		const Math::Vector3d p(atof(a[1].c_str()), atof(a[2].c_str()), atof(a[3].c_str()));
+		float t = 1;
+		const bool hit = _collision->cast(p, p - Math::Vector3d(0, 0, 10000), t);
+		return Common::String::format("%d z %g", (int)hit, p.z() - 10000 * t);
 	}
 	if (c == "bar") {
 		_inventory->toggle(); // as Space
