@@ -1045,7 +1045,7 @@ void X3DEngine::findHotspots() {
 			continue;
 		for (uint o = 0; o < m->file.objects.size(); o++) {
 			const Common::String &name = m->file.objects[o].name;
-			if (!name.contains('*') || m->hiddenObjects[o] || m->unpickable[o])
+			if (!name.contains('*') || (m->hiddenObjects[o] && !m->pickWhenHidden[o]) || m->unpickable[o])
 				continue;
 			const int h = _interaction->hotspotFor(Common::StringArray(1, name));
 			if (h < 0)
@@ -1084,7 +1084,7 @@ void X3DEngine::findHotspots() {
 		if (m->hidden)
 			continue;
 		for (uint o = 0; o < m->file.objects.size(); o++) {
-			if (m->hiddenObjects[o] || m->unpickable[o])
+			if ((m->hiddenObjects[o] && !m->pickWhenHidden[o]) || m->unpickable[o])
 				continue;
 			Common::StringArray names;
 			for (int k = o; k >= 0; k = m->file.objects[k].parent)

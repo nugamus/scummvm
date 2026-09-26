@@ -229,6 +229,7 @@ private:
 		float fps = 30, frame = 0;
 		bool loop = true, running = true, backward = false;
 		bool pingPong = false; // not looping: turns round at both ends instead of stopping
+		bool rewound = false;  // stopped running backward (not paused by the unit)
 		float stopAt = -1; // stop target, < 0 for none
 		float first = -1, last = -1; // range override, < 0: the animation's
 		int object = -1;             // the object it drives, < 0: the node's
