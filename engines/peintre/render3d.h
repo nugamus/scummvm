@@ -50,9 +50,8 @@ class Renderer3D {
 public:
 	Renderer3D();
 
-	/** Draws the scene in the viewport of `dst`. textures[i] is material i's texture or null. */
-	void draw(Graphics::Surface &dst, const Common::Rect &viewport, const Scene3D &scene,
-			  const Common::Array<const Texture3D *> &textures, const Camera &cam);
+	/** Draws the scene in the viewport of `dst` with each face group's texture. */
+	void draw(Graphics::Surface &dst, const Common::Rect &viewport, const Scene3D &scene, const Camera &cam);
 	/** The node under (x, y) after the last draw, -1 for none. */
 	int pick(int x, int y) const;
 	/** The camera-relative position of a node after the last draw (its +0x4c). */

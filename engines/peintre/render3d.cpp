@@ -93,8 +93,7 @@ void Renderer3D::computeWorld(const Scene3D &scene) {
 	}
 }
 
-void Renderer3D::draw(Graphics::Surface &dst, const Common::Rect &viewport, const Scene3D &scene,
-					  const Common::Array<const Texture3D *> &textures, const Camera &cam) {
+void Renderer3D::draw(Graphics::Surface &dst, const Common::Rect &viewport, const Scene3D &scene, const Camera &cam) {
 	_viewport = viewport;
 	// Focal length: 480 for a 640-wide view, scaled by width (scene.md "Camera and view").
 	_focal = 480.0f * viewport.width() / 640.0f;
@@ -144,7 +143,7 @@ void Renderer3D::draw(Graphics::Surface &dst, const Common::Rect &viewport, cons
 			o.z = w[0] * _view[2] + w[1] * _view[5] + w[2] * _view[8];
 		}
 		for (const FaceGroup &g : nd.faceGroups) {
-			const Texture3D *tex = g.materialIndex >= 0 && (uint)g.materialIndex < textures.size() ? textures[g.materialIndex] : nullptr;
+			const Texture3D *tex = g.texture;
 			for (const Poly &poly : g.polys) {
 				Vtx tri[3];
 				bool ok = true;
