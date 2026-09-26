@@ -276,6 +276,7 @@ private:
 	Common::Array<Scene::Highlight> _highlight; // their objects, outlined
 	Common::String _menuText; // the text edit of the last menu
 	bool _escapeNow = false, _escapeBlocked = false;
+	bool _posedBetween = false; // the last render posed the scene between two steps
 	int _frameDepth = 0; // frames nested in blocking sequences: no saving or loading there
 	bool _walk = false; // runFor with walking input
 	Gauge _gauge;

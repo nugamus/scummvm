@@ -41,6 +41,7 @@ public:
 	bool handle(const Common::String &action) override;
 	void afterFrame() override;
 	bool beforeClick() override; // the curtain trap
+	void afterStep() override;   // the bike ride's camera
 
 private:
 	void run(uint32 id);
@@ -70,6 +71,8 @@ private:
 
 	X3DEngine *_vm;
 	uint32 _timer = 0; // the nag's and the clown search's shared clock (E-0422)
+	bool _riding = false;
+	float _roll = 0, _rho = 2; // the ride's sway
 };
 
 } // End of namespace X3D
