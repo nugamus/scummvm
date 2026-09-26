@@ -1267,19 +1267,9 @@ void Scene::draw(const Camera &cam, int width, int height) {
 			// ponytail: culls on the base object's sphere; a LOD far outside it would be missed
 			if (!inView(&m->bounds[i * 4]))
 				continue;
-			// Level of detail by squared distance from the object's origin to the camera
-			const float *origin = m->file.objects[i].world + 12;
-			float s = 0;
-			for (int k = 0; k < 3; k++)
-				s += (origin[k] - p[k]) * (origin[k] - p[k]);
-			const Model *drawn = m;
-			uint object = i;
-			for (const Lod &lod : m->lods[i]) {
-				if (!maxDetail && lod.threshold <= s) {
-					drawn = lod.model;
-					object = lod.object;
-				}
-			}
+			const Model *drawn;
+			uint object;
+			drawnLod(m, i, drawn, object);
 			drawObject(*drawn, object);
 		}
 	}
@@ -1320,14 +1310,30 @@ void Scene::faceCamera(const Model &m, uint object, Common::Array<float> &v) con
 		}
 }
 
-void Scene::drawObject(const Model &m, uint object) {
+void Scene::drawnLod(const Model *m, uint i, const Model *&drawn, uint &object) const {
+	// Level of detail by squared distance from the object's origin to the camera
+	const float *origin = m->file.objects[i].world + 12;
+	float s = 0;
+	for (int k = 0; k < 3; k++)
+		s += (origin[k] - _eye[k]) * (origin[k] - _eye[k]);
+	drawn = m;
+	object = i;
+	for (const Lod &lod : m->lods[i]) {
+		if (!maxDetail && lod.threshold <= s) {
+			drawn = lod.model;
+			object = lod.object;
+		}
+	}
+}
+
+const Common::Array<float> *Scene::drawnVertices(const Model &m, uint object) {
 	// Weld objects index the vertices of the nearest ancestor that has some (Q-0020)
 	const Common::Array<O3DObject> &objects = m.file.objects;
 	int owner = object;
 	while (owner >= 0 && objects[owner].vertices.empty())
 		owner = objects[owner].parent;
 	if (owner < 0)
-		return;
+		return nullptr;
 	const Common::Array<float> *vertices = &m.worldVertices[owner];
 
 	// ponytail: only camera type 2 ($Z$, the only one in U01); types 1 and 3 fix the yaw at
@@ -1338,6 +1344,17 @@ void Scene::drawObject(const Model &m, uint object) {
 		faceCamera(m, object, _facingVertices);
 		vertices = &_facingVertices;
 	}
+	return vertices;
+}
+
+void Scene::drawObject(const Model &m, uint object) {
+	const Common::Array<O3DObject> &objects = m.file.objects;
+	const Common::Array<float> *vertices = drawnVertices(m, object);
+	if (!vertices)
+		return;
+	int owner = object;
+	while (objects[owner].vertices.empty())
+		owner = objects[owner].parent;
 
 	for (const O3DFace &face : objects[object].faces) {
 		const O3DMaterial &mat = m.file.materials[face.material];
@@ -1409,6 +1426,92 @@ void Scene::drawFace(const Deferred &f) {
 		_renderer->drawFan(f.xyz, nullptr, f.spec, f.count);
 		_renderer->setBlend(f.alpha == 255 && !f.additive ? Renderer::kOpaque : f.additive ? Renderer::kAdditive : Renderer::kAlpha, f.keyed);
 	}
+}
+
+void Scene::drawHighlight(const Common::Array<Common::Pair<const Model *, uint> > &objects) {
+	// The faces again, tinted and blended over the frame, and their
+	// edges collected by position: those between a front and a back face, or of one front
+	// face only, outline the object
+	byte tint[3 * 64];
+	for (uint k = 0; k < 64; k++) {
+		tint[k * 3] = 255;
+		tint[k * 3 + 1] = 210;
+		tint[k * 3 + 2] = 60;
+	}
+	float xyz[3 * 64];
+	_edges.resize(0);
+	_renderer->setTexture(0);
+	_renderer->setBlend(Renderer::kTint, false);
+	for (const Common::Pair<const Model *, uint> &p : objects) {
+		const Model *m = p.first;
+		if (Common::find(_models.begin(), _models.end(), m) == _models.end() || p.second >= m->file.objects.size() ||
+		    m->hidden || m->hiddenObjects[p.second] || !inView(&m->bounds[p.second * 4]))
+			continue;
+		const Model *drawn;
+		uint object;
+		drawnLod(m, p.second, drawn, object);
+		const Common::Array<float> *v = drawnVertices(*drawn, object);
+		if (!v)
+			continue;
+		for (const O3DFace &face : drawn->file.objects[object].faces) {
+			uint n = 0;
+			for (uint k = 0; k < face.indices.size() && n < 64 && face.indices[k] * 3 + 2 < v->size(); k++, n++)
+				memcpy(&xyz[n * 3], &(*v)[face.indices[k] * 3], 3 * sizeof(float));
+			if (n < 3)
+				continue;
+			// Colour-keyed faces (spectacles, foliage) tint only their kept texels and get
+			// no outline
+			const O3DMaterial &mat = drawn->file.materials[face.material];
+			if (mat.mode >= 1 && mat.mode <= 3 && !mat.textureMap.empty() && !face.uvs.empty()) {
+				_renderer->setTexture(texture(mat.textureMap));
+				_renderer->setClamp(!mat.wrap);
+				_renderer->setBlend(Renderer::kTint, true);
+				_renderer->drawFan(xyz, face.uvs.begin(), tint, n, 72);
+				_renderer->setTexture(0);
+				_renderer->setBlend(Renderer::kTint, false);
+				continue;
+			}
+			_renderer->drawFan(xyz, nullptr, tint, n, 72);
+			// Newell's normal; faces wound against it toward the eye are drawn (CCW in GL)
+			float nrm[3] = { 0, 0, 0 };
+			for (uint k = 0; k < n; k++) {
+				const float *a = &xyz[k * 3], *b = &xyz[(k + 1) % n * 3];
+				nrm[0] += (a[1] - b[1]) * (a[2] + b[2]);
+				nrm[1] += (a[2] - b[2]) * (a[0] + b[0]);
+				nrm[2] += (a[0] - b[0]) * (a[1] + b[1]);
+			}
+			const bool front = nrm[0] * (xyz[0] - _eye[0]) + nrm[1] * (xyz[1] - _eye[1]) + nrm[2] * (xyz[2] - _eye[2]) < 0;
+			for (uint k = 0; k < n; k++) {
+				const float *a = &xyz[k * 3], *b = &xyz[(k + 1) % n * 3];
+				if (memcmp(b, a, 3 * sizeof(float)) < 0)
+					SWAP(a, b);
+				Edge e;
+				memcpy(e.a, a, sizeof(e.a));
+				memcpy(e.b, b, sizeof(e.b));
+				e.front = front;
+				_edges.push_back(e);
+			}
+		}
+	}
+	Common::sort(_edges.begin(), _edges.end(), [](const Edge &x, const Edge &y) {
+		return memcmp(x.a, y.a, sizeof(x.a) + sizeof(x.b)) < 0;
+	});
+	// Lines pulled 0.5% toward the eye so the surfaces they lie on do not hide them
+	_lines.resize(0);
+	for (uint i = 0; i < _edges.size();) {
+		uint j = i, front = 0;
+		for (; j < _edges.size() && !memcmp(_edges[i].a, _edges[j].a, sizeof(Edge::a) + sizeof(Edge::b)); j++)
+			front += _edges[j].front;
+		if (front && (front < j - i || j - i == 1))
+			for (const float *q : { _edges[i].a, _edges[i].b })
+				for (int k = 0; k < 3; k++)
+					_lines.push_back(_eye[k] + (q[k] - _eye[k]) * 0.995f);
+		i = j;
+	}
+	_renderer->setBlend(Renderer::kAlpha, false);
+	if (!_lines.empty())
+		_renderer->drawLines(_lines.begin(), _lines.size() / 3, 255, 170, 0, 2);
+	_renderer->setBlend(Renderer::kOpaque, true);
 }
 
 bool Scene::pick(const Camera &cam, int width, int height, float x, float y,

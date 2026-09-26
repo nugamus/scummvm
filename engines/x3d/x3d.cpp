@@ -375,6 +375,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 
 	_sound->stopAll();
 	_scene = nullptr;
+	_highlight.clear();
 	_collision = nullptr;
 	_interaction = nullptr;
 	_talk = nullptr;
@@ -624,6 +625,8 @@ void X3DEngine::frame(bool input) {
 		_scene->poseAll();
 	}
 	_scene->draw(camera, _renderer->width(), _renderer->height());
+	if (_showHotspots && _freePlay)
+		_scene->drawHighlight(_highlight);
 	_inventory->draw(*_renderer, x2d);
 	if (_unit)
 		_unit->draw();
@@ -968,6 +971,22 @@ void X3DEngine::getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspo
 			const Common::String &label = _interaction->hotspotName(h);
 			hotspots.push_back(Graphics::HotspotInfo(_renderer->toWindow(s), label.substr(label.findFirstOf('*') + 1)));
 			_hotspotCount++;
+		}
+	}
+	// Every object a pick takes to a marked hotspot (its name or an ancestor's), for the outline
+	_highlight.clear();
+	for (const Scene::Model *m : _scene->models()) {
+		if (m->hidden)
+			continue;
+		for (uint o = 0; o < m->file.objects.size(); o++) {
+			if (m->hiddenObjects[o] || m->unpickable[o])
+				continue;
+			Common::StringArray names;
+			for (int k = o; k >= 0; k = m->file.objects[k].parent)
+				names.push_back(m->file.objects[k].name);
+			const int h = _interaction->hotspotFor(names);
+			if (h >= 0 && (uint)h < done.size() && done[h])
+				_highlight.push_back(Common::Pair<const Scene::Model *, uint>(m, o));
 		}
 	}
 }

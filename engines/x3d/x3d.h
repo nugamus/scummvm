@@ -256,6 +256,7 @@ private:
 	Camera _hotspotCamera; // the view of the last hotspot overlay
 	uint32 _hotspotTime = 0;
 	uint _hotspotCount = 0; // markers in it
+	Common::Array<Common::Pair<const Scene::Model *, uint> > _highlight; // their objects, outlined
 	Common::String _menuText; // the text edit of the last menu
 	bool _escapeNow = false, _escapeBlocked = false;
 	int _frameDepth = 0; // frames nested in blocking sequences: no saving or loading there
