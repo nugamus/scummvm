@@ -219,6 +219,7 @@ private:
 	Talk *_talk = nullptr;
 	Unit *_unit = nullptr;
 	bool _nativeResolution = false; // the renderer draws at the window's size
+	bool _inGameOver = false;       // no saves until the next scene or load
 	Video::VideoDecoder *_video = nullptr; // the video playing, if any
 	bool _practice = false; // Practice was chosen (u00.md): U00 without the players screen
 	Player _player, _previous;
