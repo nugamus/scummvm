@@ -109,12 +109,16 @@ void U00::start(bool newGame, bool video) {
 	// Monet's first line, then the players screen over the paused scene (ui.md)
 	_vm->runFor(0);
 	say("sb01", false);
+	// The edit starts with the current player's name, or Message.txt line 301 (ui.md)
 	X3DEngine::MenuList list;
-	list.names = _vm->players();
+	Common::String current;
+	list.names = _vm->players(&current);
 	for (uint i = 0; i < list.names.size(); i++)
 		list.rows.push_back(Common::String::format("%d - %s", i + 1, list.names[i].c_str()));
+	if (current.empty())
+		current = list.names.empty() ? "Player's name" : list.names[0];
 	for (;;) {
-		const Common::String c = _vm->runMenu("OptionUser", &list);
+		const Common::String c = _vm->runMenu("OptionUser", &list, current);
 		if (_vm->shouldQuit() || c == "escape") {
 			_vm->quitGame();
 			return;

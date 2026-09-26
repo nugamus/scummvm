@@ -20,6 +20,7 @@
  */
 
 #include "common/file.h"
+#include "common/system.h"
 #include "common/textconsole.h"
 
 #include "graphics/font.h"
@@ -39,6 +40,15 @@ static Graphics::Surface *bitmap(const Common::String &name) {
 	if (!s)
 		warning("Missing bitmap 2dbit/%s", name.c_str());
 	return s;
+}
+
+// The original draws edits and lists with GDI Arial 12 pt (ui.md, Text): a sans-serif here
+static const Graphics::Font *textFont() {
+	return FontMan.getFontByUsage(Graphics::FontManager::kBigGUIFont);
+}
+
+static int textWidth(const Common::String &text, int chars) {
+	return textFont()->getStringWidth(Common::String(text.c_str(), chars));
 }
 
 Frame::~Frame() {
@@ -157,12 +167,12 @@ int Frame::viewAt(const Common::Point &p) const {
 }
 
 int Frame::cursorAt(int view) const {
-	return view >= 0 ? _views[view].cursor : -1;
+	return view >= 0 && _views[view].enabled ? _views[view].cursor : -1;
 }
 
 const Common::String &Frame::commandAt(int view) const {
 	static const Common::String none;
-	return view >= 0 ? _views[view].command : none;
+	return view >= 0 && _views[view].enabled ? _views[view].command : none;
 }
 
 int Frame::editView() const {
@@ -172,25 +182,81 @@ int Frame::editView() const {
 	return -1;
 }
 
+void Frame::setCaret(int pos) {
+	// Every caret move shows the caret and restarts its blink (E-0610)
+	const int e = editView();
+	_caret = _selEnd = _anchor = CLIP<int>(pos, 0, e >= 0 ? _views[e].text.size() : 0);
+	_caretTime = g_system->getMillis();
+}
+
+void Frame::deleteSelection() {
+	Common::String &t = _views[editView()].text;
+	t = Common::String(t.c_str(), _caret) + (t.c_str() + _selEnd);
+	setCaret(_caret);
+}
+
 void Frame::type(char c) {
 	const int e = editView();
-	if (e < 0)
+	// The length test comes before the insert, so one character more than the maximum fits
+	if (e < 0 || _views[e].text.size() > _views[e].maxLength)
 		return;
-	View &v = _views[e];
-	if (v.placeholder) {
-		v.text.clear();
-		v.placeholder = false;
-	}
-	if (v.text.size() < v.maxLength)
-		v.text += c;
+	deleteSelection();
+	_views[e].text.insertChar(c, _caret);
+	setCaret(_caret + 1);
+	textChanged();
 }
 
 void Frame::backspace() {
 	const int e = editView();
-	if (e >= 0 && !_views[e].text.empty()) {
-		_views[e].text.deleteLastChar();
-		_views[e].placeholder = false;
+	if (e < 0)
+		return;
+	if (_caret != _selEnd) {
+		deleteSelection();
+	} else if (_caret > 0) {
+		_views[e].text.deleteChar(_caret - 1);
+		setCaret(_caret - 1);
 	}
+	textChanged();
+}
+
+void Frame::moveCaret(int delta) {
+	if (editView() >= 0)
+		setCaret(delta < 0 ? _caret - 1 : _selEnd + 1);
+}
+
+int Frame::charAt(int x) const {
+	// The first boundary from the left after which the distance stops shrinking
+	const Common::String &t = _views[editView()].text;
+	int best = 0, distance = 10000;
+	for (uint i = 0; i <= t.size(); i++) {
+		const int d = ABS(textWidth(t, i) - x);
+		if (d >= distance)
+			break;
+		best = i;
+		distance = d;
+	}
+	return best;
+}
+
+void Frame::textChanged() {
+	// Players list (cSU#, E-0610): OK dims and stops reacting on an empty name; otherwise
+	// the player of that exact name is selected and scrolled to
+	const int l = listView();
+	const int e = editView();
+	if (l < 0 || e < 0 || _views[l].tag != "cSU#")
+		return;
+	const Common::String &t = _views[e].text;
+	setBitmap(2, t.empty() ? "UserOKN" : "UserOKM");
+	setEnabled(2, !t.empty());
+	_selected = -1;
+	for (uint i = 0; i < _names.size() && !t.empty(); i++) {
+		if (_names[i] == t) {
+			_selected = i;
+			break;
+		}
+	}
+	if (_selected >= 0 && scrollMax() > 0)
+		_scroll = MIN(_selected, scrollMax());
 }
 
 int Frame::indexOf(int id) const {
@@ -205,6 +271,8 @@ void Frame::setBitmap(int id, const Common::String &name) {
 	if (i < 0)
 		return;
 	View &v = _views[i];
+	if (v.bitmapName == name)
+		return;
 	if (v.bitmap) {
 		v.bitmap->free();
 		delete v.bitmap;
@@ -217,6 +285,12 @@ void Frame::setVisible(int id, bool visible) {
 	const int i = indexOf(id);
 	if (i >= 0)
 		_views[i].visible = visible;
+}
+
+void Frame::setEnabled(int id, bool enabled) {
+	const int i = indexOf(id);
+	if (i >= 0)
+		_views[i].enabled = enabled;
 }
 
 int Frame::sliderMax(int id) const {
@@ -235,9 +309,23 @@ void Frame::setSliderValue(int id, int value) {
 		_views[i].value = CLIP(value, 0, sliderMax(id));
 }
 
-bool Frame::press(const Common::Point &p) {
+bool Frame::press(const Common::Point &p, bool shift) {
 	if (pressScroll(p))
 		return true;
+	// The edit: caret to the nearest character boundary, Shift extends, a drag selects
+	const int e = editView();
+	if (e >= 0 && _views[e].visible && Common::Rect(_views[e].x, _views[e].y, _views[e].x + _views[e].w, _views[e].y + _views[e].h).contains(p)) {
+		const int i = charAt(p.x - _views[e].x);
+		if (!shift)
+			setCaret(i);
+		else if (_caret < i)
+			_selEnd = i;
+		else
+			_caret = i;
+		_anchor = i;
+		_editDrag = true;
+		return true;
+	}
 	// A margin steps by 5, the knob starts a drag, the rest of the track does nothing
 	for (uint i = 0; i < _views.size(); i++) {
 		View &v = _views[i];
@@ -266,18 +354,24 @@ void Frame::drag(const Common::Point &p) {
 			s++;
 		_scroll = CLIP(s, 0, max);
 	}
+	if (_editDrag) {
+		const int i = charAt(p.x - _views[editView()].x);
+		_caret = MIN(_anchor, i);
+		_selEnd = MAX(_anchor, i);
+	}
 	if (_dragging < 0)
 		return;
 	View &v = _views[_dragging];
 	v.value = CLIP(p.x - v.margin - v.x, 0, v.w - 2 * v.margin);
 }
 
-void Frame::setText(const Common::String &text, bool placeholder) {
+void Frame::setText(const Common::String &text) {
 	const int e = editView();
-	if (e >= 0) {
-		_views[e].text = text;
-		_views[e].placeholder = placeholder;
-	}
+	if (e < 0)
+		return;
+	_views[e].text = text;
+	setCaret(text.size());
+	textChanged();
 }
 
 int Frame::listView() const {
@@ -287,15 +381,28 @@ int Frame::listView() const {
 	return -1;
 }
 
-void Frame::setList(const Common::Array<Common::String> &rows, int selected) {
+void Frame::setList(const Common::Array<Common::String> &rows, int selected, const Common::Array<Common::String> &names) {
 	_rows = rows;
+	_names = names;
 	_selected = selected;
 	_scroll = CLIP(selected, 0, scrollMax()); // the list scrolls to the selected row
+	textChanged(); // the players list selects the edit's name
+}
+
+void Frame::selectRow(int row) {
+	_selected = row;
+	// Players list: the row's name goes to the edit (E-0610)
+	if (row >= 0 && row < (int)_names.size())
+		setText(_names[row]);
 }
 
 int Frame::scrollMax() const {
+	return MAX(0, scrollRange());
+}
+
+int Frame::scrollRange() const {
 	const int l = listView();
-	return l < 0 ? 0 : MAX(0, (int)_rows.size() - _views[l].h / 32);
+	return l < 0 ? -1 : (int)_rows.size() - _views[l].h / 32;
 }
 
 int Frame::listRowAt(const Common::Point &p) const {
@@ -336,7 +443,7 @@ bool Frame::pressScroll(const Common::Point &p) {
 
 Common::String Frame::text() const {
 	const int e = editView();
-	return e >= 0 && !_views[e].placeholder ? _views[e].text : Common::String();
+	return e >= 0 ? _views[e].text : Common::String();
 }
 
 void Frame::draw(Renderer &r, int xOffset, int hovered) {
@@ -346,42 +453,56 @@ void Frame::draw(Renderer &r, int xOffset, int hovered) {
 			continue;
 		if (v.bitmap)
 			r.drawImage(*v.bitmap, xOffset + v.x + v.bitmapDx, v.y + v.bitmapDy, false);
-		if ((int)i == hovered && v.hover)
+		if ((int)i == hovered && v.hover && v.enabled)
 			r.drawImage(*v.hover, xOffset + v.x + v.hoverDx, v.y + v.hoverDy, false);
 		if (v.slider && v.knob)
 			r.drawImage(*v.knob, xOffset + v.x + v.margin + v.value - 4, v.y, false);
 		if (v.edit) {
-			// The original draws edits with GDI Arial 12 pt (ui.md, Text): a sans-serif here
-			if (v.text.empty() && !v.placeholder && v.tag == "dEU#") {
-				v.text = "Player's name";
-				v.placeholder = true;
-			}
-			const Graphics::Font *font = FontMan.getFontByUsage(Graphics::FontManager::kBigGUIFont);
+			// White on (32, 32, 80) from the left, the selection inverted, a blinking
+			// inverted caret (ui.md, Players screen)
+			const Graphics::Font *font = textFont();
 			Graphics::Surface s;
 			s.create(v.w, v.h, Graphics::PixelFormat::createFormatRGBA32());
-			s.fillRect(Common::Rect(v.w, v.h), s.format.ARGBToColor(255, 31, 33, 80));
-			font->drawString(&s, v.text, 2, (v.h - font->getFontHeight()) / 2, v.w - 4, s.format.ARGBToColor(255, 255, 255, 255));
+			const uint32 back = s.format.ARGBToColor(255, 32, 32, 80), white = s.format.ARGBToColor(255, 255, 255, 255);
+			s.fillRect(Common::Rect(v.w, v.h), back);
+			const int ty = (v.h - font->getFontHeight()) / 2;
+			font->drawString(&s, v.text, 0, ty, v.w, white);
+			const int x0 = textWidth(v.text, _caret);
+			if (_selEnd > _caret) {
+				const Common::String sel(v.text.c_str() + _caret, _selEnd - _caret);
+				s.fillRect(Common::Rect(x0, MAX(0, ty), MIN(v.w, x0 + font->getStringWidth(sel)), MIN(v.h, ty + font->getFontHeight())), white);
+				font->drawString(&s, sel, x0, ty, v.w - x0, back);
+			} else if ((g_system->getMillis() - _caretTime) / kCaretBlink % 2 == 0 && x0 < v.w) {
+				for (int y = 0; y < v.h; y++) {
+					uint32 *px = (uint32 *)s.getBasePtr(x0, y);
+					uint8 a, cr, cg, cb;
+					s.format.colorToARGB(*px, a, cr, cg, cb);
+					*px = s.format.ARGBToColor(255, 255 - cr, 255 - cg, 255 - cb);
+				}
+			}
 			r.drawImage(s, xOffset + v.x, v.y, false);
 			s.free();
 		}
-		if (v.list && !_rows.empty()) {
-			// Rows centred in (0, 32 row, w - 38, 32), keyed over the frame (save.md, Lists)
-			const Graphics::Font *font = FontMan.getFontByUsage(Graphics::FontManager::kBigGUIFont);
+		if (v.list) {
+			// Rows centred in (0, 32 row, w - 38, 32) on an opaque (32, 32, 80) box
+			// (save.md, Lists)
+			const Graphics::Font *font = textFont();
 			Graphics::Surface s;
-			s.create(v.w, v.h, Graphics::PixelFormat::createFormatRGBA32());
-			s.fillRect(Common::Rect(v.w, v.h), s.format.ARGBToColor(255, 255, 255, 255));
+			s.create(v.w - 38, v.h, Graphics::PixelFormat::createFormatRGBA32());
+			s.fillRect(Common::Rect(s.w, s.h), s.format.ARGBToColor(255, 32, 32, 80));
 			for (int shown = 0; shown + _scroll < (int)_rows.size() && (shown + 1) * 32 <= v.h; shown++) {
 				const int row = shown + _scroll;
 				const uint32 color = row == _selected ? s.format.ARGBToColor(255, 247, 196, 90) : s.format.ARGBToColor(255, 135, 186, 235);
-				font->drawString(&s, _rows[row], 0, shown * 32 + (32 - font->getFontHeight()) / 2, v.w - 38, color, Graphics::kTextAlignCenter);
+				font->drawString(&s, _rows[row], 0, shown * 32 + (32 - font->getFontHeight()) / 2, s.w, color, Graphics::kTextAlignCenter);
 			}
-			r.drawImage(s, xOffset + v.x, v.y, true);
+			r.drawImage(s, xOffset + v.x, v.y, false);
 			s.free();
-			const int max = scrollMax();
-			if (v.scrollBar && max > 0) {
+			// The players list draws its bar from max 0 on, the thumb only above (E-0600)
+			const int max = scrollRange();
+			if (v.scrollBar && (max > 0 || (max == 0 && v.tag == "cSU#"))) {
 				const int bx = xOffset + v.x + v.w - v.scrollBar->w;
 				r.drawImage(*v.scrollBar, bx, v.y, false);
-				if (v.scrollThumb) {
+				if (v.scrollThumb && max > 0) {
 					const float f = (v.h - 66) / (float)max;
 					r.drawImage(*v.scrollThumb, bx, (int)(v.y + 33 + _scroll * f) - v.scrollThumb->h / 2, false);
 				}

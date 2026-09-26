@@ -244,16 +244,19 @@ bool X3DEngine::loadMenu() {
 }
 
 // The players and the unit of each one's last save, one "unit name" line per player, in
-// the savefile <target>.players
-void X3DEngine::readPlayers(Common::StringArray &names, Common::Array<int> &units) const {
+// the savefile <target>.players; "*" before the unit marks the current player (ui.md)
+void X3DEngine::readPlayers(Common::StringArray &names, Common::Array<int> &units, Common::String *current) const {
 	Common::ScopedPtr<Common::InSaveFile> in(_saveFileMan->openForLoading(_targetName + ".players"));
 	while (in && !in->eos() && !in->err()) {
 		const Common::String line = in->readLine();
 		const char *space = strchr(line.c_str(), ' ');
 		if (!space || !space[1])
 			continue;
-		units.push_back(atoi(line.c_str()));
+		const bool isCurrent = line.hasPrefix("*");
+		units.push_back(atoi(line.c_str() + (isCurrent ? 1 : 0)));
 		names.push_back(space + 1);
+		if (isCurrent && current)
+			*current = names.back();
 	}
 }
 
@@ -262,14 +265,14 @@ void X3DEngine::writePlayers(const Common::StringArray &names, const Common::Arr
 	if (!out)
 		return;
 	for (uint i = 0; i < names.size(); i++)
-		out->writeString(Common::String::format("%d %s\n", units[i], names[i].c_str()));
+		out->writeString(Common::String::format("%s%d %s\n", names[i] == _playerName ? "*" : "", units[i], names[i].c_str()));
 	out->finalize();
 }
 
-Common::StringArray X3DEngine::players() const {
+Common::StringArray X3DEngine::players(Common::String *current) const {
 	Common::StringArray names;
 	Common::Array<int> units;
-	readPlayers(names, units);
+	readPlayers(names, units, current);
 	return names;
 }
 
@@ -279,13 +282,14 @@ bool X3DEngine::selectPlayer(const Common::String &name) {
 	Common::StringArray names;
 	Common::Array<int> units;
 	readPlayers(names, units);
-	for (const Common::String &n : names)
-		if (n == name)
-			return false;
-	names.push_back(name);
-	units.push_back(0);
+	// The selected player becomes the current one, which the players screen offers next time
+	const bool isNew = Common::find(names.begin(), names.end(), name) == names.end();
+	if (isNew) {
+		names.push_back(name);
+		units.push_back(0);
+	}
 	writePlayers(names, units);
-	return true;
+	return isNew;
 }
 
 Common::Error X3DEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
@@ -801,12 +805,12 @@ void X3DEngine::setView(const float *position, float yaw, float pitch) {
 	_previous = _player;
 }
 
-Common::String X3DEngine::runMenu(const Common::String &name, MenuList *list, const Common::String &placeholder) {
+Common::String X3DEngine::runMenu(const Common::String &name, MenuList *list, const Common::String &text) {
 	Frame frame;
 	if (!frame.load(name))
 		return "escape";
-	if (!placeholder.empty())
-		frame.setText(placeholder, true);
+	if (!text.empty())
+		frame.setText(text);
 	const Common::String result = runFrame(frame, list);
 	debugC(1, kDebugMenu, "menu %s: %s", name.c_str(), result.c_str());
 	return result;
@@ -814,8 +818,10 @@ Common::String X3DEngine::runMenu(const Common::String &name, MenuList *list, co
 
 Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout) {
 	if (list)
-		frame.setList(list->rows, list->selected);
+		frame.setList(list->rows, list->selected, list->names);
 	const int x2d = (_renderer->width() - 640) / 2;
+	uint32 lastPress = 0; // a second press on a players row within 500 ms and 4 px selects
+	Common::Point lastPoint;
 	CursorMan.showMouse(true);
 	const uint32 start = _system->getMillis();
 	_menuView = -1;
@@ -853,11 +859,18 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 				const Common::Point p(_mouse.x - x2d, _mouse.y);
 				const int row = list ? frame.listRowAt(p) : -1;
 				if (row >= 0) {
-					list->selected = row;
 					frame.selectRow(row);
-					if (row < (int)list->names.size())
-						frame.setText(list->names[row]);
-				} else if (!frame.press(p)) {
+					// Windows' double click on the players list: SelectUser (ui.md)
+					const uint32 now = _system->getMillis();
+					if (!list->names.empty() && lastPress && now - lastPress <= 500 &&
+						ABS(p.x - lastPoint.x) <= 2 && ABS(p.y - lastPoint.y) <= 2 && frame.selectedRow() >= 0) {
+						result = "SelectUser";
+						lastPress = 0;
+					} else {
+						lastPress = now;
+						lastPoint = p;
+					}
+				} else if (!frame.press(p, _system->getEventManager()->getModifierState() & Common::KBD_SHIFT)) {
 					_menuView = frame.viewAt(p);
 					result = frame.commandAt(_menuView);
 				}
@@ -875,6 +888,8 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 					result = "key";
 				else if (e.kbd.keycode == Common::KEYCODE_BACKSPACE)
 					frame.backspace();
+				else if (e.kbd.keycode == Common::KEYCODE_LEFT || e.kbd.keycode == Common::KEYCODE_RIGHT)
+					frame.moveCaret(e.kbd.keycode == Common::KEYCODE_LEFT ? -1 : 1);
 				else if (e.kbd.ascii >= 32 && e.kbd.ascii < 127)
 					frame.type(e.kbd.ascii);
 			}
@@ -904,6 +919,8 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 		_system->delayMillis(10);
 	}
 	_menuText = frame.text();
+	if (list)
+		list->selected = frame.selectedRow();
 	_last = _system->getMillis();
 	return result;
 }
