@@ -1,7 +1,9 @@
 MODULE := engines/peintre
 
 MODULE_OBJS = \
+	bfg.o \
 	metaengine.o \
+	obj3d.o \
 	peintre.o
 
 # This module can be built as a plugin

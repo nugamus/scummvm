@@ -36,6 +36,8 @@ public:
 	Common::Error run() override;
 
 private:
+	void loadAllScenes();
+
 	const ADGameDescription *_gameDescription;
 };
 
