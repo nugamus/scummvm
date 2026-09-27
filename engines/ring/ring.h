@@ -43,8 +43,20 @@ namespace Ring {
 class Cursors;
 class Resources;
 class World;
+struct HotSpot;
 struct Movability;
 struct Rotation;
+
+/** The drag control, app+0x99 (spec/cursor.md, "Dragging"). */
+struct Drag {
+	bool active = false;
+	int object = 0, value = 0, puzzle = 0;
+	bool onPuzzle = true;
+	Common::Point press, current;
+	int mode = 1; ///< 2: moves count inside `limit` instead of the hot spot
+	Common::Rect limit = Common::Rect(0, 16, 640, 464);
+	const HotSpot *hotSpot = nullptr;
+};
 
 /**
  * The Ring engine (Arxel Tribe, 1999). Behaviour follows the specs in the research
@@ -91,6 +103,13 @@ public:
 
 	const Common::String &languageFolder() const { return _languageFolder; }
 
+	Drag &drag() { return _drag; }
+
+	/** The preferences (`aPreFer`, sy.md "Preferences"): volume, dialogue volume, stereo, subtitles. */
+	const int *preferences() const { return _preferences; }
+	/** `aPreFer::Save`: stored and written (the game domain's `preferences`, in aPre.ini's format). */
+	void savePreferences(int volume, int dialogue, int stereo, int subtitles);
+
 	/** `GetMultiLanMes` (spec/text.md): loads the key's title and text from aMes.ini. */
 	void message(const char *key);
 	const Common::String &messageTitle() const { return _messageTitle; }
@@ -98,13 +117,23 @@ public:
 
 private:
 	void showStartupScreens();
+	/** aPre.ini's four values: the game domain's `preferences` once saved, else the game's aPre.ini. */
+	void loadPreferences();
 	void addCursors();
 	/** One idle-loop frame (spec/boot.md, "Frame"). */
 	void frame();
-	/** Hot-spot tracking, 0x408dd0 (spec/cursor.md). */
+	/** Hot-spot tracking, 0x408dd0 (spec/cursor.md); a drag replaces the cursor last. */
 	void track(int x, int y);
-	/** `MouseLeftEvent` (spec/cursor.md). */
+	/** The tracking search; returns the hot spot under the mouse, if any. */
+	const HotSpot *trackHit(int x, int y);
+	/** Left button down (0x409630): button-down events and drag starts (spec/cursor.md, "Dragging"). */
+	void buttonDown(int x, int y);
+	/** 0x409520, every frame while the button is down: the drag follows the mouse. */
+	void dragMove(int x, int y);
+	/** `MouseLeftEvent` on release (spec/cursor.md). */
 	void click(int x, int y);
+	/** The drag event (0x40c060) to the zone's handler. */
+	void dragEvent(int phase);
 	/** Through a movability of the current rotation or puzzle (spec/rotation.md). */
 	void move(const Movability &m);
 	/** 0x4101c0: an animated turn of the current rotation, one step per frame. */
@@ -129,8 +158,14 @@ private:
 	RotationView _view;
 	uint32 _panTime = 0; ///< looking around advances once per 1/60 s (Q-0011)
 	Common::Point _mouse;
-	bool _clicked = false; ///< a left button press at _clickPos not handled yet
-	Common::Point _clickPos;
+	struct Button {
+		bool down;
+		Common::Point pos;
+	};
+	Common::Array<Button> _buttons; ///< left button presses and releases not handled yet
+	bool _buttonDown = false;
+	Drag _drag;
+	int _preferences[4] = { 100, 100, -1, 1 };
 	Common::Array<int> _keys; ///< key codes not handled yet
 	Common::String _languageFolder;
 	bool _escapeDown = false;

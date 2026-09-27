@@ -72,10 +72,10 @@ void RingEngine::pollEvents(uint32 ms) {
 			_escapeDown = false;
 		else if (event.type == Common::EVENT_MOUSEMOVE && !_scripted)
 			_mouse = event.mouse;
-		else if (event.type == Common::EVENT_LBUTTONDOWN && event.mouse.y < 465) {
-			_mouse = event.mouse;
-			_clickPos = event.mouse;
-			_clicked = true;
+		else if (event.type == Common::EVENT_LBUTTONDOWN || event.type == Common::EVENT_LBUTTONUP) {
+			if (!_scripted)
+				_mouse = event.mouse;
+			_buttons.push_back(Button{ event.type == Common::EVENT_LBUTTONDOWN, event.mouse });
 		}
 	}
 	if (ms)
@@ -208,8 +208,9 @@ Common::Error RingEngine::run() {
 	if (!ConfMan.getBool("dev_skip_startup"))
 		showStartupScreens();
 
+	loadPreferences();
 	startMenu(false);
-	_clicked = false;
+	_buttons.clear();
 	// Development: dev_input="ms:move x y;ms:click x y;ms:key code 0;..." replays input at ms after the menu opens.
 	Common::StringArray script;
 	for (const Common::String &step : Common::StringTokenizer(ConfMan.get("dev_input"), ";").split())
@@ -230,9 +231,12 @@ Common::Error RingEngine::run() {
 			if (!strcmp(what, "key")) {
 				key(x);
 			} else {
+				// "down" and "up" press and release the left button; "click" does both.
 				_mouse = Common::Point(x, y);
-				if (!strcmp(what, "click"))
-					click(x, y);
+				if (!strcmp(what, "down") || !strcmp(what, "click"))
+					_buttons.push_back(Button{ true, _mouse });
+				if (!strcmp(what, "up") || !strcmp(what, "click"))
+					_buttons.push_back(Button{ false, _mouse });
 			}
 			script.remove_at(0);
 		}
@@ -240,9 +244,16 @@ Common::Error RingEngine::run() {
 			int k = _keys.remove_at(0);
 			key(k);
 		}
-		if (_clicked) {
-			_clicked = false;
-			click(_clickPos.x, _clickPos.y);
+		while (!_buttons.empty()) {
+			// The button state follows every event; handlers only see y < 465 (spec/boot.md, "Input").
+			Button b = _buttons.remove_at(0);
+			_buttonDown = b.down;
+			if (b.pos.y >= 465)
+				continue;
+			if (b.down)
+				buttonDown(b.pos.x, b.pos.y);
+			else
+				click(b.pos.x, b.pos.y);
 		}
 		frame();
 		g_system->delayMillis(10);
@@ -264,6 +275,28 @@ void RingEngine::key(int code) {
 			return;
 		}
 	}
+}
+
+void RingEngine::loadPreferences() {
+	Common::String line = ConfMan.get("preferences");
+	Common::File f;
+	if (line.empty() && f.open("aPre.ini"))
+		line = f.readLine();
+	int v[4];
+	if (sscanf(line.c_str(), "%d %d %d %d", &v[0], &v[1], &v[2], &v[3]) == 4)
+		memcpy(_preferences, v, sizeof(v));
+	else
+		warning("Ring: cannot read the preferences (aPre.ini)");
+	// ponytail: applying them (volumes, stereo, subtitles) comes with spec/sound.md and the dialogues
+}
+
+void RingEngine::savePreferences(int volume, int dialogue, int stereo, int subtitles) {
+	_preferences[0] = volume;
+	_preferences[1] = dialogue;
+	_preferences[2] = stereo;
+	_preferences[3] = subtitles;
+	ConfMan.set("preferences", Common::String::format("%d %d %d %d", volume, dialogue, stereo, subtitles));
+	ConfMan.flushToDisk();
 }
 
 void RingEngine::message(const char *key) {
@@ -391,6 +424,8 @@ void RingEngine::requestClose() {
 
 void RingEngine::frame() {
 	drawView();
+	if (_buttonDown)
+		dragMove(_mouse.x, _mouse.y);
 	track(_mouse.x, _mouse.y);
 	_cursors->draw(*_resources, _screen, _mouse.x, _mouse.y, g_system->getMillis());
 	present();
@@ -487,17 +522,23 @@ static void onClick(RingEngine *vm, int zone, int object, int value) {
 }
 
 void RingEngine::track(int x, int y) {
-	// ponytail: the inventory, rotations and movabilities join with their specs
+	const HotSpot *h = trackHit(x, y);
+	if (_drag.active)
+		_cursors->set(h == _drag.hotSpot ? 4 : 3);
+}
+
+const HotSpot *RingEngine::trackHit(int x, int y) {
+	// ponytail: the inventory joins with its spec
 	if (Puzzle *p1 = _world->puzzle(1)) {
 		if (const Accessibility *acc = _world->hit(*p1, x, y)) {
 			_cursors->set(acc->hotSpot.cursor);
 			onAccessibility(this, kZoneSY, acc->object, acc->hotSpot.value);
-			return;
+			return &acc->hotSpot;
 		}
 		if (p1->mode == 2) {
 			_cursors->set(0x32);
 			SY::onNothing(this);
-			return;
+			return nullptr;
 		}
 	}
 	Rotation *r = _mode == 1 ? _world->rotation(_rotation) : nullptr;
@@ -506,28 +547,97 @@ void RingEngine::track(int x, int y) {
 		if (const Accessibility *acc = World::hit(r->accessibilities, pt.x, pt.y)) {
 			_cursors->set(acc->hotSpot.cursor);
 			onAccessibility(this, _zone, acc->object, acc->hotSpot.value);
-			return;
+			return &acc->hotSpot;
 		}
 		if (const Movability *m = World::hit(r->movabilities, pt.x, pt.y)) {
 			_cursors->set(m->hotSpot.cursor); // ponytail: the "on a movability" event comes with the zone handlers
-			return;
+			return &m->hotSpot;
 		}
 	} else if (Puzzle *p = _world->puzzle(_puzzle)) {
 		if (const Accessibility *acc = _world->hit(*p, x, y)) {
 			_cursors->set(acc->hotSpot.cursor);
 			onAccessibility(this, _zone, acc->object, acc->hotSpot.value);
-			return;
+			return &acc->hotSpot;
 		}
 		if (const Movability *m = World::hit(p->movabilities, x, y)) {
 			_cursors->set(m->hotSpot.cursor);
-			return;
+			return &m->hotSpot;
 		}
 	}
 	_cursors->set(0x32);
 	onNothing(this, _zone);
+	return nullptr;
+}
+
+void RingEngine::buttonDown(int x, int y) {
+	// ponytail: not while the inventory is shown (its spec); the button-down event (bit 1)
+	// has no handler in the zones done so far
+	Puzzle *p1 = _world->puzzle(1);
+	Puzzle *p = _world->puzzle(_puzzle);
+	Rotation *r = _mode == 1 ? _world->rotation(_rotation) : nullptr;
+	const Accessibility *acc = nullptr;
+	int id = 0;
+	bool onPuzzle = true;
+	Common::Point at(x, y);
+	if (p1 && (acc = _world->hit(*p1, x, y)))
+		id = 1;
+	else if (p1 && p1->mode == 2)
+		return;
+	else if (p && _mode == 2 && (acc = _world->hit(*p, x, y)))
+		id = p->id;
+	else if (r && !r->paused && r->panorama) {
+		at = _view.toPanorama(*r->panorama, x, y);
+		if ((acc = World::hit(r->accessibilities, at.x, at.y))) {
+			id = r->id;
+			onPuzzle = false;
+		}
+	}
+	Object *o = acc ? _world->object(acc->object) : nullptr;
+	if (o && (o->flags & 4)) {
+		_drag = Drag();
+		_drag.active = true;
+		_drag.object = o->id;
+		_drag.value = acc->hotSpot.value;
+		_drag.puzzle = id;
+		_drag.onPuzzle = onPuzzle;
+		_drag.press = _drag.current = at;
+		_drag.hotSpot = &acc->hotSpot;
+		// Cursors 3 and 4: the object's passive and active drag cursors (0x40b9b0).
+		for (int i = 0; i < 2; i++) {
+			const DragCursor &d = o->dragCursors[i];
+			_cursors->remove(3 + i);
+			if (d.kind == 3)
+				_cursors->add(3 + i, (o->icon.empty() ? "dummy" : o->icon) + (i ? "_da" : "_dp"), 3);
+			else if (d.kind == 4)
+				_cursors->add(3 + i, o->icon, 4, d.frames, d.fps);
+			_cursors->setOffset(3 + i, d.offsetX, d.offsetY);
+		}
+		dragEvent(1);
+	}
+	track(x, y);
+}
+
+void RingEngine::dragMove(int x, int y) {
+	// The screen position, also against a rotation's hot spot, as 0x409520 does.
+	if (!_drag.active || !(_drag.mode == 2 ? _drag.limit : _drag.hotSpot->rect).contains(x, y))
+		return;
+	_drag.current = Common::Point(x, y);
+	dragEvent(3);
+}
+
+void RingEngine::dragEvent(int phase) {
+	if ((_drag.puzzle == 1 && _drag.onPuzzle) || _zone == kZoneSY)
+		SY::onDrag(this, _drag.object, phase);
 }
 
 void RingEngine::click(int x, int y) {
+	if (_drag.active) {
+		int mode = _drag.mode;
+		dragEvent(2);
+		_drag = Drag();
+		if (mode == 2)
+			return;
+	}
 	Puzzle *p1 = _world->puzzle(1);
 	Puzzle *p = _mode == 2 ? _world->puzzle(_puzzle) : nullptr;
 	if (p1 && p1->mode != 2) {

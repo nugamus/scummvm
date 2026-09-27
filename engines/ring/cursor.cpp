@@ -45,6 +45,19 @@ Cursors::Cursor *Cursors::find(int id) {
 	return nullptr;
 }
 
+void Cursors::remove(int id) {
+	for (uint i = 0; i < _cursors.size(); i++) {
+		if (_cursors[i].id != id)
+			continue;
+		_cursors.remove_at(i);
+		if (_current == (int)i)
+			_current = -1;
+		else if (_current > (int)i)
+			_current--;
+		return;
+	}
+}
+
 void Cursors::setOffset(int id, int x, int y) {
 	if (Cursor *c = find(id)) {
 		c->offsetX = x;

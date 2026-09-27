@@ -179,10 +179,22 @@ void World::apply(int zone, const SetupCall &c) {
 		// Name and icon come from aObj.ini when present (spec/api.md); not needed yet.
 		Common::SharedPtr<Object> o(new Object());
 		o->id = a[0];
+		o->icon = str(2);
 		o->flags = (byte)a[3];
 		_objects.push_back(o);
 		break;
 	}
+	case kObjSetPasDraCur:
+	case kObjSetActDraCur:
+		if (Object *o = object(a[0])) {
+			DragCursor &d = o->dragCursors[c.call == kObjSetActDraCur];
+			d.offsetX = a[1];
+			d.offsetY = a[2];
+			d.frames = a[3];
+			d.kind = a[4];
+			d.fps = asFloat(a[5]);
+		}
+		break;
 	case kObjAddPuzAcc: {
 		Object *o = object(a[0]);
 		Puzzle *p = puzzle(a[1]);
@@ -280,6 +292,14 @@ void World::showPresentation(int id, int presentation, bool shown) {
 	for (uint i = 0; i < o->presentations.size(); i++)
 		if (presentation < 0 || (int)i == presentation)
 			o->presentations[i].shown = shown;
+}
+
+PuzzleImage *World::image(int id, int presentation, int index) {
+	for (auto &p : _puzzles)
+		for (auto &img : p->images)
+			if (img->object == id && img->presentation == presentation && index-- == 0)
+				return img.get();
+	return nullptr;
 }
 
 void World::hideAndFree(int id) {
