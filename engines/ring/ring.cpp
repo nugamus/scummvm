@@ -466,6 +466,16 @@ void RingEngine::drawView() {
 			_panTime = now;
 		_view.update(*r, *r->panorama);
 		_view.draw(*r->panorama, _screen, 16);
+		// 3D sounds follow the view (0x41ed80, every frame).
+		float alpha = r->alpha + 135.0f;
+		if (alpha > 360.0f)
+			alpha -= 360.0f;
+		for (auto &i : r->sounds) {
+			if (_sounds->typeOf(i->sound) == kSoundAmbientEffect) {
+				i->pan = i->pan3D(alpha, _preferences[2]);
+				_sounds->setPan(i->sound, i->pan);
+			}
+		}
 	} else if (Puzzle *p = _world->puzzle(_puzzle)) {
 		_world->draw(*p, *_resources, _screen);
 	}
@@ -513,7 +523,8 @@ void RingEngine::move(const Movability &m) {
 	if (to) {
 		to->setAlpha(m.alpha2);
 		for (auto &i : to->sounds)
-			i->pan = i->pan3D(to->alpha + 135.0f, _preferences[2]); // ponytail: 0x41ee10 checks the sound's type 3
+			if (_sounds->typeOf(i->sound) == kSoundAmbientEffect)
+				i->pan = i->pan3D(to->alpha + 135.0f, _preferences[2]);
 		_sounds->prepareTransition(&to->sounds);
 	} else if (toPuzzle) {
 		_sounds->prepareTransition(&toPuzzle->sounds);
