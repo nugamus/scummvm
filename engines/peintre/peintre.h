@@ -94,7 +94,7 @@ public:
 	void waitTick(uint32 ms);
 	/**
 	 * Dev harness: dev_commands=ms:command[;ms:command...] from the start of run():
-	 * click x y, move x y, key <name>, hold <name> ms, type <text>, snap <file.png>, quit.
+	 * click x y, tap x y (down for one poll), move x y, key <name>, hold <name> ms, type <text>, snap <file.png>, quit.
 	 * Input is pushed as events, so movies and every screen see it.
 	 */
 	void devStep();
