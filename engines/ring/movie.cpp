@@ -31,6 +31,7 @@
 #include "ring/detection.h"
 #include "ring/movie.h"
 #include "ring/ring.h"
+#include "ring/sound.h"
 
 namespace Ring {
 
@@ -65,10 +66,14 @@ bool playMovie(RingEngine *vm, const Common::Path &path, int soundChannel, float
 	uint32 shown = 0, start = 0;
 	bool started = false;
 	Graphics::ManagedSurface &screen = vm->screen();
+	// A pending ambient transition runs over the ride's frames (aCinMov::Init / Play, spec/sound.md).
+	vm->sounds().beginRide(frames);
 
 	while (shown < frames && !f.eos() && !vm->shouldQuit()) {
-		if (vm->escapePressed())
+		if (vm->escapePressed()) {
+			vm->sounds().rideStep(frames);
 			break;
+		}
 		byte tag = f.readByte();
 		if (f.eos())
 			break;
@@ -125,6 +130,7 @@ bool playMovie(RingEngine *vm, const Common::Path &path, int soundChannel, float
 				}
 				vm->present();
 			}
+			vm->sounds().rideStep(shown);
 			shown++;
 		} else {
 			warning("Ring: unknown chunk %02x in %s", tag, path.toString().c_str());

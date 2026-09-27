@@ -30,7 +30,9 @@
 
 namespace Ring {
 
-void World::setUp() {
+void World::setUp(Sounds *sounds, int lr) {
+	_sounds = sounds;
+	_lr = lr;
 	for (int zone = kZoneSY; zone <= kZoneN2; zone++) {
 		uint count;
 		const SetupCall *calls = zoneSetup(zone, count);
@@ -264,6 +266,60 @@ void World::apply(int zone, const SetupCall &c) {
 	case kObjPreSho:
 		showPresentation(a[0], c.argc > 1 ? a[1] : -1, true);
 		break;
+	case kSouAdd:
+		if (_sounds)
+			_sounds->add(a[0], a[1], str(2));
+		break;
+	case kSouSet:
+		if (_sounds)
+			_sounds->setVolume(a[0], a[1]);
+		break;
+	case kPuzAddAmbSou:
+	case kRotAddAmbSou:
+	case kPuzAdd3DSou:
+	case kRotAdd3DSou: {
+		// (owner, sound, volume, pan, same, leave, fade) or (owner, sound, same, leave, fade, volume, angle, amplitude)
+		bool puz = c.call == kPuzAddAmbSou || c.call == kPuzAdd3DSou;
+		Puzzle *p = puz ? puzzle(a[0]) : nullptr;
+		Rotation *r = puz ? nullptr : rotation(a[0]);
+		if ((!p && !r) || a[c.call == kPuzAddAmbSou || c.call == kRotAddAmbSou ? 6 : 4] < 2)
+			break;
+		Common::SharedPtr<SoundItem> item(new SoundItem());
+		item->sound = a[1];
+		if (c.call == kPuzAddAmbSou || c.call == kRotAddAmbSou) {
+			item->volume = a[2];
+			item->pan = a[3];
+			item->sameMode = a[4];
+			item->leaveMode = a[5];
+			item->fade = a[6] - 1;
+		} else {
+			item->sameMode = a[2];
+			item->leaveMode = a[3];
+			item->fade = a[4] - 1;
+			item->volume = a[5];
+			float angle = asFloat(a[6]);
+			if (a[7] >= 0 && a[7] <= 100)
+				item->amplitude = a[7];
+			if (angle >= -360.0f && angle <= 360.0f)
+				item->offset = _lr * angle * 0.0174532889f;
+			// A rotation's pan from its current angle (unset before the zone sets it), a puzzle's from 0.
+			item->pan = item->pan3D(r ? r->alpha + 135.0f : 0.0f, _lr);
+		}
+		(p ? p->sounds : r->sounds).push_back(item);
+		break;
+	}
+	case kPuzSetAmbSouOff:
+	case kRotSetAmbSouOff:
+	case kPuzSet3DSouOff:
+	case kRotSet3DSouOff: {
+		bool puz = c.call == kPuzSetAmbSouOff || c.call == kPuzSet3DSouOff;
+		SoundItems *list = puz ? (puzzle(a[0]) ? &puzzle(a[0])->sounds : nullptr) : (rotation(a[0]) ? &rotation(a[0])->sounds : nullptr);
+		if (list)
+			for (auto &i : *list)
+				if (i->sound == a[1])
+					i->active = false;
+		break;
+	}
 	case kObjSetAccOff:
 		setAccessibilities(a[0], false, a[1], a[2]);
 		break;

@@ -36,11 +36,15 @@ void onNothing(RingEngine *vm);
 void onClick(RingEngine *vm, int object, int value);
 /** The drag event (0x4331b0): phase 1 press, 2 release, 3 move. */
 void onDrag(RingEngine *vm, int object, int phase);
+/** The sound event (0x433cf0). */
+void onSound(RingEngine *vm, int id, int type, int reason, int ended);
 }
 
 namespace AS {
 /** GameSetZoneAS (0x437ba0): entering the zone at `entry` (999: a new game). */
 void enter(RingEngine *vm, int entry);
+/** The sound event (0x437190). */
+void onSound(RingEngine *vm, int id, int type, int reason, int ended);
 }
 
 } // End of namespace Ring
