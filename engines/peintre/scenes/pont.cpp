@@ -105,7 +105,7 @@ public:
 					if (!w.var(kBridgeDown)) {
 						startSound(w, "pontlev2");
 						w.anims[kAnimBridge].playing = true;
-						w.vm()->writeResume(0);
+						w.autosave();
 					}
 					w.var(kHandleFitted) = 1;
 				} else {

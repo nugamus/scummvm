@@ -117,13 +117,13 @@ public:
 					w.var(kFaggotBurnt) = 1;
 					scrollUVs(w, _fire, 0, 0x550000);
 					w.objects[kBuche].cursorType = 4;
-					w.vm()->writeResume(0);
+					w.autosave();
 				} else if (h >= 0 && h == _fire && carried == "buche") {
 					startSound(w, "feu", true);
 					w.var(kLogBurns) = 1;
 					w.var(kLit) = 1;
 					_kettleTicks = 0;
-					w.vm()->writeResume(0);
+					w.autosave();
 				} else {
 					w.setHidden(w.carriedNode(), false);
 				}
