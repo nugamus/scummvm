@@ -20,9 +20,14 @@
  */
 
 #include "common/savefile.h"
+#include "common/translation.h"
 #include "common/system.h"
 
 #include "engines/advancedDetector.h"
+
+#include "backends/keymapper/action.h"
+#include "backends/keymapper/keymap.h"
+#include "backends/keymapper/standard-actions.h"
 
 #include "peintre/detection.h"
 #include "peintre/peintre.h"
@@ -78,6 +83,42 @@ public:
 		}
 		Common::sort(list.begin(), list.end(), SaveStateDescriptorSlotComparator());
 		return list;
+	}
+
+	/**
+	 * The original's keys (movement.md, ui.md) as remappable actions. Each action carries
+	 * the key it stands for, and the engine treats it as that key (pollInput).
+	 */
+	Common::KeymapArray initKeymaps(const char *target) const override {
+		using namespace Common;
+		Keymap *keymap = new Keymap(Keymap::kKeymapTypeGame, "peintre", _("Game keymappings"));
+		static const struct {
+			const char *id, *label, *key, *joy;
+			KeyCode code;
+		} actions[] = {
+			{ "FORWARD", _s("Walk forward"), "UP", "JOY_UP", KEYCODE_UP },
+			{ "BACKWARD", _s("Walk backward"), "DOWN", "JOY_DOWN", KEYCODE_DOWN },
+			{ "LEFT", _s("Turn left"), "LEFT", "JOY_LEFT", KEYCODE_LEFT },
+			{ "RIGHT", _s("Turn right"), "RIGHT", "JOY_RIGHT", KEYCODE_RIGHT },
+			{ "LOOKUP", _s("Look up"), "PAGEUP", "JOY_LEFT_SHOULDER", KEYCODE_PAGEUP },
+			{ "LOOKDOWN", _s("Look down"), "PAGEDOWN", "JOY_RIGHT_SHOULDER", KEYCODE_PAGEDOWN },
+			{ "INVENTORY", _s("Inventory"), "SPACE", "JOY_X", KEYCODE_SPACE },
+			{ "RETURN", _s("Back to the museum"), "BACKSPACE", "JOY_B", KEYCODE_BACKSPACE },
+			{ "MENU", _s("Options"), "ESCAPE", "JOY_START", KEYCODE_ESCAPE },
+		};
+		for (const auto &a : actions) {
+			Action *act = new Action(a.id, _(a.label));
+			act->setCustomEngineActionEvent(a.code);
+			act->addDefaultInputMapping(a.key);
+			act->addDefaultInputMapping(a.joy);
+			keymap->addAction(act);
+		}
+		Action *click = new Action(kStandardActionLeftClick, _("Click"));
+		click->setLeftClickEvent();
+		click->addDefaultInputMapping("MOUSE_LEFT");
+		click->addDefaultInputMapping("JOY_A");
+		keymap->addAction(click);
+		return Keymap::arrayOf(keymap);
 	}
 
 	bool removeSaveState(const char *target, int slot) const override {
