@@ -37,7 +37,7 @@ namespace {
 /**
  * Dev harness around the first scene loaded (game domain of the dev ini):
  * dev_vars=addr=value,... sets 3D block words before its init, dev_camera=x,y,z,pitch,yaw
- * places the viewer after it. Debug level 2 lists where the table objects show every 150
+ * places the viewer after it, dev_look=<node>[,distance] in front of a node. Debug level 2 lists where the table objects show every 150
  * ticks, level 3 logs the camera every 15 ticks.
  */
 class DevScript : public SceneScript {
@@ -56,6 +56,8 @@ public:
 			}
 		}
 		_s->init(w);
+		if (first && ConfMan.hasKey("dev_look"))
+			lookAt(w, ConfMan.get("dev_look"));
 		if (first && ConfMan.hasKey("dev_camera")) {
 			int32 c[5] = { 0, 0, 0, 0, 0 };
 			Common::StringTokenizer t(ConfMan.get("dev_camera"), ",");
@@ -73,7 +75,7 @@ public:
 
 	void frame(World &w) override {
 		_s->frame(w);
-		if (gDebugLevel >= 2 && ++_ticks % 150 == 20)
+		if (gDebugLevel >= 2 && ++_ticks % 150 == 60)
 			listObjects(w);
 		if (gDebugLevel >= 3 && _ticks % 15 == 0) {
 			const Camera &c = w.camera();
@@ -82,6 +84,85 @@ public:
 	}
 
 private:
+	/** The centre of a node's vertices in world space (render3d's parent x local order). */
+	static bool worldCentre(World &w, int node, double c[3]) {
+		const Common::Array<Node> &nodes = w.scene3D().nodes;
+		if (node < 0)
+			return false;
+		Common::Array<int> chain;
+		for (int k = node; k >= 0; k = nodes[k].parent)
+			chain.insert_at(0, k);
+		double r[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 }, p[3] = { 0, 0, 0 };
+		for (int k : chain) {
+			const Node &nd = nodes[k];
+			double l[9], nr[9], np[3];
+			for (int j = 0; j < 9; j++)
+				l[j] = nd.rotation[j] / 32768.0;
+			const double lp[3] = { (double)nd.position.x, (double)nd.position.y, (double)nd.position.z };
+			for (int a = 0; a < 3; a++) {
+				for (int b = 0; b < 3; b++)
+					nr[3 * a + b] = r[3 * a] * l[b] + r[3 * a + 1] * l[3 + b] + r[3 * a + 2] * l[6 + b];
+				np[a] = p[a] + r[3 * a] * lp[0] + r[3 * a + 1] * lp[1] + r[3 * a + 2] * lp[2];
+			}
+			memcpy(r, nr, sizeof(r));
+			memcpy(p, np, sizeof(p));
+		}
+		debugC(1, kDebugScript, "dev_look: %s has %d vertices, %d children", nodes[node].name.c_str(),
+			   nodes[node].vertices.size(), nodes[node].children.size());
+		if (nodes[node].vertices.empty()) {
+			memcpy(c, p, sizeof(p));
+			return true;
+		}
+		c[0] = c[1] = c[2] = 0;
+		for (const Vec3i &v : nodes[node].vertices) {
+			c[0] += r[0] * v.x + r[1] * v.y + r[2] * v.z + p[0];
+			c[1] += r[3] * v.x + r[4] * v.y + r[5] * v.z + p[1];
+			c[2] += r[6] * v.x + r[7] * v.y + r[8] * v.z + p[2];
+		}
+		for (int i = 0; i < 3; i++)
+			c[i] /= nodes[node].vertices.size();
+		return true;
+	}
+
+	/** dev_look=<node>[,distance[,yaw]]: the viewer `distance` (default 1200) in front of a node. */
+	static void lookAt(World &w, const Common::String &arg) {
+		Common::StringTokenizer t(arg, ",");
+		const Common::String name = t.nextToken();
+		const double dist = t.empty() ? 1200 : atoi(t.nextToken().c_str());
+		double c[3];
+		if (!worldCentre(w, w.findObject(name), c)) {
+			warning("dev_look: no node %s", name.c_str());
+			return;
+		}
+		// The yaw whose forward (x, z) points best away from the node's approach side:
+		// try each yaw, stand `dist` behind the node along it, keep the first that sees it.
+		Camera &cam = w.camera();
+		int32 best = 0;
+		double bestDot = -2;
+		const double dir[2] = { c[0] - cam.x, c[2] - cam.z };
+		const double len = sqrt(dir[0] * dir[0] + dir[1] * dir[1]);
+		for (int32 yaw = 0; yaw < 4096; yaw += 8) {
+			int32 m[9];
+			cameraMatrix(0, yaw, 0, m);
+			const double d = len > 0 ? (m[2] * dir[0] + m[8] * dir[1]) / 32768.0 / len : m[8] / 32768.0;
+			if (d > bestDot) {
+				bestDot = d;
+				best = yaw;
+			}
+		}
+		if (!t.empty())
+			best = atoi(t.nextToken().c_str()) & 0xFFF;
+		int32 m[9];
+		cameraMatrix(0, best, 0, m);
+		cam.x = (int32)(c[0] - m[2] / 32768.0 * dist);
+		cam.z = (int32)(c[2] - m[8] / 32768.0 * dist);
+		cam.y = (int32)c[1] - 700; // eye height over an object on the floor
+		cam.pitch = 0;
+		cam.yaw = best;
+		debugC(1, kDebugScript, "dev_look %s: centre %d, %d, %d; camera %d, %d, %d yaw %d", name.c_str(),
+			   (int)c[0], (int)c[1], (int)c[2], cam.x, cam.y, cam.z, best);
+	}
+
 	/** Logs where each table object shows on screen: the hit pixel nearest its centre. */
 	void listObjects(World &w) {
 		const int c = w.pickAt(320, 240);
@@ -141,7 +222,7 @@ SceneScript *createScript(int scene, const Common::String &bundle) {
 
 SceneScript *createSceneScript(int scene, const Common::String &bundle) {
 	SceneScript *s = createScript(scene, bundle);
-	return s && (ConfMan.hasKey("dev_vars") || ConfMan.hasKey("dev_camera") || gDebugLevel >= 2) ? new DevScript(s) : s;
+	return s && (ConfMan.hasKey("dev_vars") || ConfMan.hasKey("dev_camera") || ConfMan.hasKey("dev_look") || gDebugLevel >= 2) ? new DevScript(s) : s;
 }
 
 void setObjects(World &w, const ObjectDef *defs, uint count) {
