@@ -29,6 +29,7 @@
 
 #include "ring/api.h"
 #include "ring/rotation.h"
+#include "ring/sound.h"
 
 namespace Graphics {
 class Font;
@@ -107,6 +108,7 @@ struct Puzzle {
 	Common::Array<Common::SharedPtr<PuzzleImage> > images; ///< ascending priority
 	Common::Array<Common::SharedPtr<PuzzleText> > texts;
 	Common::Array<Movability> movabilities;
+	SoundItems sounds; ///< ambient and 3D sounds (spec/sound.md)
 };
 
 /** A panorama node (`AddRot`, spec/rotation.md). */
@@ -120,6 +122,7 @@ struct Rotation {
 	float alpha = 0, beta = 0, ran = 85.3f;
 	Common::Array<Common::SharedPtr<Accessibility> > accessibilities;
 	Common::Array<Movability> movabilities;
+	SoundItems sounds;
 	Common::ScopedPtr<Panorama> panorama;
 
 	/** 0x410170: all three at once. */
@@ -160,8 +163,11 @@ struct Object {
  */
 class World {
 public:
-	/** Runs every zone's set-up once, as 0x431040 does (spec/boot.md). */
-	void setUp();
+	/**
+	 * Runs every zone's set-up once, as 0x431040 does (spec/boot.md); sounds go to
+	 * `sounds`, 3D offsets take the stereo preference `lr`.
+	 */
+	void setUp(Sounds *sounds, int lr);
 
 	Puzzle *puzzle(int id);
 	Rotation *rotation(int id);
@@ -199,6 +205,8 @@ private:
 	Common::Array<Common::SharedPtr<Rotation> > _rotations;
 	Common::Array<Common::SharedPtr<Object> > _objects;
 	const Graphics::Font *_font = nullptr;
+	Sounds *_sounds = nullptr;
+	int _lr = -1;
 };
 
 } // End of namespace Ring

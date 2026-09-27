@@ -35,6 +35,7 @@
 #include "ring/movie.h"
 #include "ring/resources.h"
 #include "ring/ring.h"
+#include "ring/sound.h"
 #include "ring/world.h"
 #include "ring/ring/zones.h"
 
@@ -193,8 +194,11 @@ Common::Error RingEngine::run() {
 	wait(3000);
 	_resources->openArchive(kZoneSY);
 	addCursors();
+	_sounds.reset(new Sounds(this));
+	loadPreferences();
 	_world.reset(new World());
-	_world->setUp();
+	_world->setUp(_sounds.get(), _preferences[2]);
+	_sounds->setTypeVolumes(_preferences[0], _preferences[1]);
 	// Font 1: "ARX Pilgrim L" asked with a 12-pixel cell; the closest in arxrin.fon is 8 points (Q-0010).
 	_font.reset(new Graphics::WinFont());
 	if (_font->loadFromFON("arxrin.fon", Graphics::WinFontDirEntry("ARX Pilgrim L", 8)))
@@ -208,7 +212,6 @@ Common::Error RingEngine::run() {
 	if (!ConfMan.getBool("dev_skip_startup"))
 		showStartupScreens();
 
-	loadPreferences();
 	startMenu(false);
 	_buttons.clear();
 	// Development: dev_input="ms:move x y;ms:click x y;ms:key code 0;..." replays input at ms after the menu opens.
@@ -287,7 +290,6 @@ void RingEngine::loadPreferences() {
 		memcpy(_preferences, v, sizeof(v));
 	else
 		warning("Ring: cannot read the preferences (aPre.ini)");
-	// ponytail: applying them (volumes, stereo, subtitles) comes with spec/sound.md and the dialogues
 }
 
 void RingEngine::savePreferences(int volume, int dialogue, int stereo, int subtitles) {
@@ -297,6 +299,7 @@ void RingEngine::savePreferences(int volume, int dialogue, int stereo, int subti
 	_preferences[3] = subtitles;
 	ConfMan.set("preferences", Common::String::format("%d %d %d %d", volume, dialogue, stereo, subtitles));
 	ConfMan.flushToDisk();
+	_sounds->setTypeVolumes(volume, dialogue); // 0x4289e0; the stereo only matters for 3D pans set later
 }
 
 void RingEngine::message(const char *key) {
@@ -352,16 +355,24 @@ void RingEngine::addCursors() {
 	}
 }
 
-void RingEngine::puzSetAct(int puzzle) {
-	// ponytail: the puzzle's ambient sounds start here (spec/sound.md, to come)
-	if (_world->puzzle(puzzle)) {
-		_puzzle = puzzle;
-		_mode = 2;
-	}
+void RingEngine::leavePlace() {
+	// 0x40b650: effects and dialogues stop when the player leaves a place.
+	_puzzle = _rotation = 0;
+	_sounds->stopType(kSoundEffect, kSoundLeft);
+	_sounds->stopType(kSoundDialogue, kSoundLeft);
 }
 
-void RingEngine::rotSetAct(int rotation) {
-	// ponytail: ambient sounds (RotSetAct's other two arguments) come with spec/sound.md
+void RingEngine::puzSetAct(int puzzle, bool start, bool stop) {
+	Puzzle *p = _world->puzzle(puzzle);
+	if (!p)
+		return;
+	leavePlace();
+	_puzzle = puzzle;
+	_mode = 2;
+	_sounds->enterPlace(&p->sounds, start, stop);
+}
+
+void RingEngine::rotSetAct(int rotation, bool start, bool stop) {
 	Rotation *r = _world->rotation(rotation);
 	if (!r)
 		return;
@@ -375,11 +386,13 @@ void RingEngine::rotSetAct(int rotation) {
 			return;
 		}
 	}
+	leavePlace();
 	_rotation = rotation;
 	_mode = 1;
 	_mouse = Common::Point(320, 240);
 	g_system->warpMouse(320, 240);
 	_panTime = g_system->getMillis();
+	_sounds->enterPlace(&r->sounds, start, stop, true, r->alpha + 135.0f, _preferences[2]);
 }
 
 void RingEngine::setZone(int zone, int entry) {
@@ -405,6 +418,7 @@ void RingEngine::startMenu(bool fromGame) {
 	if (_menuZone)
 		return;
 	// ponytail: from the game, the snapshot save and the thumbnail come with spec/save.md
+	_sounds->stopAll(4); // 0x406ea0(4)
 	_menuZone = _zone;
 	_zone = kZoneSY;
 	puzSetAct(90000);
@@ -427,8 +441,10 @@ void RingEngine::frame() {
 	if (_buttonDown)
 		dragMove(_mouse.x, _mouse.y);
 	track(_mouse.x, _mouse.y);
+	_sounds->dialogueFrame(_screen, _font.get(), _preferences[3] != 0);
 	_cursors->draw(*_resources, _screen, _mouse.x, _mouse.y, g_system->getMillis());
 	present();
+	_sounds->checkEnds();
 }
 
 void RingEngine::drawView() {
@@ -492,11 +508,19 @@ void RingEngine::move(const Movability &m) {
 	else if (from && m.turn == 1)
 		from->setAngles(m.alpha1, m.beta1, m.ran1);
 	Rotation *to = m.kind == 0 || m.kind == 2 ? _world->rotation(m.target) : nullptr;
-	if (to)
+	Puzzle *toPuzzle = to ? nullptr : _world->puzzle(m.target);
+	// The target's sounds: 3D pans for the arrival angle, then the transition (spec/sound.md).
+	if (to) {
 		to->setAlpha(m.alpha2);
+		for (auto &i : to->sounds)
+			i->pan = i->pan3D(to->alpha + 135.0f, _preferences[2]); // ponytail: 0x41ee10 checks the sound's type 3
+		_sounds->prepareTransition(&to->sounds);
+	} else if (toPuzzle) {
+		_sounds->prepareTransition(&toPuzzle->sounds);
+	}
 	int zone = from ? from->zone : _zone;
-	if (!m.ride.empty())
-		playMovie(this, Common::Path("DATA").appendComponent(zoneFolder(zone)).appendComponent("PLA").appendComponent(m.ride + ".cnm"), 0);
+	if (m.ride.empty() || !playMovie(this, Common::Path("DATA").appendComponent(zoneFolder(zone)).appendComponent("PLA").appendComponent(m.ride + ".cnm"), 0))
+		_sounds->finishTransition();
 	if (to) {
 		rotSetAct(m.target);
 		to->setAngles(m.alpha2, m.beta2, m.ran2);
@@ -519,6 +543,15 @@ static void onNothing(RingEngine *vm, int zone) {
 static void onClick(RingEngine *vm, int zone, int object, int value) {
 	if (zone == kZoneSY)
 		SY::onClick(vm, object, value);
+}
+
+void RingEngine::soundEvent(int id, int type, int reason) {
+	// (id, type, reason without bit 0x1000, reason & 0x1000) to the zone's handler (0x40ced0).
+	int why = reason & ~0x1000, ended = reason & 0x1000;
+	if (_zone == kZoneSY)
+		SY::onSound(this, id, type, why, ended);
+	else if (_zone == kZoneAS)
+		AS::onSound(this, id, type, why, ended);
 }
 
 void RingEngine::track(int x, int y) {

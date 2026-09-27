@@ -42,6 +42,7 @@ namespace Ring {
 
 class Cursors;
 class Resources;
+class Sounds;
 class World;
 struct HotSpot;
 struct Movability;
@@ -75,11 +76,16 @@ public:
 	Resources &resources() { return *_resources; }
 	World &world() { return *_world; }
 	Cursors &cursors() { return *_cursors; }
+	Sounds &sounds() { return *_sounds; }
+	/** The current zone (app+0x6e). */
+	int zone() const { return _zone; }
+	/** The sound event (0x40ced0, spec/sound.md) to the current zone's handler. */
+	void soundEvent(int id, int type, int reason);
 
-	/** `PuzSetAct` (games/ring/docs/sy.md): the puzzle becomes the current one. */
-	void puzSetAct(int puzzle);
+	/** `PuzSetAct` (games/ring/docs/sy.md): the puzzle becomes the current one; its sounds start / the old ones stop. */
+	void puzSetAct(int puzzle, bool start = true, bool stop = true);
 	/** `RotSetAct` (0x4025b0, spec/rotation.md): the rotation becomes the current view. */
-	void rotSetAct(int rotation);
+	void rotSetAct(int rotation, bool start = true, bool stop = true);
 	/** 0x402280: enter a zone at an entry point (the zone's GameSetZone). */
 	void setZone(int zone, int entry);
 	/** `PuzSetMod`: refused (false) when mode 2 is asked of a puzzle already in mode 2. */
@@ -120,6 +126,8 @@ private:
 	/** aPre.ini's four values: the game domain's `preferences` once saved, else the game's aPre.ini. */
 	void loadPreferences();
 	void addCursors();
+	/** 0x40b650: the current place is left. */
+	void leavePlace();
 	/** One idle-loop frame (spec/boot.md, "Frame"). */
 	void frame();
 	/** Hot-spot tracking, 0x408dd0 (spec/cursor.md); a drag replaces the cursor last. */
@@ -148,6 +156,7 @@ private:
 	Common::ScopedPtr<Resources> _resources;
 	Common::ScopedPtr<World> _world;
 	Common::ScopedPtr<Cursors> _cursors;
+	Common::ScopedPtr<Sounds> _sounds;
 	Common::ScopedPtr<Graphics::WinFont> _font;
 	Common::String _messageTitle, _messageText;
 	int _zone = 1;

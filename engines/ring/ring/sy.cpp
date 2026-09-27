@@ -228,5 +228,14 @@ void onClick(RingEngine *vm, int object, int value) {
 	}
 }
 
+void onSound(RingEngine *vm, int id, int type, int reason, int ended) {
+	// The end of Isha's last words (sound 90001): her picture goes, the credits, the menu.
+	if (ended && id == kObjPreferences) {
+		vm->world().hideAndFree(7);
+		warning("Ring: the credits (ScrollImage) are not implemented yet");
+		vm->startMenu(false);
+	}
+}
+
 } // End of namespace SY
 } // End of namespace Ring

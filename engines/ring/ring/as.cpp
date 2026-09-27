@@ -44,5 +44,9 @@ void enter(RingEngine *vm, int entry) {
 	warning("Ring: AS entry %d is not implemented yet", entry);
 }
 
+void onSound(RingEngine *vm, int id, int type, int reason, int ended) {
+	// ponytail: the zone's sound chains (0x437190) come with its handlers
+}
+
 } // End of namespace AS
 } // End of namespace Ring
