@@ -27,6 +27,7 @@
 #include "common/ptr.h"
 #include "common/str.h"
 
+#include "graphics/hotspot_renderer.h"
 #include "graphics/surface.h"
 
 #include "peintre/bfg.h"
@@ -135,6 +136,10 @@ public:
 	void render(float alpha);
 	/** The next frames show the current state as it is (after a load or a jump). */
 	void cut() { _cut = true; }
+	/** ScummVM's hotspot overlay: the markers, and whether they changed since last drawn. */
+	void hotspots(Common::Array<Graphics::HotspotInfo> &out) const { out = _hotspotList; }
+	bool hotspotsChanged() const { return _hotspotsChanged; }
+	void hotspotsDrawn() { _hotspotsChanged = false; }
 	/** After the requested movie: load the pending scene. */
 	void afterMovie();
 	/** After a zone or the option menu: back to the scene at the saved spot. */
@@ -242,6 +247,8 @@ private:
 	void barLogic();
 	void drawBar(int barY);
 	void updateCursor();
+	void updateHotspots();
+	void look();
 	Common::Rect viewRect() const;
 	bool loadCursors();
 	void drawImage(const Graphics::Surface &img, int x, int y, bool keyed);
@@ -268,6 +275,9 @@ private:
 	int _scene = -1, _prevScene = 0;
 	Camera _cam;
 	int32 _v = 0, _vy = 0, _w = 0, _p = 0;
+	int32 _s = 0;           ///< strafing (modern controls)
+	float _turn = 1.0f;     ///< the turn speed option
+	float _lookRest[2] = {}; ///< mouse look below one step: yaw, pitch
 	Common::Point _mousePos;
 	bool _click = false;
 	byte _cursor = kCursorArrow;
@@ -283,6 +293,9 @@ private:
 	bool _returnShown = false;
 	bool _hourglass = false;
 	int _shownCursor = -1, _shownScale = 0;
+	bool _shownCentred = false;
+	Common::Array<Graphics::HotspotInfo> _hotspotList;
+	bool _hotspotsChanged = false;
 
 	// The last two ticks, for drawing in between.
 	bool _cut = true;

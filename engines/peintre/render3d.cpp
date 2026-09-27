@@ -468,6 +468,37 @@ int Renderer3D::pickBuffered(int x, int y) {
 	return pick(x, y);
 }
 
+bool Renderer3D::nodeScreenPoint(int node, Common::Point &p) const {
+	if (node < 0 || (uint)node >= _verts.size() || !_visible[node] || _verts[node].empty())
+		return false;
+	const Common::Array<Vtx> &vs = _verts[node];
+	const float cx = (float)(_viewport.width() / 2 + _viewport.left);
+	const float cy = (float)(_viewport.height() / 2 + _viewport.top);
+	auto tryAt = [&](float x, float y, float z) {
+		if (z < _near)
+			return false;
+		const Common::Point q((int)(_focal * x / z + cx), (int)(_focal * y / z + cy));
+		if (!_viewport.contains(q) || pick(q.x, q.y) != node)
+			return false;
+		p = q;
+		return true;
+	};
+	float c[3] = { 0, 0, 0 };
+	for (const Vtx &v : vs) {
+		c[0] += v.x;
+		c[1] += v.y;
+		c[2] += v.z;
+	}
+	if (tryAt(c[0] / vs.size(), c[1] / vs.size(), c[2] / vs.size()))
+		return true;
+	// ponytail: up to 64 vertices tried; a thin object seen edge-on may get no marker.
+	const uint step = MAX<uint>(1, vs.size() / 64);
+	for (uint i = 0; i < vs.size(); i += step)
+		if (tryAt(vs[i].x, vs[i].y, vs[i].z))
+			return true;
+	return false;
+}
+
 bool Renderer3D::nodeViewPosition(int node, int32 &x, int32 &y, int32 &z) const {
 	if (node < 0 || (uint)(3 * node + 2) >= _pos.size())
 		return false;

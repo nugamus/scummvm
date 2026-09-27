@@ -32,13 +32,26 @@
 #include "engines/advancedDetector.h"
 #include "engines/engine.h"
 
+#include "graphics/hotspot_renderer.h"
 #include "graphics/surface.h"
+
+namespace Common {
+class Keymap;
+}
 
 namespace Peintre {
 
 class Display;
 class MoviePlayer;
 class Sound;
+class World;
+
+/** Keymapper actions beyond the original's keys (metaengine.cpp initKeymaps). */
+enum {
+	kKeyStrafeLeft = 0x10001,
+	kKeyStrafeRight,
+	kKeyHotspots
+};
 
 /** A player record (save.md "USERS.BIN"). */
 struct PlayerRecord {
@@ -93,6 +106,20 @@ public:
 	bool buttonDown() const { return _button || _pressed; }
 	/** Moves the mouse to a point of the 640x480 page. */
 	void warpMouse(int x, int y);
+
+	// Modern controls (enhancement): mouse look with the mouse held at the centre.
+	bool modernControls() const { return _modern; }
+	void captureMouse(bool capture);
+	bool mouseCaptured() const { return _captured; }
+	/** The mouse look since the last call, in 1/4096 turns (yaw right, pitch up). */
+	void takeLook(float &yaw, float &pitch);
+
+	// ScummVM's hotspot overlay over the 3D (World::hotspots).
+	void getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) override;
+	bool hotspotDirty() const override;
+	void drawHotspots() override;
+	void toggleHotspots();
+	bool hotspotsShown() const { return _showHotspots; }
 	/** True on the tick a key is released (the original's "fires"). */
 	bool keyFired(Common::KeyCode key) const;
 	/** True while a key is down (the panorama reads the arrows held, ui.md "Views"). */
@@ -105,7 +132,8 @@ public:
 	void waitTick(uint32 ms);
 	/**
 	 * Dev harness: dev_commands=ms:command[;ms:command...] from the start of run():
-	 * click x y, tap x y (down for one poll), move x y, key <name>, hold <name> ms, type <text>, snap <file.png>, quit.
+	 * click x y, tap x y (down for one poll), move x y, look dx dy (relative motion), key <name>,
+	 * hold <name> ms, type <text>, snap <file.png>, quit.
 	 * Input is pushed as events, so movies and every screen see it.
 	 */
 	void devStep();
@@ -145,6 +173,8 @@ private:
 	bool runPlayerScreen(uint &player, bool &known);
 	/** The 3D world until the player quits (world.cpp). */
 	void runWorld(int scene, int prevScene, int zone = -1, int zoneCode = 0);
+	/** Out of the 3D: the cursor manager's cursor, the mouse capture and the hotspots go. */
+	void leave3D();
 	void loadAllScenes();
 
 	const ADGameDescription *_gameDescription;
@@ -164,6 +194,13 @@ private:
 	};
 	Common::Array<DevCommand> _devCommands;
 	uint32 _devStart = 0;
+
+	bool _modern = false, _invertY = false, _captured = false;
+	float _lookScale = 2.0f;
+	float _lookX = 0, _lookY = 0;
+	uint32 _captureStart = 0;
+	World *_world = nullptr;
+	Common::Keymap *_keymap = nullptr;
 
 	Common::Array<PlayerRecord> _players;
 	uint _player = 0;
