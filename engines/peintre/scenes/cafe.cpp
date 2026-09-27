@@ -129,7 +129,7 @@ public:
 					startSound(w, "serrure");
 					w.anims[kAnimBarDoor].playing = true;
 					w.var(kBarOpen) = 1;
-					w.vm()->writeResume(0);
+					w.autosave();
 				} else {
 					w.setHidden(w.carriedNode(), false);
 				}
