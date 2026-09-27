@@ -34,8 +34,14 @@ namespace SY {
 
 enum {
 	kObjExit = 2, kObjWarning = 3, kObjQuestion = 4,
-	kObjNewGame = 90000, kObjPreferences, kObjLoad, kObjSave, kObjContinue, kObjStatus, kObjQuit
+	kObjNewGame = 90000, kObjPreferences, kObjLoad, kObjSave, kObjContinue, kObjStatus, kObjQuit,
+	kObjPrefCancel = 90101, kObjPrefOK, kObjSubtitles, kObjStereo, kObjVolume, kObjDialogueVolume, kObjCredits
 };
+
+// The preferences screen's working values (sy.md, "Preferences").
+static int s_volume, s_dialogue, s_subtitles;
+static bool s_swapped;
+static int s_sliderX, s_delta; // the slider's x between drags; the last move's signed distance
 
 // Presentations lit while the mouse is on an entry; all of them go out on nothing (0x433bc0).
 static const struct { int object, presentation; } kLit[] = {
@@ -64,14 +70,75 @@ void onAccessibility(RingEngine *vm, int object, int value) {
 		// odd unk_19: cancel (presentation 2) lit, even: OK (presentation 1)
 		w.showPresentation(kObjQuestion, value & 1 ? 1 : 2, false);
 		w.showPresentation(kObjQuestion, value & 1 ? 2 : 1, true);
+	} else if (object == kObjPrefCancel || object == kObjPrefOK) {
+		w.showPresentation(kObjPrefCancel, 0, object == kObjPrefCancel);
+		w.showPresentation(kObjPrefOK, 0, object == kObjPrefOK);
+	} else if (object == kObjStereo) {
+		w.showPresentation(kObjStereo, 2, true);
 	}
-	// ponytail: the preferences, load, save and status screens light their own pictures (sy.md, to come)
+	// ponytail: the load, save and status screens light their own pictures (sy.md, to come)
 }
 
 void onNothing(RingEngine *vm) {
 	for (const auto &l : kLit)
 		vm->world().showPresentation(l.object, l.presentation, false);
 	vm->cursors().set(0x38); // CUR_MenuIdle
+}
+
+static void moveSlider(RingEngine *vm, int object, int x) {
+	if (PuzzleImage *img = vm->world().image(object, 0, 0))
+		img->x = x;
+}
+
+static void showSubtitles(RingEngine *vm) {
+	vm->world().showPresentation(kObjSubtitles, 0, s_subtitles == 1);
+	vm->world().showPresentation(kObjSubtitles, 1, s_subtitles != 1);
+}
+
+static void showStereo(RingEngine *vm) {
+	vm->world().showPresentation(kObjStereo, -1, false);
+	vm->world().showPresentation(kObjStereo, s_swapped, true);
+}
+
+static void openPreferences(RingEngine *vm) {
+	vm->puzSetAct(kObjPreferences);
+	const int *p = vm->preferences();
+	s_volume = p[0];
+	s_dialogue = p[1];
+	s_swapped = p[2] == 1;
+	s_subtitles = p[3];
+	// ScummVM always has a mixer, so the subtitles switch is never forced on and disabled (0x406ee0).
+	showSubtitles(vm);
+	moveSlider(vm, kObjVolume, s_volume * 5 + 84);
+	moveSlider(vm, kObjDialogueVolume, s_dialogue * 5 + 84);
+	showStereo(vm);
+}
+
+void onDrag(RingEngine *vm, int object, int phase) {
+	if (object != kObjVolume && object != kObjDialogueVolume)
+		return;
+	Drag &d = vm->drag();
+	int step;
+	switch (phase) {
+	case 1:
+		d.mode = 2;
+		d.limit = object == kObjVolume ? Common::Rect(310, 140, 600, 180) : Common::Rect(310, 197, 600, 237);
+		step = CLIP((d.current.x - 314) / 5, 0, 54);
+		break;
+	case 3:
+		s_delta = d.current.x - d.press.x;
+		moveSlider(vm, object, s_sliderX + s_delta);
+		return;
+	case 2:
+		// s_delta is the last move's; a press and release without a move reuses the previous drag's.
+		step = CLIP((s_sliderX + s_delta - 314) / 5, 0, 54);
+		(object == kObjVolume ? s_volume : s_dialogue) = step + 46;
+		break;
+	default:
+		return;
+	}
+	s_sliderX = step * 5 + 314;
+	moveSlider(vm, object, s_sliderX);
 }
 
 static void closeQuestion(RingEngine *vm, int kind) {
@@ -108,6 +175,26 @@ void onClick(RingEngine *vm, int object, int value) {
 		askQuestion(vm, 2, "DoYouWantToStartNewGame");
 		break;
 	case kObjPreferences:
+		openPreferences(vm);
+		break;
+	case kObjPrefCancel:
+		vm->puzSetAct(kObjNewGame);
+		break;
+	case kObjPrefOK:
+		vm->puzSetAct(kObjNewGame);
+		vm->savePreferences(s_volume, s_dialogue, s_swapped ? 1 : -1, s_subtitles);
+		break;
+	case kObjSubtitles:
+		s_subtitles = value == 0;
+		showSubtitles(vm);
+		break;
+	case kObjStereo:
+		s_swapped = !s_swapped;
+		showStereo(vm);
+		break;
+	case kObjCredits:
+		warning("Ring: the credits (ScrollImage) are not implemented yet");
+		break;
 	case kObjLoad:
 	case kObjSave:
 		vm->puzSetAct(object);

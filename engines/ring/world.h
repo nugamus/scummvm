@@ -137,9 +137,18 @@ struct Rotation {
 	}
 };
 
+/** A drag cursor of an object (`ObjSetPasDraCur` / `ObjSetActDraCur`, spec/cursor.md "Dragging"). */
+struct DragCursor {
+	int offsetX = 0, offsetY = 0, frames = 0, kind = 0;
+	float fps = 0.0f;
+};
+
 struct Object {
 	int id = 0;
-	byte flags = 0; ///< `AddObj`'s last argument: bit 0 = clicks reach the zone
+	/** `AddObj`'s last argument: bit 0 clicks reach the zone, bit 1 button-down events, bit 2 drags. */
+	byte flags = 0;
+	Common::String icon;
+	DragCursor dragCursors[2]; ///< passive (cursor 3), active (cursor 4)
 	Common::Array<Common::SharedPtr<Accessibility> > accessibilities;
 	Common::Array<Presentation> presentations;
 };
@@ -165,6 +174,8 @@ public:
 	void showPresentation(int object, int presentation, bool shown);
 	/** `ObjPreSetTxtToPuz` / `ObjPreSetTxtCooToPuz`: the presentation's `index`-th text. */
 	PuzzleText *text(int object, int presentation, int index);
+	/** `ObjPreSetImgCooOnPuz`: the `index`-th picture of the presentation, on any puzzle. */
+	PuzzleImage *image(int object, int presentation, int index);
 	/** `ObjPreHidDeaPuz`: hides every presentation of the object and frees its pictures. */
 	void hideAndFree(int object);
 	/** `ObjSetAccOnOrOff` over all (from < 0) or `from`..`to` of the object's accessibilities. */

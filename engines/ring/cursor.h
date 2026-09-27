@@ -40,6 +40,8 @@ class Cursors {
 public:
 	/** `CurAdd`: kind 3 is one picture, kind 4 an animation of `frames` at `fps`. */
 	void add(int id, const Common::String &name, int kind, int frames = 0, float fps = 0.0f);
+	/** Drops the cursor with that id (the drag cursors, spec/cursor.md "Dragging"). */
+	void remove(int id);
 	/** `CurSetOffset`. */
 	void setOffset(int id, int x, int y);
 	/** `CurSet`. */

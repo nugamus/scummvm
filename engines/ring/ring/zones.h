@@ -34,6 +34,8 @@ namespace SY {
 void onAccessibility(RingEngine *vm, int object, int value);
 void onNothing(RingEngine *vm);
 void onClick(RingEngine *vm, int object, int value);
+/** The drag event (0x4331b0): phase 1 press, 2 release, 3 move. */
+void onDrag(RingEngine *vm, int object, int phase);
 }
 
 namespace AS {
