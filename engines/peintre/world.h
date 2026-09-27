@@ -126,6 +126,15 @@ public:
 	void unload();
 	/** One 3D tick (movement.md "The tick"). */
 	WorldExit tick();
+	/** After each tick: keeps its camera and poses for drawing between ticks. */
+	void endTick();
+	/**
+	 * Draws the scene `alpha` (0..1) of the way from the tick before the last to the last
+	 * (enhancement: the original draws once per tick), with its 2D and the cursor.
+	 */
+	void render(float alpha);
+	/** The next frames show the current state as it is (after a load or a jump). */
+	void cut() { _cut = true; }
 	/** After the requested movie: load the pending scene. */
 	void afterMovie();
 	/** After a zone or the option menu: back to the scene at the saved spot. */
@@ -229,15 +238,21 @@ private:
 	void move();
 	void collide();
 	void mouse();
-	void drawFrame(bool hourglass);
-	void drawBar();
+	void frameLogic(bool hourglass);
+	void barLogic();
+	void drawBar(int barY);
+	void updateCursor();
+	Common::Rect viewRect() const;
 	bool loadCursors();
 	void drawImage(const Graphics::Surface &img, int x, int y, bool keyed);
 	void flightStep();
 	void finishFlight();
 
 	PeintreEngine *_vm;
-	Renderer3D _renderer;
+	Renderer3D _renderer;   ///< the tick's frame: picking and node positions
+	Renderer3D _view;       ///< the frames drawn
+	Common::Array<Tri3D> _tris;
+	float _focal = 0.0f;    ///< 0: the original's
 	Bfg _bfg;
 	Scene3D _scene3D;
 	Common::Array<Texture3D *> _textures;          ///< owned
@@ -264,6 +279,16 @@ private:
 	int _barY = 480;
 	int _barFirst = 0;
 	bool _barSoundPlayed = false;
+	int _barButton = -1;      ///< the bar arrow clicked this tick, drawn pressed
+	bool _returnShown = false;
+	bool _hourglass = false;
+	int _shownCursor = -1, _shownScale = 0;
+
+	// The last two ticks, for drawing in between.
+	bool _cut = true;
+	Common::Array<float> _posePrev, _poseCur, _poseDraw;
+	float _camPrev[6] = {}, _camCur[6] = {};
+	int _barYPrev = 480, _barYCur = 480;
 
 	// Requests and modes.
 	bool _reload = false;
@@ -273,7 +298,6 @@ private:
 	int _flightStep = 0;
 	int32 _flightDelta[5];
 	int _flightTarget = 0;
-	uint32 _lastTickCount = 0;
 	uint32 _elapsed = 1;
 	WorldExit _exit = kExitNone;
 	Common::String _ambience;
@@ -283,7 +307,7 @@ private:
 public:
 	// Scene API additions (scenes agent)
 	/** The node drawn at a screen point in the last frame, -1 (dev harness). */
-	int pickAt(int x, int y) const { return _renderer.pick(x, y); }
+	int pickAt(int x, int y) { return _renderer.pickBuffered(x, y); }
 };
 
 /** The scene code for a scene number and bundle (scenes/). */

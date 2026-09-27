@@ -31,12 +31,15 @@
 
 #include "engines/util.h"
 
+#include "graphics/cursorman.h"
+
 #include "graphics/pixelformat.h"
 
 #include "image/png.h"
 
 #include "peintre/bfg.h"
 #include "peintre/detection.h"
+#include "peintre/display.h"
 #include "peintre/gfx.h"
 #include "peintre/movie.h"
 #include "peintre/obj3d.h"
@@ -54,12 +57,18 @@ PeintreEngine::PeintreEngine(OSystem *syst, const ADGameDescription *gameDesc)
 PeintreEngine::~PeintreEngine() {
 	delete _movies;
 	delete _sound;
+	delete _display;
 	_screen.free();
 }
 
 void PeintreEngine::present() {
-	_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, _screen.w, _screen.h);
-	_system->updateScreen();
+	_display->present(_screen);
+}
+
+void PeintreEngine::warpMouse(int x, int y) {
+	const Common::Point w = _display->toWindow(Common::Point(x, y));
+	_system->warpMouse(w.x, w.y);
+	_mouse = Common::Point(x, y);
 }
 
 static Common::KeyCode devKey(const Common::String &name, char &ascii) {
@@ -109,7 +118,7 @@ void PeintreEngine::devStep() {
 		Common::Event e;
 		if ((w[0] == "click" || w[0] == "tap" || w[0] == "press" || w[0] == "move") && w.size() >= 3) {
 			e.type = Common::EVENT_MOUSEMOVE;
-			e.mouse = Common::Point(atoi(w[1].c_str()), atoi(w[2].c_str()));
+			e.mouse = _display->toWindow(Common::Point(atoi(w[1].c_str()), atoi(w[2].c_str())));
 			_system->warpMouse(e.mouse.x, e.mouse.y);
 			em->pushEvent(e);
 			if (w[0] == "press") {
@@ -120,12 +129,12 @@ void PeintreEngine::devStep() {
 				// A tap is down for exactly one poll: its release is due at the next one.
 				e.type = Common::EVENT_LBUTTONDOWN;
 				em->pushEvent(e);
-				DevCommand up = { now + (w[0] == "tap" ? 1 : 150), Common::String::format("release %d %d", e.mouse.x, e.mouse.y) };
+				DevCommand up = { now + (w[0] == "tap" ? 1 : 150), Common::String::format("release %s %s", w[1].c_str(), w[2].c_str()) };
 				_devCommands.insert_at(0, up);
 			}
 		} else if (w[0] == "release" && w.size() >= 3) {
 			e.type = Common::EVENT_LBUTTONUP;
-			e.mouse = Common::Point(atoi(w[1].c_str()), atoi(w[2].c_str()));
+			e.mouse = _display->toWindow(Common::Point(atoi(w[1].c_str()), atoi(w[2].c_str())));
 			em->pushEvent(e);
 		} else if ((w[0] == "key" || w[0] == "hold" || w[0] == "keyup") && w.size() >= 2) {
 			char ascii;
@@ -152,8 +161,10 @@ void PeintreEngine::devStep() {
 			}
 		} else if (w[0] == "snap" && w.size() >= 2) {
 			Common::DumpFile out;
+			Graphics::Surface frame;
 			if (out.open(Common::Path(w[1], '/')))
-				Image::writePNG(out, _screen);
+				Image::writePNG(out, _display->snapshot(frame) ? frame : _screen);
+			frame.free();
 		} else if (w[0] == "quit") {
 			quitGame();
 		}
@@ -161,18 +172,33 @@ void PeintreEngine::devStep() {
 }
 
 void PeintreEngine::pollInput() {
-	devStep();
+	endTick();
+	pollEvents();
+}
+
+void PeintreEngine::endTick() {
 	_keysFired.clear();
 	_typed.clear();
+	_pressed = false;
+}
+
+void PeintreEngine::pollEvents() {
+	devStep();
 	Common::Event event;
 	while (_eventMan->pollEvent(event)) {
+		if (Common::isMouseEvent(event))
+			event.mouse = _display->toLogical(event.mouse);
 		switch (event.type) {
+		case Common::EVENT_SCREEN_CHANGED:
+			_display->updateSize();
+			break;
 		case Common::EVENT_MOUSEMOVE:
 			_mouse = event.mouse;
 			break;
 		case Common::EVENT_LBUTTONDOWN:
 			_mouse = event.mouse;
 			_button = true;
+			_pressed = true;
 			break;
 		case Common::EVENT_LBUTTONUP:
 			_mouse = event.mouse;
@@ -224,9 +250,14 @@ void PeintreEngine::waitTick(uint32 ms) {
 }
 
 Common::Error PeintreEngine::run() {
-	// The original draws on a 640x480 16-bit surface (boot.md step 5).
+	// Enhancements (launcher options, all off by default: the original).
+	ConfMan.registerDefault("widescreen", false);
+	ConfMan.registerDefault("filter_textures", false);
+	ConfMan.registerDefault("fov", 67);
+	// The original draws on a 640x480 16-bit surface (boot.md step 5); with OpenGL the 3D is
+	// drawn at the window's size and the page is scaled into it.
+	_display = Display::create();
 	const Graphics::PixelFormat format(2, 5, 6, 5, 0, 11, 5, 0, 0);
-	initGraphics(640, 480, &format);
 	_screen.create(640, 480, format);
 
 	if (ConfMan.getBool("dev_load_all"))
@@ -357,11 +388,43 @@ void PeintreEngine::runWorld(int scene, int prevScene, int zone, int zoneCode) {
 	} else if (!world.load(scene, prevScene, false)) {
 		return;
 	}
-	// movement.md "The tick": 66 ms.
+	// movement.md "The tick": 66 ms. The game runs in those steps; the frames in between
+	// are drawn from the last two (enhancement), at the display's rate.
+	const uint32 kTickMs = 66;
+	uint32 last = _system->getMillis(), pending = kTickMs;
+	uint32 frames = 0, fpsStart = last, renderMs = 0;
 	while (!shouldQuit()) {
-		pollInput();
-		const WorldExit exit = world.tick();
-		present();
+		pollEvents();
+		const uint32 now = _system->getMillis();
+		// A long stall (a debugger, a dragged window) is not replayed.
+		pending += MIN<uint32>(now - last, 250);
+		last = now;
+		WorldExit exit = kExitNone;
+		while (pending >= kTickMs && exit == kExitNone && !shouldQuit()) {
+			pending -= kTickMs;
+			exit = world.tick();
+			world.endTick();
+			endTick();
+		}
+		if (exit == kExitNone) {
+			const uint32 r0 = _system->getMillis();
+			world.render((float)pending / kTickMs);
+			renderMs += _system->getMillis() - r0;
+			// Vsync paces the frames; without it, a frame drawn in under 2 ms rests a little.
+			if (_system->getMillis() - r0 < 2)
+				_system->delayMillis(1);
+			frames++;
+			if (now - fpsStart >= 5000) {
+				debugC(1, kDebugGraphics, "%u frames per second, %u ms drawing each", frames * 1000 / (now - fpsStart), renderMs / MAX<uint32>(frames, 1));
+				frames = 0;
+				renderMs = 0;
+				fpsStart = now;
+			}
+			continue;
+		}
+		// The tick's own frame, then what it asked for.
+		world.render(1.0f);
+		CursorMan.showMouse(false);
 		switch (exit) {
 		case kExitMovie: {
 			const Common::String name = world.movieRequest();
@@ -409,8 +472,12 @@ void PeintreEngine::runWorld(int scene, int prevScene, int zone, int zoneCode) {
 		default:
 			break;
 		}
-		waitTick(66);
+		// Back in the 3D: the next tick comes a full tick later, as after the original's wait.
+		world.cut();
+		pending = 0;
+		last = _system->getMillis();
 	}
+	CursorMan.showMouse(false);
 }
 
 void PeintreEngine::loadAllScenes() {

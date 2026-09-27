@@ -36,6 +36,7 @@
 
 namespace Peintre {
 
+class Display;
 class MoviePlayer;
 class Sound;
 
@@ -77,11 +78,21 @@ public:
 	// Screen: the original's 640x480 RGB565 page.
 	Graphics::Surface &screen() { return _screen; }
 	void present();
+	Display *display() { return _display; }
 
 	// Input, sampled once per tick (ui.md "Input").
 	void pollInput();
+	/**
+	 * The 3D reads input per tick but draws more often: events are gathered at every frame
+	 * and endTick() forgets what the tick has seen (fired keys, typing, a short click).
+	 */
+	void pollEvents();
+	void endTick();
 	Common::Point mouse() const { return _mouse; }
-	bool buttonDown() const { return _button; }
+	/** The button's level, or a press since the last poll (a click shorter than a tick). */
+	bool buttonDown() const { return _button || _pressed; }
+	/** Moves the mouse to a point of the 640x480 page. */
+	void warpMouse(int x, int y);
 	/** True on the tick a key is released (the original's "fires"). */
 	bool keyFired(Common::KeyCode key) const;
 	/** True while a key is down (the panorama reads the arrows held, ui.md "Views"). */
@@ -138,11 +149,12 @@ private:
 
 	const ADGameDescription *_gameDescription;
 	Graphics::Surface _screen;
+	Display *_display = nullptr;
 	MoviePlayer *_movies = nullptr;
 	Sound *_sound = nullptr;
 
 	Common::Point _mouse;
-	bool _button = false;
+	bool _button = false, _pressed = false;
 	Common::Array<Common::KeyCode> _keysDown, _keysFired;
 	Common::String _typed;
 	uint32 _lastTick = 0;

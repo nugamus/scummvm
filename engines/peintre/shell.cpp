@@ -345,7 +345,7 @@ void Shell::startView(const Common::String &name, bool panorama) {
 		_viewPos = Common::Point(MAX(0, _panorama.w - 640) / 2, MAX(0, _panorama.h - 480) / 2);
 		_viewSpeed = Common::Point();
 		_mouse = Common::Point(320, 240);
-		g_system->warpMouse(320, 240);
+		_vm->warpMouse(320, 240);
 	} else {
 		background(name);
 		_viewAnim.load(name);
@@ -394,7 +394,7 @@ bool Shell::viewStep() {
 		_viewSpeed.y = up ? MAX(_viewSpeed.y - 1, -32) : down ? MIN(_viewSpeed.y + 1, 32) : 0;
 		d = _viewSpeed;
 		_mouse = Common::Point(320, 240);
-		g_system->warpMouse(320, 240);
+		_vm->warpMouse(320, 240);
 		setCursor(kCursorDefault);
 	} else {
 		_viewSpeed = Common::Point();
@@ -430,7 +430,7 @@ void Shell::leave(int code) {
 
 static void centreCursor(Common::Point &mouse) {
 	mouse = Common::Point(320, 240);
-	g_system->warpMouse(320, 240);
+	static_cast<PeintreEngine *>(g_engine)->warpMouse(320, 240);
 }
 
 static SlotRun *placeObject(Shell &s, uint zone, uint object) {

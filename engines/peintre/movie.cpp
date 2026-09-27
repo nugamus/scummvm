@@ -163,7 +163,7 @@ Video::HNMDecoder *MoviePlayer::openDecoder(const Common::String &name) {
 	const bool hasSound = f->readByte() & 1;
 	f->seek(0);
 
-	Video::HNMDecoder *decoder = new Video::HNMDecoder(g_system->getScreenFormat());
+	Video::HNMDecoder *decoder = new Video::HNMDecoder(_vm->screen().format);
 	if (!hasSound)
 		decoder->setRegularFrameDelay(kSilentFrameDelay);
 	if (!decoder->loadStream(f)) {
@@ -203,10 +203,8 @@ bool MoviePlayer::play(const Common::String &name, bool skippable) {
 		if (decoder->needsUpdate()) {
 			const Graphics::Surface *frame = decoder->decodeNextFrame();
 			if (frame) {
-				Graphics::Surface *screen = g_system->lockScreen();
-				drawFrame(*screen, *frame, entry, masks, decoder->getCurFrame());
-				g_system->unlockScreen();
-				g_system->updateScreen();
+				drawFrame(_vm->screen(), *frame, entry, masks, decoder->getCurFrame());
+				_vm->present();
 			}
 		}
 		Common::Event event;

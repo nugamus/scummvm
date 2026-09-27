@@ -52,37 +52,79 @@ void cameraMatrix(int32 pitch, int32 yaw, int32 roll, int32 m[9]) {
 	m[8] = mul(Cb, Ca);
 }
 
+View viewOf(const Camera &cam) {
+	View v;
+	int32 m[9];
+	cameraMatrix(cam.pitch, cam.yaw, cam.roll, m);
+	for (int i = 0; i < 9; i++)
+		v.rot[i] = m[i] / 32768.0f;
+	v.eye[0] = (float)cam.x;
+	v.eye[1] = (float)cam.y;
+	v.eye[2] = (float)cam.z;
+	return v;
+}
+
+View viewOf(float x, float y, float z, float pitch, float yaw, float roll) {
+	// cameraMatrix in floats, for angles between the original's steps.
+	const float k = (float)(2.0 * M_PI / 4096.0);
+	const float Sa = sinf(pitch * k), Ca = cosf(pitch * k);
+	const float Sb = sinf(yaw * k), Cb = cosf(yaw * k);
+	const float Sc = sinf(roll * k), Cc = cosf(roll * k);
+	View v;
+	v.rot[0] = Sc * Sa * Sb + Cc * Cb;
+	v.rot[1] = Cc * Sa * Sb - Cb * Sc;
+	v.rot[2] = Sb * Ca;
+	v.rot[3] = Sc * Ca;
+	v.rot[4] = Cc * Ca;
+	v.rot[5] = -Sa;
+	v.rot[6] = Cb * Sc * Sa - Cc * Sb;
+	v.rot[7] = Cc * Cb * Sa + Sb * Sc;
+	v.rot[8] = Cb * Ca;
+	v.eye[0] = x;
+	v.eye[1] = y;
+	v.eye[2] = z;
+	return v;
+}
+
 // The unlit shade row (render.md "Lighting": brightness 15 -> row 31 - 15).
 static const int kShadeRow = 16;
 
 Renderer3D::Renderer3D() {
-	_zbuf.resize(640 * 480);
-	_pickZ.resize(640 * 480);
-	_pickNode.resize(640 * 480);
 }
 
-void Renderer3D::draw(Graphics::Surface &dst, const Common::Rect &viewport, const Scene3D &scene, const Camera &cam) {
+void Renderer3D::draw(Graphics::Surface *dst, const Common::Rect &viewport, const Scene3D &scene, const View &cam,
+					  const float *poses, Common::Array<Tri3D> *out) {
+	_dst = dst;
+	_out = out;
+	if (out)
+		out->clear();
 	_viewport = viewport;
 	// f = 480 * w / 640 (integer division) on both axes (render.md "Projection").
-	_focal = (float)(480 * viewport.width() / 640);
+	_focal = _fixedFocal > 0 ? _fixedFocal : (float)(480 * viewport.width() / 640);
 	// Black background, nothing picked (render.md "Visibility").
-	for (int y = viewport.top; y < viewport.bottom; y++) {
-		memset(dst.getBasePtr(viewport.left, y), 0, viewport.width() * 2);
-		for (int x = viewport.left; x < viewport.right; x++) {
-			_zbuf[y * 640 + x] = 0.0f;
-			_pickZ[y * 640 + x] = 0.0f;
-			_pickNode[y * 640 + x] = -1;
+	const uint area = viewport.width() * viewport.height();
+	_pickTris.clear();
+	_pickBuilt = dst != nullptr;
+	if (dst) {
+		_zbuf.resize(area);
+		_pickZ.resize(area);
+		_pickNode.resize(area);
+		for (uint i = 0; i < area; i++) {
+			_zbuf[i] = 0.0f;
+			_pickZ[i] = 0.0f;
+			_pickNode[i] = -1;
 		}
+		if (dst)
+			for (int y = viewport.top; y < viewport.bottom; y++)
+				memset(dst->getBasePtr(viewport.left, y), 0, viewport.width() * 2);
 	}
 
 	// The view transform: v_cam = R^T (v - eye); the columns of R are right, down, forward.
-	int32 m[9];
-	cameraMatrix(cam.pitch, cam.yaw, cam.roll, m);
 	float view[9];
 	for (int a = 0; a < 3; a++)
 		for (int b = 0; b < 3; b++)
-			view[3 * a + b] = m[3 * b + a] / 32768.0f;
-	const float eye[3] = { (float)cam.x, (float)cam.y, (float)cam.z };
+			view[3 * a + b] = cam.rot[3 * b + a];
+	const float *eye = cam.eye;
 
 	// World matrices parent x local, from the root down (render.md "Per frame"); a hidden
 	// node (flag bit 0) hides its subtree.
@@ -102,10 +144,17 @@ void Renderer3D::draw(Graphics::Surface &dst, const Common::Rect &viewport, cons
 		stack.pop_back();
 		order.push_back(k);
 		const Node &nd = scene.nodes[k];
-		float l[9];
-		for (int j = 0; j < 9; j++)
-			l[j] = nd.rotation[j] / 32768.0f;
-		const float lp[3] = { (float)nd.position.x, (float)nd.position.y, (float)nd.position.z };
+		float l[9], lp[3];
+		if (poses) {
+			memcpy(l, poses + 12 * k, sizeof(l));
+			memcpy(lp, poses + 12 * k + 9, sizeof(lp));
+		} else {
+			for (int j = 0; j < 9; j++)
+				l[j] = nd.rotation[j] / 32768.0f;
+			lp[0] = (float)nd.position.x;
+			lp[1] = (float)nd.position.y;
+			lp[2] = (float)nd.position.z;
+		}
 		float *r = &wrot[9 * k], *p = &wpos[3 * k];
 		if (nd.parent < 0) {
 			memcpy(r, l, sizeof(l));
@@ -204,14 +253,30 @@ void Renderer3D::draw(Graphics::Surface &dst, const Common::Rect &viewport, cons
 						if ((fn.x * e[0] + fn.y * e[1] + fn.z * e[2]) / 32768.0f < poly.planeDistance)
 							continue;
 					}
-					clipAndDraw(dst, tri, fill);
+					clipAndDraw(tri, fill);
 				}
 			}
 		}
 	}
 }
 
-void Renderer3D::clipAndDraw(Graphics::Surface &dst, Vtx *v, const Fill &fill) {
+void Renderer3D::clipAndDraw(Vtx *v, const Fill &fill) {
+	if (_out) {
+		// A hardware renderer clips at near itself and draws sub-pixel corners.
+		Tri3D t;
+		for (int i = 0; i < 3; i++) {
+			t.x[i] = v[i].x;
+			t.y[i] = v[i].y;
+			t.z[i] = v[i].z;
+			t.u[i] = v[i].u;
+			t.v[i] = v[i].v;
+		}
+		t.type = fill.type;
+		t.tex = fill.tex;
+		t.colour = fill.colour;
+		_out->push_back(t);
+		return;
+	}
 	// Clip against the near plane; a triangle becomes 0, 1 or 2 triangles.
 	Vtx in[4];
 	int n = 0;
@@ -241,14 +306,23 @@ void Renderer3D::clipAndDraw(Graphics::Surface &dst, Vtx *v, const Fill &fill) {
 		in[i].sx = truncf(_focal * in[i].x / in[i].z + cx);
 		in[i].sy = truncf(_focal * in[i].y / in[i].z + cy);
 	}
-	drawTriangle(dst, in, fill);
+	if (!_dst) {
+		// Picking only: the triangles are tested at the points asked for.
+		addPickTri(in, fill);
+		if (n == 4) {
+			Vtx t2[3] = { in[0], in[2], in[3] };
+			addPickTri(t2, fill);
+		}
+		return;
+	}
+	drawTriangle(in, fill);
 	if (n == 4) {
 		Vtx t2[3] = { in[0], in[2], in[3] };
-		drawTriangle(dst, t2, fill);
+		drawTriangle(t2, fill);
 	}
 }
 
-void Renderer3D::drawTriangle(Graphics::Surface &dst, const Vtx *v, const Fill &fill) {
+void Renderer3D::drawTriangle(const Vtx *v, const Fill &fill) {
 	// Only counter-clockwise triangles on the y-down screen are drawn (negative area).
 	const float area = (v[2].sy - v[1].sy) * (v[1].sx - v[0].sx) - (v[1].sy - v[0].sy) * (v[2].sx - v[1].sx);
 	if (area >= 0)
@@ -273,7 +347,7 @@ void Renderer3D::drawTriangle(Graphics::Surface &dst, const Vtx *v, const Fill &
 	const float rden = 1.0f / den;
 	for (int y = minY; y <= maxY; y++) {
 		const float py = y + 0.5f;
-		uint16 *row = (uint16 *)dst.getBasePtr(0, y);
+		uint16 *row = _dst ? (uint16 *)_dst->getBasePtr(0, y) : nullptr;
 		for (int x = minX; x <= maxX; x++) {
 			const float px = x + 0.5f;
 			const float w0 = ((v[1].sx - px) * (v[2].sy - py) - (v[2].sx - px) * (v[1].sy - py)) * rden;
@@ -282,13 +356,13 @@ void Renderer3D::drawTriangle(Graphics::Surface &dst, const Vtx *v, const Fill &
 			if (w0 < 0 || w1 < 0 || w2 < 0)
 				continue;
 			const float z = w0 * iz[0] + w1 * iz[1] + w2 * iz[2];
-			const int at = y * 640 + x;
+			const int at = bufferIndex(x, y);
 			// Picking sees every covered pixel, key texels included (render.md "Picking").
 			if (z > _pickZ[at]) {
 				_pickZ[at] = z;
 				_pickNode[at] = fill.node;
 			}
-			if (z <= _zbuf[at])
+			if (!row || z <= _zbuf[at])
 				continue;
 			uint16 colour;
 			if (fill.type == 1 || !fill.tex) {
@@ -318,13 +392,80 @@ void Renderer3D::drawTriangle(Graphics::Surface &dst, const Vtx *v, const Fill &
 	}
 }
 
+void Renderer3D::addPickTri(const Vtx *v, const Fill &fill) {
+	PickTri t;
+	memcpy(t.v, v, sizeof(t.v));
+	t.node = fill.node;
+	_pickTris.push_back(t);
+}
+
+bool Renderer3D::covers(const Vtx *v, int x, int y, float &z) const {
+	// drawTriangle's test for one pixel: counter-clockwise, inside the corners' box and the
+	// viewport, pixel centre inside the edges; z = interpolated 1/z.
+	const float area = (v[2].sy - v[1].sy) * (v[1].sx - v[0].sx) - (v[1].sy - v[0].sy) * (v[2].sx - v[1].sx);
+	if (area >= 0)
+		return false;
+	const int minX = MAX<int>((int)MIN(v[0].sx, MIN(v[1].sx, v[2].sx)), _viewport.left);
+	const int maxX = MIN<int>((int)MAX(v[0].sx, MAX(v[1].sx, v[2].sx)), _viewport.right - 1);
+	const int minY = MAX<int>((int)MIN(v[0].sy, MIN(v[1].sy, v[2].sy)), _viewport.top);
+	const int maxY = MIN<int>((int)MAX(v[0].sy, MAX(v[1].sy, v[2].sy)), _viewport.bottom - 1);
+	if (x < minX || x > maxX || y < minY || y > maxY)
+		return false;
+	const float den = (v[1].sx - v[0].sx) * (v[2].sy - v[0].sy) - (v[2].sx - v[0].sx) * (v[1].sy - v[0].sy);
+	const float rden = 1.0f / den;
+	const float px = x + 0.5f, py = y + 0.5f;
+	const float w0 = ((v[1].sx - px) * (v[2].sy - py) - (v[2].sx - px) * (v[1].sy - py)) * rden;
+	const float w1 = ((v[2].sx - px) * (v[0].sy - py) - (v[0].sx - px) * (v[2].sy - py)) * rden;
+	const float w2 = 1.0f - w0 - w1;
+	if (w0 < 0 || w1 < 0 || w2 < 0)
+		return false;
+	z = w0 * (1.0f / v[0].z) + w1 * (1.0f / v[1].z) + w2 * (1.0f / v[2].z);
+	return true;
+}
+
 int Renderer3D::pick(int x, int y) const {
 	// render.md "Picking": edges inclusive.
 	if (x < _viewport.left || x > _viewport.right || y < _viewport.top || y > _viewport.bottom)
 		return -1;
-	x = MIN<int>(x, 639);
-	y = MIN<int>(y, 479);
-	return _pickNode[y * 640 + x];
+	x = MIN<int>(x, _viewport.right - 1);
+	y = MIN<int>(y, _viewport.bottom - 1);
+	if (_pickBuilt)
+		return _pickNode.empty() ? -1 : _pickNode[bufferIndex(x, y)];
+	// The first nearest in drawing order, as the buffer keeps it.
+	int node = -1;
+	float best = 0.0f;
+	for (const PickTri &t : _pickTris) {
+		float z;
+		if (covers(t.v, x, y, z) && z > best) {
+			best = z;
+			node = t.node;
+		}
+	}
+	return node;
+}
+
+int Renderer3D::pickBuffered(int x, int y) {
+	if (!_pickBuilt) {
+		const uint area = _viewport.width() * _viewport.height();
+		_zbuf.resize(area);
+		_pickZ.resize(area);
+		_pickNode.resize(area);
+		for (uint i = 0; i < area; i++) {
+			_zbuf[i] = 0.0f;
+			_pickZ[i] = 0.0f;
+			_pickNode[i] = -1;
+		}
+		Fill fill;
+		fill.type = 3;
+		fill.tex = nullptr;
+		fill.colour = 0;
+		for (const PickTri &t : _pickTris) {
+			fill.node = t.node;
+			drawTriangle(t.v, fill);
+		}
+		_pickBuilt = true;
+	}
+	return pick(x, y);
 }
 
 bool Renderer3D::nodeViewPosition(int node, int32 &x, int32 &y, int32 &z) const {

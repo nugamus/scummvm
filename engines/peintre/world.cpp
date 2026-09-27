@@ -24,7 +24,10 @@
 #include "common/endian.h"
 #include "common/system.h"
 
+#include "graphics/cursorman.h"
+
 #include "peintre/detection.h"
+#include "peintre/display.h"
 #include "peintre/gfx.h"
 #include "peintre/peintre.h"
 #include "peintre/sound.h"
@@ -157,6 +160,9 @@ static const int32 kEyeAboveFloor = 700;
 
 World::World(PeintreEngine *vm) : _vm(vm) {
 	loadCursors();
+	// Field of view (enhancement): 67 degrees is the original's f = 480.
+	const int fov = ConfMan.getInt("fov");
+	_focal = fov == 67 ? 0.0f : (float)(320.0 / tan(fov * M_PI / 360.0));
 }
 
 World::~World() {
@@ -206,6 +212,7 @@ bool World::sceneComplete(int scene) {
 }
 
 void World::unload() {
+	_vm->display()->forgetTextures();
 	_script.reset();
 	stopAllSounds();
 	for (Texture3D *t : _textures)
@@ -466,6 +473,7 @@ bool World::load(int scene, int prevScene, bool keepCamera) {
 	_barY = 480;
 	_reload = false;
 	_exit = kExitNone;
+	_cut = true;
 
 	_script.reset(ConfMan.getBool("dev_noscript") ? nullptr : createSceneScript(scene, bundle));
 	if (_script)
@@ -728,6 +736,11 @@ void World::dropCarried() {
 }
 
 void World::drawImage(const Graphics::Surface &img, int x, int y, bool keyed) {
+	Display *display = _vm->display();
+	if (display->hardware()) {
+		display->drawImage(img, x, y, keyed);
+		return;
+	}
 	Graphics::Surface &dst = _vm->screen();
 	if (keyed) {
 		blitKeyed(dst, img, x, y);
@@ -740,9 +753,10 @@ void World::drawImage(const Graphics::Surface &img, int x, int y, bool keyed) {
 	dst.copyRectToSurface(img, r.left, r.top, Common::Rect(r.left - x, r.top - y, r.right - x, r.bottom - y));
 }
 
-void World::drawBar() {
-	// interaction.md "Inventory bar": move, draw, clicks, items, sunflowers.
+void World::barLogic() {
+	// interaction.md "Inventory bar": move, clicks, items (drawn by drawBar).
 	const int barH = _bar.h;
+	_barButton = -1;
 	if (_barState == 2) {
 		if (!_barSoundPlayed) {
 			_vm->sound()->playStatic("bar_obj");
@@ -761,8 +775,6 @@ void World::drawBar() {
 			autosave();
 		}
 	}
-	if (_barState != 0)
-		drawImage(_bar, 0, _barY, false);
 	// Clicks while shown.
 	if (_barState == 1 && _click) {
 		const Common::Point m = _mousePos;
@@ -771,11 +783,11 @@ void World::drawBar() {
 			held += _vm->state().held(i) ? 1 : 0;
 		if (_cursor == kCursorArrow) {
 			if (m.x >= 12 && m.x <= 44 && m.y >= _barY + 15 && m.y <= _barY + 47) {
-				drawImage(_cursors[kCursorDef0], 10, _barY + 13, true);
+				_barButton = 0;
 				if (_barFirst > 0)
 					_barFirst--;
 			} else if (m.x >= 500 && m.x <= 532 && m.y >= _barY + 15 && m.y <= _barY + 47) {
-				drawImage(_cursors[kCursorDef1], 503, _barY + 13, true);
+				_barButton = 1;
 				_barFirst++;
 				if (held < _barFirst + 6)
 					_barFirst--;
@@ -792,6 +804,17 @@ void World::drawBar() {
 			_barState = 3;
 		}
 	}
+}
+
+void World::drawBar(int barY) {
+	if (barY >= 480)
+		return;
+	drawImage(_bar, 0, barY, false);
+	// The pressed arrow shows for the tick of its click.
+	if (_barButton == 0)
+		drawImage(_cursors[kCursorDef0], 10, barY + 13, true);
+	else if (_barButton == 1)
+		drawImage(_cursors[kCursorDef1], 503, barY + 13, true);
 	// Held objects and the sunflower counter.
 	int skipped = 0, drawn = 0;
 	for (uint i = 0; i < kNumObjects && drawn < 6; i++) {
@@ -802,23 +825,31 @@ void World::drawBar() {
 			continue;
 		}
 		const Graphics::Surface &img = _cursors[i];
-		drawImage(img, kBarItemX[drawn] - img.w / 2, _barY + 30 - img.h / 2, true);
+		drawImage(img, kBarItemX[drawn] - img.w / 2, barY + 30 - img.h / 2, true);
 		drawn++;
 	}
 	const int n = MIN<int>(sunflowers(), 15);
 	const Graphics::Surface &ct = _cursors[kCursorCounter + n];
-	drawImage(ct, 556, _barY + 31 - ct.h / 2, true);
+	drawImage(ct, 556, barY + 31 - ct.h / 2, true);
 }
 
-void World::drawFrame(bool hourglass) {
-	Graphics::Surface &dst = _vm->screen();
-	_renderer.draw(dst, Common::Rect(0, 0, 640, 480), _scene3D, _cam);
-	drawBar();
+Common::Rect World::viewRect() const {
+	// The original's 640x480; a wide display adds columns on both sides (enhancement).
+	const Display *display = _vm->display();
+	return Common::Rect(display->left(), 0, display->left() + display->width(), 480);
+}
+
+void World::frameLogic(bool hourglass) {
+	// The part of the original's frame that the game reads back: what is under the mouse
+	// and where the nodes are (render.md "Picking"), for this tick's camera.
+	_renderer.setFocal(_focal);
+	_renderer.draw(nullptr, viewRect(), _scene3D, viewOf(_cam));
+	barLogic();
 	// The return icon (interaction.md "The return icon and the ways out").
 	const Graphics::Surface &ret = _cursors[kCursorRetour];
-	if (!hourglass && _scene != kSceneMusee && _barState == 0 &&
-		_mousePos.x < ret.w + 10 && _mousePos.y > 474 - ret.h) {
-		drawImage(ret, 10, 474 - ret.h, true);
+	_returnShown = !hourglass && _scene != kSceneMusee && _barState == 0 &&
+		_mousePos.x < ret.w + 10 && _mousePos.y > 474 - ret.h;
+	if (_returnShown) {
 		_cursor = kCursorFinger;
 		if (_click)
 			requestMuseum();
@@ -834,12 +865,220 @@ void World::drawFrame(bool hourglass) {
 		else if (n.equalsIgnoreCase("clef"))
 			_cursor = kCursorCle;
 	}
-	if (hourglass) {
+	_hourglass = hourglass;
+}
+
+// ---------------------------------------------------------------------------------------
+// Drawing between ticks (enhancement: the original draws once per 66 ms tick)
+
+namespace {
+
+/** A rotation matrix (row-major, unit rows) as a unit quaternion (w, x, y, z). */
+void toQuat(const float *m, float q[4]) {
+	const float t = m[0] + m[4] + m[8];
+	if (t > 0) {
+		const float s = sqrtf(t + 1.0f) * 2;
+		q[0] = 0.25f * s;
+		q[1] = (m[7] - m[5]) / s;
+		q[2] = (m[2] - m[6]) / s;
+		q[3] = (m[3] - m[1]) / s;
+	} else if (m[0] > m[4] && m[0] > m[8]) {
+		const float s = sqrtf(1.0f + m[0] - m[4] - m[8]) * 2;
+		q[0] = (m[7] - m[5]) / s;
+		q[1] = 0.25f * s;
+		q[2] = (m[1] + m[3]) / s;
+		q[3] = (m[2] + m[6]) / s;
+	} else if (m[4] > m[8]) {
+		const float s = sqrtf(1.0f + m[4] - m[0] - m[8]) * 2;
+		q[0] = (m[2] - m[6]) / s;
+		q[1] = (m[1] + m[3]) / s;
+		q[2] = 0.25f * s;
+		q[3] = (m[5] + m[7]) / s;
+	} else {
+		const float s = sqrtf(1.0f + m[8] - m[0] - m[4]) * 2;
+		q[0] = (m[3] - m[1]) / s;
+		q[1] = (m[2] + m[6]) / s;
+		q[2] = (m[5] + m[7]) / s;
+		q[3] = 0.25f * s;
+	}
+}
+
+void fromQuat(const float q[4], float *m) {
+	const float w = q[0], x = q[1], y = q[2], z = q[3];
+	m[0] = 1 - 2 * (y * y + z * z);
+	m[1] = 2 * (x * y - w * z);
+	m[2] = 2 * (x * z + w * y);
+	m[3] = 2 * (x * y + w * z);
+	m[4] = 1 - 2 * (x * x + z * z);
+	m[5] = 2 * (y * z - w * x);
+	m[6] = 2 * (x * z - w * y);
+	m[7] = 2 * (y * z + w * x);
+	m[8] = 1 - 2 * (x * x + y * y);
+}
+
+/** Unit rows: a rotation (a scaled node keeps its new pose). */
+bool isRotation(const float *m) {
+	for (int r = 0; r < 3; r++) {
+		const float l = m[3 * r] * m[3 * r] + m[3 * r + 1] * m[3 * r + 1] + m[3 * r + 2] * m[3 * r + 2];
+		if (l < 0.96f || l > 1.04f)
+			return false;
+	}
+	return true;
+}
+
+/** a + (b - a) * t for angles in 1/4096 turn, the short way round. */
+float lerpAngle(float a, float b, float t) {
+	float d = fmodf(b - a, 4096.0f);
+	if (d > 2048)
+		d -= 4096;
+	else if (d < -2048)
+		d += 4096;
+	return a + d * t;
+}
+
+} // End of anonymous namespace
+
+void World::endTick() {
+	// What this tick drew, and the tick before, for drawing in between.
+	const uint n = _scene3D.nodes.size();
+	_posePrev = _poseCur;
+	_poseCur.resize(12 * n);
+	for (uint i = 0; i < n; i++) {
+		const Node &nd = _scene3D.nodes[i];
+		float *p = &_poseCur[12 * i];
+		for (int j = 0; j < 9; j++)
+			p[j] = nd.rotation[j] / 32768.0f;
+		p[9] = (float)nd.position.x;
+		p[10] = (float)nd.position.y;
+		p[11] = (float)nd.position.z;
+	}
+	memcpy(_camPrev, _camCur, sizeof(_camCur));
+	_camCur[0] = (float)_cam.x;
+	_camCur[1] = (float)_cam.y;
+	_camCur[2] = (float)_cam.z;
+	_camCur[3] = (float)_cam.pitch;
+	_camCur[4] = (float)_cam.yaw;
+	_camCur[5] = (float)_cam.roll;
+	_barYPrev = _barYCur;
+	_barYCur = _barY;
+	if (_cut || _posePrev.size() != _poseCur.size()) {
+		_posePrev = _poseCur;
+		memcpy(_camPrev, _camCur, sizeof(_camCur));
+		_barYPrev = _barYCur;
+		_cut = false;
+	}
+}
+
+void World::render(float alpha) {
+	Display *display = _vm->display();
+	alpha = CLIP(alpha, 0.0f, 1.0f);
+	const bool blend = !_cut && _poseCur.size() == 12 * _scene3D.nodes.size();
+
+	// The camera between the last two ticks; not across a jump.
+	float cam[6] = { (float)_cam.x, (float)_cam.y, (float)_cam.z, (float)_cam.pitch, (float)_cam.yaw, (float)_cam.roll };
+	if (blend) {
+		const float d[3] = { _camCur[0] - _camPrev[0], _camCur[1] - _camPrev[1], _camCur[2] - _camPrev[2] };
+		const bool jump = d[0] * d[0] + d[1] * d[1] + d[2] * d[2] > 3000.0f * 3000.0f;
+		const float t = jump ? 1.0f : alpha;
+		for (int i = 0; i < 3; i++)
+			cam[i] = _camPrev[i] + d[i] * t;
+		for (int i = 3; i < 6; i++)
+			cam[i] = lerpAngle(_camPrev[i], _camCur[i], t);
+	}
+	const View view = viewOf(cam[0], cam[1], cam[2], cam[3], cam[4], cam[5]);
+
+	// Node poses between the last two ticks: rotations by quaternions, positions linearly;
+	// a node that jumped or turned far (a cut in its track) takes the new pose.
+	const float *poses = nullptr;
+	if (blend) {
+		_poseDraw.resize(_poseCur.size());
+		for (uint i = 0; i < _poseCur.size(); i += 12) {
+			const float *a = &_posePrev[i], *b = &_poseCur[i];
+			float *o = &_poseDraw[i];
+			memcpy(o, b, 12 * sizeof(float));
+			if (!memcmp(a, b, 12 * sizeof(float)))
+				continue;
+			const float dp[3] = { b[9] - a[9], b[10] - a[10], b[11] - a[11] };
+			if (dp[0] * dp[0] + dp[1] * dp[1] + dp[2] * dp[2] > 2000.0f * 2000.0f)
+				continue;
+			for (int j = 0; j < 3; j++)
+				o[9 + j] = a[9 + j] + dp[j] * alpha;
+			if (!memcmp(a, b, 9 * sizeof(float)) || !isRotation(a) || !isRotation(b))
+				continue;
+			float qa[4], qb[4];
+			toQuat(a, qa);
+			toQuat(b, qb);
+			float dot = qa[0] * qb[0] + qa[1] * qb[1] + qa[2] * qb[2] + qa[3] * qb[3];
+			if (dot < 0) {
+				for (float &c : qb)
+					c = -c;
+				dot = -dot;
+			}
+			if (dot < 0.95f)
+				continue; // more than about 36 degrees in one tick
+			// Close rotations: a normalised lerp is a slerp to within a hair.
+			float q[4], len = 0;
+			for (int j = 0; j < 4; j++) {
+				q[j] = qa[j] + (qb[j] - qa[j]) * alpha;
+				len += q[j] * q[j];
+			}
+			len = sqrtf(len);
+			for (float &c : q)
+				c /= len;
+			fromQuat(q, o);
+		}
+		poses = _poseDraw.data();
+	}
+
+	_view.setFocal(_focal);
+	_view.setClip(_renderer.nearZ(), _renderer.farZ());
+	if (display->hardware()) {
+		_view.draw(nullptr, viewRect(), _scene3D, view, poses, &_tris);
+		display->begin3D(_focal > 0 ? _focal : 480.0f, _renderer.nearZ(), _renderer.farZ());
+		display->drawTriangles(_tris);
+	} else {
+		_view.draw(&_vm->screen(), Common::Rect(0, 0, 640, 480), _scene3D, view, poses);
+	}
+
+	// The 2D over it: the bar (sliding between ticks too), the return icon, the hourglass.
+	drawBar(blend ? (int)(_barYPrev + (_barYCur - _barYPrev) * alpha + 0.5f) : _barY);
+	if (_returnShown) {
+		const Graphics::Surface &ret = _cursors[kCursorRetour];
+		drawImage(ret, 10, 474 - ret.h, true);
+	}
+	if (_hourglass) {
 		const Graphics::Surface &h = _cursors[kCursorHourglass];
 		drawImage(h, 320 - h.w / 2, 240 - h.h / 2, true);
-	} else {
-		drawImage(_cursors[_cursor], _mousePos.x, _mousePos.y, true);
 	}
+	updateCursor();
+	if (display->hardware())
+		display->end3D();
+	else
+		_vm->present();
+}
+
+void World::updateCursor() {
+	// The cursor through ScummVM's cursor manager, so it follows the mouse at the display's
+	// rate (the original draws it into each 66 ms frame, top-left at the mouse).
+	if (_hourglass) {
+		CursorMan.showMouse(false);
+		return;
+	}
+	const int scale = _vm->display()->pixelScale();
+	if (_cursor != _shownCursor || scale != _shownScale) {
+		_shownCursor = _cursor;
+		_shownScale = scale;
+		const Graphics::Surface &c = _cursors[_cursor];
+		if (scale <= 1) {
+			CursorMan.replaceCursor(c, 0, 0, kTgaKey);
+		} else {
+			Graphics::Surface *big = c.scale(c.w * scale, c.h * scale); // nearest: the key stays exact
+			CursorMan.replaceCursor(*big, 0, 0, kTgaKey);
+			big->free();
+			delete big;
+		}
+	}
+	CursorMan.showMouse(true);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1046,9 +1285,9 @@ void World::collide() {
 }
 
 WorldExit World::tick() {
-	const uint32 now = g_system->getMillis() / 66;
-	_elapsed = _lastTickCount ? CLIP<uint32>(now - _lastTickCount, 1, 10) : 1;
-	_lastTickCount = now;
+	// The engine runs every 66 ms tick (a late one is caught up rather than dropped), so
+	// one tick has passed since the last (movement.md "The tick": elapsed 1..10).
+	_elapsed = 1;
 
 	if (_reload) {
 		_reload = false;
@@ -1057,14 +1296,14 @@ WorldExit World::tick() {
 	if (_flying) {
 		mouse();
 		flightStep();
-		drawFrame(true);
+		frameLogic(true);
 		return _exit;
 	}
 	// One frame (movement.md, 0x4223e8).
 	move();
 	collide();
 	mouse();
-	drawFrame(false);
+	frameLogic(false);
 	if (_vm->keyFired(Common::KEYCODE_BACKSPACE) && _scene != kSceneMusee)
 		requestMuseum();
 	if (_vm->keyFired(Common::KEYCODE_SPACE)) {
