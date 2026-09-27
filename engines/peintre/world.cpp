@@ -504,20 +504,31 @@ void World::requestMuseum() {
 	}
 }
 
-void World::requestZone(int zone) {
-	_zone = zone;
-	_exit = kExitZone;
-	// The camera and the scene go into the block (0x42f755, save.md "3D block").
+void World::storeView(bool pitch) {
 	byte *b = _vm->state().block3D;
 	WRITE_LE_UINT32(b + 0x30, _cam.x);
 	WRITE_LE_UINT32(b + 0x34, _cam.y);
 	WRITE_LE_UINT32(b + 0x38, _cam.z);
-	WRITE_LE_UINT32(b + 0x24, _cam.pitch);
+	if (pitch)
+		WRITE_LE_UINT32(b + 0x24, _cam.pitch);
 	WRITE_LE_UINT32(b + 0x28, _cam.yaw);
 	WRITE_LE_UINT32(b + 0x2C, _cam.roll);
 	b[0x3C] = _scene;
 	b[0x3D] = _prevScene;
-	b[0x3E] = zone;
+}
+
+void World::requestZone(int zone) {
+	_zone = zone;
+	_exit = kExitZone;
+	// The camera and the scene go into the block (0x42f755, save.md "3D block").
+	storeView(true);
+	_vm->state().block3D[0x3E] = zone;
+}
+
+void World::autosave() {
+	// 0x42f873 copies the pitch elsewhere (0x5b7fb0), not into the block.
+	storeView(false);
+	_vm->writeResume(0);
 }
 
 void World::requestMovie(const Common::String &name) {
@@ -747,7 +758,7 @@ void World::drawBar() {
 		if (_barY >= 480) {
 			_barY = 480;
 			_barState = 0;
-			_vm->writeResume(0); // autosave (0x42f873)
+			autosave();
 		}
 	}
 	if (_barState != 0)
@@ -1062,8 +1073,10 @@ WorldExit World::tick() {
 		else if (_barState == 1)
 			_barState = 3;
 	}
-	if (_vm->keyFired(Common::KEYCODE_ESCAPE) && _exit == kExitNone)
+	if (_vm->keyFired(Common::KEYCODE_ESCAPE) && _exit == kExitNone) {
+		storeView(true); // 0x42edef
 		_exit = kExitOptions;
+	}
 	if (_script)
 		_script->frame(*this);
 	else
