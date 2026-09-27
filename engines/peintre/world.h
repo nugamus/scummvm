@@ -212,6 +212,8 @@ public:
 	void requestScene(int target);
 	void requestMuseum();
 	void requestZone(int zone);
+	/** The autosave on closing the bar (0x42f873): camera and scene into the block, then the resume file. */
+	void autosave();
 	void requestMovie(const Common::String &name);
 	void startFlight(int target);
 
@@ -222,6 +224,8 @@ public:
 	void setAmbience(const Common::String &name);
 
 private:
+	/** Camera and scene into the 3D block (0x42f755, 0x42edef, 0x42f873); the autosave leaves the pitch. */
+	void storeView(bool pitch);
 	void move();
 	void collide();
 	void mouse();
