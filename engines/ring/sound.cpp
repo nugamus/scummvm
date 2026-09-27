@@ -273,6 +273,11 @@ bool Sounds::playing(int id) {
 	return active(*s);
 }
 
+int Sounds::typeOf(int id) {
+	Sound *s = find(id);
+	return s ? s->type : 0;
+}
+
 bool Sounds::typePlaying(int type) {
 	if (type == kSoundDialogue)
 		return !_dialogues.empty();

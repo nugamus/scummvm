@@ -94,6 +94,8 @@ public:
 	/** The preferences' volumes: `volume` for every type but 5, `dialogue` for 5. */
 	void setTypeVolumes(int volume, int dialogue);
 	bool playing(int id);
+	/** The sound's type, 0 when there is no such sound. */
+	int typeOf(int id);
 	bool typePlaying(int type);
 
 	/** Once per frame, after drawing: natural ends raise their events (0x468da0). */
