@@ -104,6 +104,7 @@ private:
 			if (colon == Common::String::npos || g_system->getMillis() < (uint32)atoi(pending[i].c_str()))
 				continue;
 			const Common::String arg = pending[i].substr(colon + 1);
+			debugC(1, kDebugScript, "dev_goto %s at %u ms", arg.c_str(), g_system->getMillis());
 			if (arg.hasPrefix("@")) {
 				// @scene,x,y,z,pitch,yaw: a camera in that scene.
 				int32 v[6] = { -1, 0, 0, 0, 0, 0 };
@@ -217,7 +218,16 @@ private:
 		const int u = w.pickAt(m.x, m.y);
 		debugC(2, kDebugScript, "Centre node %s, node under the mouse %s", c >= 0 ? w.scene3D().nodes[c].name.c_str() : "none",
 			   u >= 0 ? w.scene3D().nodes[u].name.c_str() : "none");
-		for (const SceneObject &o : w.objects) {
+		// dev_list=node,node: more nodes to list than the table's.
+		Common::Array<SceneObject> list = w.objects;
+		Common::StringTokenizer extra(ConfMan.get("dev_list"), ",");
+		while (!extra.empty()) {
+			SceneObject o;
+			o.name = extra.nextToken();
+			o.node = w.findObject(o.name);
+			list.push_back(o);
+		}
+		for (const SceneObject &o : list) {
 			if (o.node < 0)
 				continue;
 			int n = 0;
