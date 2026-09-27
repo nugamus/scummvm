@@ -43,6 +43,8 @@ namespace Ring {
 class Cursors;
 class Resources;
 class World;
+struct Movability;
+struct Rotation;
 
 /**
  * The Ring engine (Arxel Tribe, 1999). Behaviour follows the specs in the research
@@ -103,6 +105,12 @@ private:
 	void track(int x, int y);
 	/** `MouseLeftEvent` (spec/cursor.md). */
 	void click(int x, int y);
+	/** Through a movability of the current rotation or puzzle (spec/rotation.md). */
+	void move(const Movability &m);
+	/** 0x4101c0: an animated turn of the current rotation, one step per frame. */
+	void turn(Rotation &r, float alpha, float beta, float ran);
+	/** Draws the current rotation (or puzzle) and puzzle 1, without the cursor. */
+	void drawView();
 	/** A key (0x40b060): clicks the hot spot that has it (spec/events.md, "Keys"). */
 	void key(int code);
 

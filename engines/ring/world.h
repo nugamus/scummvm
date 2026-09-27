@@ -86,6 +86,10 @@ struct PuzzleImage {
 
 /** A way out of a puzzle or rotation (`*AddMovTo*`, spec/api.md "Movability"). */
 struct Movability {
+	/** The transition (0x423730): the turn before the ride and the angles after it. */
+	float alpha1 = 0, beta1 = 0, ran1 = 85.0f;
+	byte turn = 2; ///< 0 animated, 1 at once, 2 none (spec/rotation.md)
+	float alpha2 = 0, beta2 = 0, ran2 = 85.0f;
 	HotSpot hotSpot;
 	int target = 0;
 	int kind = 0;        ///< 0 rotation → rotation, 1 rotation → puzzle, 2 puzzle → rotation, 3 puzzle → puzzle
@@ -117,6 +121,13 @@ struct Rotation {
 	Common::Array<Common::SharedPtr<Accessibility> > accessibilities;
 	Common::Array<Movability> movabilities;
 	Common::ScopedPtr<Panorama> panorama;
+
+	/** 0x410170: all three at once. */
+	void setAngles(float a, float b, float r) {
+		setAlpha(a);
+		beta = b;
+		ran = r;
+	}
 
 	/** `RotSetAlp` (0x405920): stored 135 degrees less. */
 	void setAlpha(float a) {
