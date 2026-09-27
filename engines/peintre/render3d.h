@@ -93,6 +93,8 @@ public:
 	int pick(int x, int y) const;
 	/** The same through a whole-view buffer, built on first use (many points, dev harness). */
 	int pickBuffered(int x, int y);
+	/** A point where the last draw can pick the node: its centre or else a vertex. */
+	bool nodeScreenPoint(int node, Common::Point &p) const;
 	/** A node's position in camera space after the last draw (its +0x4c). */
 	bool nodeViewPosition(int node, int32 &x, int32 &y, int32 &z) const;
 

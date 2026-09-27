@@ -34,6 +34,15 @@ enum PeintreDebugChannels {
 	kDebugSound
 };
 
+// Enhancements, all off by default (the original).
+#define GAMEOPTION_WIDESCREEN GUIO_GAMEOPTIONS1
+#define GAMEOPTION_FILTER_TEXTURES GUIO_GAMEOPTIONS2
+#define GAMEOPTION_MODERN_CONTROLS GUIO_GAMEOPTIONS3
+#define GAMEOPTION_INVERT_Y GUIO_GAMEOPTIONS4
+#define GAMEOPTION_MOUSE_SENSITIVITY GUIO_GAMEOPTIONS5
+#define GAMEOPTION_TURN_SPEED GUIO_GAMEOPTIONS6
+#define GAMEOPTION_FOV GUIO_GAMEOPTIONS7
+
 extern const PlainGameDescriptor peintreGames[];
 
 extern const ADGameDescription gameDescriptions[];

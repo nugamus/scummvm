@@ -163,6 +163,8 @@ World::World(PeintreEngine *vm) : _vm(vm) {
 	// Field of view (enhancement): 67 degrees is the original's f = 480.
 	const int fov = ConfMan.getInt("fov");
 	_focal = fov == 67 ? 0.0f : (float)(320.0 / tan(fov * M_PI / 360.0));
+	// Turn speed (enhancement): 100% is the original's steps.
+	_turn = ConfMan.getInt("turn_speed") / 100.0f;
 }
 
 World::~World() {
@@ -467,7 +469,7 @@ bool World::load(int scene, int prevScene, bool keepCamera) {
 		_cam.yaw = s.yaw;
 		_cam.roll = 0;
 	}
-	_v = _vy = _w = _p = 0;
+	_v = _vy = _w = _p = _s = 0;
 	_cursor = kCursorArrow;
 	_barState = 0;
 	_barY = 480;
@@ -674,6 +676,12 @@ void World::setAmbience(const Common::String &name) {
 
 void World::mouse() {
 	_mousePos = _vm->mouse();
+	if (_carrying && _vm->mouseCaptured()) {
+		// The game picks at the carried image's centre: that goes on the crosshair.
+		const Graphics::Surface &c = _cursors[_cursor];
+		_mousePos.x -= c.w / 2;
+		_mousePos.y -= c.h / 2;
+	}
 	_click = _vm->buttonDown(); // the button's level, no edge (interaction.md)
 }
 
@@ -956,8 +964,8 @@ void World::endTick() {
 	_camCur[0] = (float)_cam.x;
 	_camCur[1] = (float)_cam.y;
 	_camCur[2] = (float)_cam.z;
-	_camCur[3] = (float)_cam.pitch;
-	_camCur[4] = (float)_cam.yaw;
+	_camCur[3] = (float)_cam.pitch + _lookRest[1];
+	_camCur[4] = (float)_cam.yaw + _lookRest[0];
 	_camCur[5] = (float)_cam.roll;
 	_barYPrev = _barYCur;
 	_barYCur = _barY;
@@ -967,11 +975,46 @@ void World::endTick() {
 		_barYPrev = _barYCur;
 		_cut = false;
 	}
+	updateHotspots();
+}
+
+void World::look() {
+	// Modern controls: the mouse turns the view at once, between ticks too. The camera takes
+	// whole steps; the fraction stays in the drawn angles.
+	float yaw, pitch;
+	_vm->takeLook(yaw, pitch);
+	if (!_vm->mouseCaptured() || (yaw == 0 && pitch == 0))
+		return;
+	float cur = fmodf(_camCur[3], 4096.0f);
+	if (cur < 0)
+		cur += 4096;
+	if (cur >= 2048)
+		cur -= 4096;
+	// Up or down to about 53 degrees (the original's Page Up/Down reach about 44 from level).
+	const float next = CLIP(cur + pitch, MIN(cur, -600.0f), MAX(cur, 600.0f));
+	pitch = next - cur;
+	_camPrev[3] += pitch;
+	_camCur[3] += pitch;
+	_camPrev[4] += yaw;
+	_camCur[4] += yaw;
+	_lookRest[0] += yaw;
+	_lookRest[1] += pitch;
+	const int32 dy = (int32)_lookRest[0], dp = (int32)_lookRest[1];
+	_cam.yaw = (_cam.yaw + dy) & 0xFFF;
+	_cam.pitch = (_cam.pitch + dp) & 0xFFF;
+	_lookRest[0] -= dy;
+	_lookRest[1] -= dp;
+	_vm->warpMouse(320, 240);
 }
 
 void World::render(float alpha) {
 	Display *display = _vm->display();
 	alpha = CLIP(alpha, 0.0f, 1.0f);
+	// Modern controls: mouse look while the bar is closed; a free cursor over the bar.
+	if (_vm->modernControls()) {
+		_vm->captureMouse(_barState == 0 && !_hourglass);
+		look();
+	}
 	const bool blend = !_cut && _poseCur.size() == 12 * _scene3D.nodes.size();
 
 	// The camera between the last two ticks; not across a jump.
@@ -1055,6 +1098,31 @@ void World::render(float alpha) {
 		display->end3D();
 	else
 		_vm->present();
+	_vm->drawHotspots();
+}
+
+void World::updateHotspots() {
+	// ScummVM's hotspot overlay: each object of the scene's table that the game can pick
+	// now, marked at the first of its centre and its vertices that picks it.
+	if (!_vm->hotspotsShown())
+		return;
+	Common::Array<Graphics::HotspotInfo> list;
+	if (!_flying) {
+		for (const SceneObject &o : objects) {
+			Common::Point p;
+			if (o.node < 0 || !_renderer.nodeScreenPoint(o.node, p))
+				continue;
+			const Graphics::HotspotType type = o.cursorType == 6 ? Graphics::kHotspotExit : Graphics::kHotspotObject;
+			list.push_back(Graphics::HotspotInfo(_vm->display()->toWindow(p), Common::U32String(o.name), type));
+		}
+	}
+	bool same = list.size() == _hotspotList.size();
+	for (uint i = 0; same && i < list.size(); i++)
+		same = list[i].position == _hotspotList[i].position && list[i].name == _hotspotList[i].name;
+	if (!same) {
+		_hotspotList = list;
+		_hotspotsChanged = true;
+	}
 }
 
 void World::updateCursor() {
@@ -1065,15 +1133,18 @@ void World::updateCursor() {
 		return;
 	}
 	const int scale = _vm->display()->pixelScale();
-	if (_cursor != _shownCursor || scale != _shownScale) {
+	const bool centred = _carrying && _vm->mouseCaptured();
+	if (_cursor != _shownCursor || scale != _shownScale || centred != _shownCentred) {
 		_shownCursor = _cursor;
 		_shownScale = scale;
+		_shownCentred = centred;
 		const Graphics::Surface &c = _cursors[_cursor];
+		const int hx = centred ? c.w / 2 * scale : 0, hy = centred ? c.h / 2 * scale : 0;
 		if (scale <= 1) {
-			CursorMan.replaceCursor(c, 0, 0, kTgaKey);
+			CursorMan.replaceCursor(c, hx, hy, kTgaKey);
 		} else {
 			Graphics::Surface *big = c.scale(c.w * scale, c.h * scale); // nearest: the key stays exact
-			CursorMan.replaceCursor(*big, 0, 0, kTgaKey);
+			CursorMan.replaceCursor(*big, hx, hy, kTgaKey);
 			big->free();
 			delete big;
 		}
@@ -1094,6 +1165,7 @@ void World::move() {
 	};
 	damp(_v);
 	damp(_w);
+	damp(_s);
 	if (_vy != 0)
 		_vy -= _vy / 2;
 	if (_vy < 6)
@@ -1102,18 +1174,25 @@ void World::move() {
 		_v += 60;
 	if (_vm->keyHeld(Common::KEYCODE_DOWN) && _v > -2500)
 		_v -= 60;
-	if (_vm->keyHeld(Common::KEYCODE_LEFT) && _w > -300)
-		_w -= 40;
-	if (_vm->keyHeld(Common::KEYCODE_RIGHT) && _w < 300)
-		_w += 40;
+	// The turn speed option scales the turning and looking steps (100%: 40, 300, 30).
+	const int32 turnStep = (int32)(40 * _turn), turnMax = (int32)(300 * _turn), lookStep = (int32)(30 * _turn);
+	if (_vm->keyHeld(Common::KEYCODE_LEFT) && _w > -turnMax)
+		_w -= turnStep;
+	if (_vm->keyHeld(Common::KEYCODE_RIGHT) && _w < turnMax)
+		_w += turnStep;
 	if (_vm->keyHeld(Common::KEYCODE_PAGEUP) && _p < 500) {
-		_p += 30;
-		_cam.pitch += 30;
+		_p += lookStep;
+		_cam.pitch += lookStep;
 	}
 	if (_vm->keyHeld(Common::KEYCODE_PAGEDOWN) && _p > -500) {
-		_p -= 30;
-		_cam.pitch -= 30;
+		_p -= lookStep;
+		_cam.pitch -= lookStep;
 	}
+	// Strafing (modern controls, not in the original): walking's steps along the right axis.
+	if (_vm->keyHeld((Common::KeyCode)kKeyStrafeLeft) && _s > -2500)
+		_s -= 60;
+	if (_vm->keyHeld((Common::KeyCode)kKeyStrafeRight) && _s < 2500)
+		_s += 60;
 	_cam.pitch &= 0xFFF;
 	_cam.yaw = (_cam.yaw + _w) & 0xFFF;
 	_cam.roll &= 0xFFF;
@@ -1121,6 +1200,10 @@ void World::move() {
 	cameraMatrix(_cam.pitch, _cam.yaw, _cam.roll, m);
 	_cam.x += (int32)(((int64)m[2] * _v) / 32768);
 	_cam.z += (int32)(((int64)m[8] * _v) / 32768);
+	if (_s) {
+		_cam.x += (int32)(((int64)m[0] * _s) / 32768);
+		_cam.z += (int32)(((int64)m[6] * _s) / 32768);
+	}
 	_cam.y += _vy;
 }
 
