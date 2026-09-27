@@ -60,6 +60,12 @@ Object *World::object(int id) {
 	return nullptr;
 }
 
+static float asFloat(int32 bits) {
+	float f;
+	memcpy(&f, &bits, 4);
+	return f;
+}
+
 // A hot spot's rectangle as declared; some are empty or inverted and never match (0x4238b0).
 static Common::Rect rectOf(const int32 *a) {
 	Common::Rect r;
@@ -131,6 +137,37 @@ void World::apply(int zone, const SetupCall &c) {
 		list->push_back(m);
 		break;
 	}
+	case kRotSetMovToRot:
+	case kRotSetMovToPuz:
+	case kPuzSetMovToRot: {
+		Rotation *r = c.call == kPuzSetMovToRot ? nullptr : rotation(a[0]);
+		Puzzle *p = c.call == kPuzSetMovToRot ? puzzle(a[0]) : nullptr;
+		Common::Array<Movability> *list = r ? &r->movabilities : p ? &p->movabilities : nullptr;
+		if (!list || (uint)a[1] >= list->size())
+			break;
+		Movability &m = (*list)[a[1]];
+		if (c.call == kPuzSetMovToRot) {
+			m.alpha2 = asFloat(a[2]);
+			m.beta2 = asFloat(a[3]);
+			m.ran2 = asFloat(a[4]);
+			break;
+		}
+		m.alpha1 = asFloat(a[2]);
+		m.beta1 = asFloat(a[3]);
+		m.ran1 = asFloat(a[4]);
+		m.turn = (byte)a[6];
+		if (c.call == kRotSetMovToRot) {
+			m.alpha2 = asFloat(a[7]);
+			m.beta2 = asFloat(a[8]);
+			m.ran2 = asFloat(a[9]);
+		}
+		break;
+	}
+	case kRotSetMovOff:
+		if (Rotation *r = rotation(a[0]))
+			for (int i = a[1]; i <= a[2] && i >= 0 && i < (int)r->movabilities.size(); i++)
+				r->movabilities[i].hotSpot.enabled = false;
+		break;
 	case kPuzAddBgrImg:
 		if (Puzzle *p = puzzle(a[0])) {
 			p->background = str(1);

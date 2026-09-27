@@ -390,6 +390,13 @@ void RingEngine::requestClose() {
 }
 
 void RingEngine::frame() {
+	drawView();
+	track(_mouse.x, _mouse.y);
+	_cursors->draw(*_resources, _screen, _mouse.x, _mouse.y, g_system->getMillis());
+	present();
+}
+
+void RingEngine::drawView() {
 	_screen.fillRect(Common::Rect(0, 0, 640, 16), 0);
 	_screen.fillRect(Common::Rect(0, 464, 640, 480), 0);
 	Rotation *r = _mode == 1 ? _world->rotation(_rotation) : nullptr;
@@ -413,9 +420,54 @@ void RingEngine::frame() {
 	}
 	if (Puzzle *p1 = _world->puzzle(1))
 		_world->draw(*p1, *_resources, _screen);
-	track(_mouse.x, _mouse.y);
-	_cursors->draw(*_resources, _screen, _mouse.x, _mouse.y, g_system->getMillis());
-	present();
+}
+
+void RingEngine::turn(Rotation &r, float alpha, float beta, float ran) {
+	float a = alpha - 135.0f;
+	if (a < 0.0f)
+		a += 360.0f;
+	float a0 = r.alpha, b0 = r.beta, r0 = r.ran;
+	int da = ABS((int)(a - a0)), db = ABS((int)(beta - b0)), dr = ABS((int)(ran - r0));
+	if (da > 180)
+		da = 360 - da;
+	int steps = (int)(MAX(da, MAX(db, dr)) * 0.8f);
+	if (a - a0 > 180.0f)
+		a -= 360.0f;
+	else if (a - a0 < -180.0f)
+		a += 360.0f;
+	for (int i = 0; i < steps && !shouldQuit(); i++) {
+		float t = steps == 1 ? 0.0f : (float)i / (steps - 1);
+		r.alpha = a * t + a0 * (1 - t);
+		if (r.alpha > 360.0f)
+			r.alpha -= 360.0f;
+		r.beta = beta * t + b0 * (1 - t);
+		r.ran = ran * t + r0 * (1 - t);
+		drawView();
+		present();
+		pollEvents(16); // one step per frame (Q-0011)
+	}
+}
+
+void RingEngine::move(const Movability &m) {
+	// ponytail: the zone's movability events (0x40c2b0, 0x40c420) come with the zone handlers;
+	// Ctrl-clicks (no turn, no ride) with the key spec's modifiers
+	Rotation *from = _mode == 1 ? _world->rotation(_rotation) : nullptr;
+	if (from && m.turn == 0)
+		turn(*from, m.alpha1, m.beta1, m.ran1);
+	else if (from && m.turn == 1)
+		from->setAngles(m.alpha1, m.beta1, m.ran1);
+	Rotation *to = m.kind == 0 || m.kind == 2 ? _world->rotation(m.target) : nullptr;
+	if (to)
+		to->setAlpha(m.alpha2);
+	int zone = from ? from->zone : _zone;
+	if (!m.ride.empty())
+		playMovie(this, Common::Path("DATA").appendComponent(zoneFolder(zone)).appendComponent("PLA").appendComponent(m.ride + ".cnm"), 0);
+	if (to) {
+		rotSetAct(m.target);
+		to->setAngles(m.alpha2, m.beta2, m.ran2);
+	} else {
+		puzSetAct(m.target);
+	}
 }
 
 // The zone's handlers; puzzle 1's events always go to SY (spec/events.md).
@@ -476,9 +528,15 @@ void RingEngine::track(int x, int y) {
 }
 
 void RingEngine::click(int x, int y) {
-	// ponytail: clicks on rotations and movabilities come with the movement spec
 	Puzzle *p1 = _world->puzzle(1);
 	Puzzle *p = _mode == 2 ? _world->puzzle(_puzzle) : nullptr;
+	if (p1 && p1->mode != 2) {
+		if (const Movability *m = World::hit(p1->movabilities, x, y)) {
+			Movability copy = *m;
+			move(copy);
+			return;
+		}
+	}
 	for (Puzzle *q : { p1, p }) {
 		if (!q)
 			continue;
@@ -491,6 +549,28 @@ void RingEngine::click(int x, int y) {
 		}
 		if (q == p1 && p1->mode == 2)
 			return;
+		if (q == p) {
+			if (const Movability *m = World::hit(p->movabilities, x, y)) {
+				Movability copy = *m;
+				move(copy);
+				return;
+			}
+		}
+	}
+	Rotation *r = _mode == 1 ? _world->rotation(_rotation) : nullptr;
+	if (!r || r->paused || !r->panorama)
+		return;
+	Common::Point pt = _view.toPanorama(*r->panorama, x, y);
+	if (const Accessibility *acc = World::hit(r->accessibilities, pt.x, pt.y)) {
+		Object *o = _world->object(acc->object);
+		if (o && (o->flags & 1))
+			onClick(this, _zone, acc->object, acc->hotSpot.value);
+		track(x, y);
+		return;
+	}
+	if (const Movability *m = World::hit(r->movabilities, pt.x, pt.y)) {
+		Movability copy = *m;
+		move(copy);
 	}
 }
 
