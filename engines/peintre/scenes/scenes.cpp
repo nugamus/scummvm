@@ -21,6 +21,7 @@
 
 #include "common/config-manager.h"
 #include "common/debug.h"
+#include "common/system.h"
 #include "common/tokenizer.h"
 
 #include "peintre/detection.h"
@@ -75,6 +76,7 @@ public:
 
 	void frame(World &w) override {
 		_s->frame(w);
+		goTo(w);
 		if (gDebugLevel >= 2 && ++_ticks % 150 == 60)
 			listObjects(w);
 		if (gDebugLevel >= 3 && _ticks % 15 == 0) {
@@ -84,6 +86,50 @@ public:
 	}
 
 private:
+	/**
+	 * dev_goto=ms:node[,distance[,yaw]];... (ms since the engine started): once due and once
+	 * the node is in the current scene, the viewer stands in front of it (lookAt).
+	 */
+	static void goTo(World &w) {
+		static Common::Array<Common::String> pending;
+		static bool parsed = false;
+		if (!parsed) {
+			parsed = true;
+			Common::StringTokenizer t(ConfMan.get("dev_goto"), ";");
+			while (!t.empty())
+				pending.push_back(t.nextToken());
+		}
+		for (uint i = 0; i < pending.size(); i++) {
+			const size_t colon = pending[i].findFirstOf(':');
+			if (colon == Common::String::npos || g_system->getMillis() < (uint32)atoi(pending[i].c_str()))
+				continue;
+			const Common::String arg = pending[i].substr(colon + 1);
+			if (arg.hasPrefix("@")) {
+				// @scene,x,y,z,pitch,yaw: a camera in that scene.
+				int32 v[6] = { -1, 0, 0, 0, 0, 0 };
+				Common::StringTokenizer c(arg.substr(1), ",");
+				for (int k = 0; k < 6 && !c.empty(); k++)
+					v[k] = atoi(c.nextToken().c_str());
+				if (v[0] != w.scene())
+					continue;
+				Camera &cam = w.camera();
+				cam.x = v[1];
+				cam.y = v[2];
+				cam.z = v[3];
+				cam.pitch = v[4];
+				cam.yaw = v[5];
+				pending.remove_at(i);
+				return;
+			}
+			Common::StringTokenizer n(arg, ",");
+			if (w.findObject(n.nextToken()) < 0)
+				continue;
+			lookAt(w, arg);
+			pending.remove_at(i);
+			return;
+		}
+	}
+
 	/** The centre of a node's vertices in world space (render3d's parent x local order). */
 	static bool worldCentre(World &w, int node, double c[3]) {
 		const Common::Array<Node> &nodes = w.scene3D().nodes;
@@ -157,7 +203,8 @@ private:
 		cam.x = (int32)(c[0] - m[2] / 32768.0 * dist);
 		cam.z = (int32)(c[2] - m[8] / 32768.0 * dist);
 		cam.y = (int32)c[1] - 700; // eye height over an object on the floor
-		cam.pitch = 0;
+		// Aim down at the node from the eye 700 above it (y points down; lower pitch looks down).
+		cam.pitch = (int32)(-atan2(700.0, dist) * 4096 / (2 * M_PI)) & 0xFFF;
 		cam.yaw = best;
 		debugC(1, kDebugScript, "dev_look %s: centre %d, %d, %d; camera %d, %d, %d yaw %d", name.c_str(),
 			   (int)c[0], (int)c[1], (int)c[2], cam.x, cam.y, cam.z, best);
@@ -166,7 +213,10 @@ private:
 	/** Logs where each table object shows on screen: the hit pixel nearest its centre. */
 	void listObjects(World &w) {
 		const int c = w.pickAt(320, 240);
-		debugC(2, kDebugScript, "Centre node %s", c >= 0 ? w.scene3D().nodes[c].name.c_str() : "none");
+		const Common::Point m = w.vm()->mouse();
+		const int u = w.pickAt(m.x, m.y);
+		debugC(2, kDebugScript, "Centre node %s, node under the mouse %s", c >= 0 ? w.scene3D().nodes[c].name.c_str() : "none",
+			   u >= 0 ? w.scene3D().nodes[u].name.c_str() : "none");
 		for (const SceneObject &o : w.objects) {
 			if (o.node < 0)
 				continue;
@@ -222,7 +272,7 @@ SceneScript *createScript(int scene, const Common::String &bundle) {
 
 SceneScript *createSceneScript(int scene, const Common::String &bundle) {
 	SceneScript *s = createScript(scene, bundle);
-	return s && (ConfMan.hasKey("dev_vars") || ConfMan.hasKey("dev_camera") || ConfMan.hasKey("dev_look") || gDebugLevel >= 2) ? new DevScript(s) : s;
+	return s && (ConfMan.hasKey("dev_vars") || ConfMan.hasKey("dev_camera") || ConfMan.hasKey("dev_look") || ConfMan.hasKey("dev_goto") || gDebugLevel >= 2) ? new DevScript(s) : s;
 }
 
 void setObjects(World &w, const ObjectDef *defs, uint count) {
