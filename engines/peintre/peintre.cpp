@@ -241,7 +241,11 @@ Common::Error PeintreEngine::run() {
 	if (!_movies->loadTable())
 		warning("Cannot read the movie table from mission.___");
 	if (ConfMan.hasKey("dev_movie")) {
-		_movies->play(ConfMan.get("dev_movie"));
+		// dev_movie=credits runs the end credits instead.
+		if (ConfMan.get("dev_movie") == "credits")
+			runEndCredits();
+		else
+			_movies->play(ConfMan.get("dev_movie"));
 		return Common::kNoError;
 	}
 
