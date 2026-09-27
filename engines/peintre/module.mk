@@ -3,6 +3,7 @@ MODULE := engines/peintre
 MODULE_OBJS = \
 	accueil.o \
 	bfg.o \
+	display.o \
 	gfx.o \
 	menu.o \
 	metaengine.o \
