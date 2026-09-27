@@ -26,6 +26,9 @@
 #include "common/system.h"
 #include "common/tokenizer.h"
 
+#include "backends/keymapper/keymap.h"
+#include "backends/keymapper/keymapper.h"
+
 #include "engines/util.h"
 
 #include "graphics/pixelformat.h"
@@ -183,6 +186,18 @@ void PeintreEngine::pollInput() {
 			else if (event.kbd.ascii >= 32 && event.kbd.ascii < 256)
 				_typed += (char)event.kbd.ascii;
 			break;
+		case Common::EVENT_CUSTOM_ENGINE_ACTION_START:
+			// A keymapper action is the key it stands for (metaengine.cpp initKeymaps).
+			if (Common::find(_keysDown.begin(), _keysDown.end(), (Common::KeyCode)event.customType) == _keysDown.end())
+				_keysDown.push_back((Common::KeyCode)event.customType);
+			break;
+		case Common::EVENT_CUSTOM_ENGINE_ACTION_END: {
+			Common::Array<Common::KeyCode>::iterator it = Common::find(_keysDown.begin(), _keysDown.end(), (Common::KeyCode)event.customType);
+			if (it != _keysDown.end())
+				_keysDown.erase(it);
+			_keysFired.push_back((Common::KeyCode)event.customType);
+			break;
+		}
 		case Common::EVENT_KEYUP: {
 			// A key fires on the tick it is released (ui.md "Input").
 			Common::Array<Common::KeyCode>::iterator it = Common::find(_keysDown.begin(), _keysDown.end(), event.kbd.keycode);
@@ -274,7 +289,14 @@ Common::Error PeintreEngine::run() {
 		}
 	}
 	bool known = false;
-	if (!runPlayerScreen(_player, known))
+	// The name is typed: the keymapper must leave Space and Backspace to the text.
+	Common::Keymap *keymap = _system->getEventManager()->getKeymapper()->getKeymap("peintre");
+	if (keymap)
+		keymap->setEnabled(false);
+	const bool entered = runPlayerScreen(_player, known);
+	if (keymap)
+		keymap->setEnabled(true);
+	if (!entered)
 		return Common::kNoError;
 	if (!known)
 		deletePlayerSaves(_player);
