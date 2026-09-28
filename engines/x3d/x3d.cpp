@@ -574,8 +574,11 @@ void X3DEngine::frame(bool input) {
 	const float alpha = (float)_pending / stepMs;
 	for (int k = 0; k < 3; k++)
 		camera.position[k] = _previous.eye.getData()[k] + (_player.eye.getData()[k] - _previous.eye.getData()[k]) * alpha;
-	camera.yaw = _previous.yaw + (_player.yaw - _previous.yaw) * alpha;
-	camera.pitch = _previous.pitch + (_player.pitch - _previous.pitch) * alpha;
+	// Angles the short way round: a step from 6.28 to 0.01 (U04's boat) is not a full turn
+	const float twoPi = 2 * (float)M_PI;
+	const float dYaw = _player.yaw - _previous.yaw, dPitch = _player.pitch - _previous.pitch;
+	camera.yaw = _previous.yaw + (dYaw - twoPi * floorf(dYaw / twoPi + 0.5f)) * alpha;
+	camera.pitch = _previous.pitch + (dPitch - twoPi * floorf(dPitch / twoPi + 0.5f)) * alpha;
 	// The fov option widens free play's 90 degrees; scripted views (70 and below) keep
 	// theirs, and zooms between blend
 	camera.fov = _player.fov + _fovExtra * CLIP((_player.fov - 70) / 20, 0.0f, 1.0f);
