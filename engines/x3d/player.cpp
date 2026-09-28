@@ -176,7 +176,7 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 		if (direction || strafe) {
 			// Head bob: roll 1 degree per second, turning back at +-0.4
 			roll += _bob * dt;
-			if (fabs(roll) >= 0.4f)
+			if (fabsf(roll) >= 0.4f)
 				_bob = -_bob;
 
 			float step = _speed * _scale * dt * (running ? 2 : 1) * (crouched ? 0.25f : 1);

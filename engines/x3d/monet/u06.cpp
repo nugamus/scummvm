@@ -31,7 +31,6 @@ namespace X3D {
 
 using Math::Vector3d;
 
-static const float kHalfPi = (float)M_PI / 2;
 static const float kKeep = X3DEngine::kKeep;
 static const char *const kClown = "*U03_02";
 static const char *const kCan = "*U06_17";

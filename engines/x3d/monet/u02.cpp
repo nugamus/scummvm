@@ -35,7 +35,6 @@ namespace X3D {
 
 using Math::Vector3d;
 
-static const float kHalfPi = (float)M_PI / 2;
 static const float kKeep = X3DEngine::kKeep;
 static const uint32 kGaugeMs = 180000;
 

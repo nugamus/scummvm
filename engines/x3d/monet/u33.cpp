@@ -32,7 +32,6 @@ namespace X3D {
 
 using Math::Vector3d;
 
-static const float kHalfPi = (float)M_PI / 2;
 static const float kKeep = X3DEngine::kKeep;
 static const char *const kClown = "*U03_02";
 static const char *const kDoor = "*U03_16";
@@ -129,6 +128,11 @@ void U33::start(bool newGame, bool video) {
 	_vm->talk()->addTalker("U03_01", "$$$DUMMY.*visage");
 	_vm->talk()->addTalker("U03_02", "$$$DUMMY.visage");
 	_vm->talk()->addTalker("U03_09", "$$$DUMMY.visage");
+	// A restore inside the caravan (entered once: M92; M02's count 0) keeps run and jump off;
+	// the eye height and sphere come back with the camera
+	Interaction *interaction = _vm->interaction();
+	if (!newGame && interaction->exhausted(92) && interaction->runs(2) == 0)
+		_vm->player().runAllowed = _vm->player().jumpAllowed = false;
 	if (newGame) {
 		_vm->player().setSphere(38.5f, 19);
 		const Vector3d p = ground(-132.19f, -463.89f, 70);
@@ -140,7 +144,7 @@ void U33::start(bool newGame, bool video) {
 }
 
 void U33::afterFrame() {
-	// u33.md, Every frame (E-0422). ponytail: after rendering, not before
+	// u33.md, Every frame (E-0422). Run after rendering, not before as in the original
 	Interaction *interaction = _vm->interaction();
 	Sound *sound = _vm->sound();
 	const bool voice = sound->isGroupPlaying(Sound::kVoice);
@@ -193,7 +197,7 @@ void U33::walkToScreen() {
 	walkG(6000, 699, 61, z0, 0);
 	const Vector3d start = player.eye, to(825.89f, 60.1939f, 62);
 	// Yaw to 0 the short way round (WalkPath)
-	float yaw0 = fmod(player.yaw, 2 * (float)M_PI);
+	float yaw0 = fmodf(player.yaw, 2 * (float)M_PI);
 	if (yaw0 > M_PI)
 		yaw0 -= 2 * (float)M_PI;
 	else if (yaw0 < -M_PI)
@@ -466,7 +470,7 @@ void U33::afterStep() {
 		return;
 	Player &player = _vm->player();
 	_roll += _rho / X3DEngine::kStepsPerSecond;
-	if (fabs(_roll) > 1) {
+	if (fabsf(_roll) > 1) {
 		_roll = CLIP(_roll, -1.0f, 1.0f);
 		_rho = -_rho;
 	}

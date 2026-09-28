@@ -34,7 +34,6 @@ namespace X3D {
 
 using Math::Vector3d;
 
-static const float kHalfPi = (float)M_PI / 2;
 static const float kKeep = X3DEngine::kKeep;
 static const char *const kPlank = "*U06_30";
 
@@ -67,7 +66,7 @@ void U07::start(bool newGame, bool video) {
 	Player &player = _vm->player();
 	Interaction *interaction = _vm->interaction();
 	sound->play(Common::Path(scene->dir() + "Sound/s4_16.wav"), Sound::kAmbient, 85, true);
-	// ponytail: the original's falls in U07 are silent (camera +0x58 = 0); the engine's land
+	// The original's falls in U07 are silent (camera +0x58 = 0); the engine's land
 	// with SAUT
 	for (Scene::Model *m : scene->models())
 		for (const O3DObject &obj : m->file.objects)
@@ -84,6 +83,11 @@ void U07::start(bool newGame, bool video) {
 	player.groundObject = kPlank;
 	if (interaction->exhausted(4))
 		_vm->collision()->setEnabled("ColGrille", false);
+	// The original restores the plank untipped; here it comes back at its last frame
+	if (!newGame && _plankTipped && scene->addObjectNode(kPlank, "Anim/planche.A3D", 30)) {
+		scene->pauseNode(kPlank);
+		scene->setNodeFrame(kPlank, scene->nodeLastFrame(kPlank));
+	}
 	if (!newGame)
 		return;
 	const float p[3] = { 1454.67f, 1912.72f, 570.605f };

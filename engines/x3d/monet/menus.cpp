@@ -23,43 +23,24 @@
 // screens and the gallery (games/monet/docs/, engines/x3d/docs/spec/ui.md and save.md)
 
 #include "common/config-manager.h"
-#include "common/memstream.h"
 #include "common/ptr.h"
 #include "common/savefile.h"
-#include "common/serializer.h"
-#include "common/debug.h"
 #include "common/events.h"
 #include "common/file.h"
 #include "common/system.h"
 
-#include "backends/keymapper/keymap.h"
-#include "backends/keymapper/keymapper.h"
-
-#include "audio/audiostream.h"
-#include "audio/decoders/wave.h"
 #include "audio/mixer.h"
 
 #include "engines/metaengine.h"
-#include "engines/util.h"
 
-#include "graphics/cursorman.h"
+#include "graphics/surface.h"
 
-#include "image/bmp.h"
-
-#include "video/avi_decoder.h"
-
-#include "x3d/detection.h"
-#include "x3d/collision.h"
-#include "x3d/console.h"
 #include "x3d/frame.h"
 #include "x3d/monet/gallery3d.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
-#include "x3d/player.h"
 #include "x3d/renderer.h"
-#include "x3d/scene.h"
 #include "x3d/sound.h"
-#include "x3d/talk.h"
 #include "x3d/monet/u00.h"
 #include "x3d/monet/u01.h"
 #include "x3d/monet/u02.h"
@@ -78,7 +59,7 @@ void X3DEngine::saveMenu() {
 	Frame frame;
 	if (!frame.load("OptionSave"))
 		return;
-	// ponytail: the original appends typing to "Save without name"; here typing replaces it
+	// The original appends typing to "Save without name"; here typing replaces it
 	frame.setText("Save without name");
 	Common::StringArray names;
 	names.resize(99);
@@ -181,7 +162,7 @@ Common::StringArray X3DEngine::players(Common::String *current) const {
 
 bool X3DEngine::selectPlayer(const Common::String &name) {
 	_playerName = name;
-	// ponytail: players share ScummVM's save slots; the original keeps saves per player
+	// Players share ScummVM's save slots; the original keeps saves per player
 	Common::StringArray names;
 	Common::Array<int> units;
 	readPlayers(names, units);
@@ -225,7 +206,7 @@ Unit *X3DEngine::createUnit(const Common::String &sceneName) {
 	_gallery3D.clear();
 	if (view3d)
 		return new Gallery3D(this, painting);
-	if (sceneName.size() < 3 || toupper(sceneName[0]) != 'U' || !Common::isDigit(sceneName[1]))
+	if (sceneName.size() < 3 || !sceneName.hasPrefixIgnoreCase("U") || !Common::isDigit(sceneName[1]))
 		return nullptr;
 	const int n = atoi(sceneName.c_str() + 1);
 	switch (n) {
@@ -437,12 +418,13 @@ void X3DEngine::magnifier(const Common::String &painting) {
 	int width = 0, height = 0;
 	for (int i = 0; i < cols * rows; i++) {
 		parts.push_back(loadBitmap(Common::Path(Common::String::format("2dbit/%sLoupe%d.BMP", painting.c_str(), i + 1))));
-		if (!parts.back())
+		if (!parts.back()) {
 			warning("Missing magnifier part %d of %s", i + 1, painting.c_str());
-		if (parts.back() && i / cols == 0)
-			width += parts.back()->w;
-		if (parts.back() && i % cols == 0)
-			height += parts.back()->h;
+			continue;
+		}
+		// Parts sit on a 640x480 grid; the canvas covers each one, even with a part missing
+		width = MAX<int>(width, (i % cols) * 640 + parts.back()->w);
+		height = MAX<int>(height, (i / cols) * 480 + parts.back()->h);
 	}
 	Graphics::Surface image;
 	image.create(MAX(width, 640), MAX(height, 480), Graphics::PixelFormat::createFormatRGBA32());
