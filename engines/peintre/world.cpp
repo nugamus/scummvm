@@ -579,17 +579,20 @@ void World::startFlight(int target) {
 	const StartPos &t = kMuseumSpot[target];
 	const int32 cur[5] = { _cam.x, _cam.y, _cam.z, _cam.pitch, _cam.yaw };
 	const int32 dst[5] = { t.x, t.y, t.z, t.pitch, t.yaw };
+	// 0x41f506: a zero difference counts as 1 before the division (so it moves 0); angles
+	// go the short way; positions are divided with truncation, so the flight ends up to 21
+	// units off (and 2 steps past, below), as in the original.
 	for (int i = 0; i < 5; i++) {
 		int32 d = dst[i] - cur[i];
-		if (i >= 3) {
-			d &= 0xFFF;
-			if (d > 0x800)
-				d -= 0x1000;
-		}
-		d /= 20;
 		if (d == 0)
 			d = 1;
-		_flightDelta[i] = d;
+		if (i >= 3) {
+			if (d < -0x800)
+				d += 0x1000;
+			else if (d > 0x800)
+				d -= 0x1000;
+		}
+		_flightDelta[i] = d / 20;
 	}
 	_flying = true;
 	_flightStep = 0;
@@ -602,8 +605,10 @@ void World::flightStep() {
 	_cam.z += _flightDelta[2];
 	_cam.pitch = (_cam.pitch + _flightDelta[3]) & 0xFFF;
 	_cam.yaw = (_cam.yaw + _flightDelta[4]) & 0xFFF;
-	_flightStep += _elapsed >= 3 ? _elapsed / 2 : 1;
-	if (_flightStep > 20)
+	// 0x41f9f8: the step that finds the count past 20 has moved too (22 steps in all).
+	if (_flightStep < 21)
+		_flightStep += _elapsed >= 3 ? _elapsed / 2 : 1;
+	else
 		finishFlight();
 }
 
