@@ -205,8 +205,7 @@ public:
 			w.anims[kAnimLog].playing = false;
 			scrollUVs(w, _fire, 0, 0x550000);
 		}
-		if (stepAnim(w, kAnimChair, e / 2))
-			w.anims[kAnimChair].frame = 1;
+		loopAnim(w, kAnimChair, e / 2);
 		if (stepAnim(w, kAnimFaggot, e)) {
 			w.setHidden(node(w, kFagot), true);
 			w.anims[kAnimFaggot].playing = false;

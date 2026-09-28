@@ -113,8 +113,7 @@ public:
 			w.var(kWardrobeOpen) = 1;
 			w.objects[kArmoire].cursorType = 0xFF;
 		}
-		if (stepAnim(w, kAnimFou, w.elapsed()))
-			w.anims[kAnimFou].frame = 1;
+		loopAnim(w, kAnimFou, w.elapsed());
 	}
 };
 
