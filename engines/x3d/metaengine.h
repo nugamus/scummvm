@@ -27,6 +27,7 @@
 class X3DMetaEngine : public AdvancedMetaEngine<ADGameDescription> {
 public:
 	const char *getName() const override;
+	void registerDefaultSettings(const Common::String &target) const override;
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override;
 
