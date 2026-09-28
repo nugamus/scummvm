@@ -173,6 +173,7 @@ World::~World() {
 	for (Graphics::Surface &s : _cursors)
 		s.free();
 	_bar.free();
+	_small.free();
 }
 
 bool World::loadCursors() {
@@ -887,17 +888,18 @@ void World::drawBar(int barY) {
 }
 
 Common::Rect World::viewRect() const {
-	// The player's view size (scene.md "Camera and view"); at full size a wide display
-	// adds columns on both sides (enhancement).
-	static const Common::Rect kViews[4] = {
-		Common::Rect(0, 0, 640, 480), Common::Rect(64, 48, 576, 432),
-		Common::Rect(120, 90, 520, 390), Common::Rect(160, 120, 480, 360)
-	};
-	const uint size = _vm->players().empty() ? 0 : _vm->players()[_vm->currentPlayer()].viewSize;
-	if (size > 0 && size < 4)
-		return kViews[size];
+	// The whole frame; a wide display adds columns on both sides (enhancement).
 	const Display *display = _vm->display();
 	return Common::Rect(display->left(), 0, display->left() + display->width(), 480);
+}
+
+Common::Rect World::renderRect() const {
+	// The player's view size (scene.md "Camera and view") is the software renderer's
+	// resolution, scaled up to fill the screen (user, 2026-09-28); the original draws the
+	// smaller picture in the middle of a border. High resolution ignores it.
+	static const int16 kSizes[4][2] = { { 640, 480 }, { 512, 384 }, { 400, 300 }, { 320, 240 } };
+	const uint size = _vm->players().empty() ? 0 : _vm->players()[_vm->currentPlayer()].viewSize;
+	return size < 4 ? Common::Rect(kSizes[size][0], kSizes[size][1]) : Common::Rect(640, 480);
 }
 
 void World::frameLogic(bool hourglass) {
@@ -1135,9 +1137,25 @@ void World::render(float alpha) {
 		display->begin3D(vr, focal() > 0 ? focal() : 480.0f * MIN<int>(vr.width(), 640) / 640, _renderer.nearZ(), _renderer.farZ());
 		display->drawTriangles(_tris);
 	} else {
-		if (vr.width() < 640)
-			_vm->screen().fillRect(Common::Rect(640, 480), 0x114A); // 0x4223e8
-		_view.draw(&_vm->screen(), vr, _scene3D, view, poses);
+		const Common::Rect rr = renderRect();
+		if (rr.width() >= 640) {
+			_view.draw(&_vm->screen(), vr, _scene3D, view, poses);
+		} else {
+			if (_small.w != rr.width()) {
+				_small.free();
+				_small.create(rr.width(), rr.height(), _vm->screen().format);
+			}
+			_view.setFocal(focal(rr.width()));
+			_view.draw(&_small, rr, _scene3D, view, poses);
+			// Nearest-neighbour up to the full frame
+			Graphics::Surface &screen = _vm->screen();
+			for (int y = 0; y < 480; y++) {
+				const uint16 *src = (const uint16 *)_small.getBasePtr(0, y * rr.height() / 480);
+				uint16 *dst = (uint16 *)screen.getBasePtr(0, y);
+				for (int x = 0; x < 640; x++)
+					dst[x] = src[x * rr.width() / 640];
+			}
+		}
 	}
 
 	// The 2D over it: the bar (sliding between ticks too), the return icon, the hourglass.
