@@ -48,7 +48,7 @@ public:
 		setAnims(w, kAnims, ARRAYSIZE(kAnims));
 		w.setHidden(node(w, kFaux), w.sunflowers() != 4);
 		if (w.var(kScytheUsed)) {
-			poseAt(w, kAnimScythe, w.anims[kAnimScythe].length);
+			poseAt(w, kAnimScythe, w.anims[kAnimScythe].length - 1);
 			w.objects[kFaux].cursorType = 0xFF;
 		} else {
 			w.objects[kFaux].cursorType = 4;

@@ -62,7 +62,7 @@ public:
 		if (w.var(kRake))
 			w.setHidden(node(w, kRato), true);
 		if (w.var(kGateOpen)) {
-			poseAt(w, kAnimGate, w.anims[kAnimGate].length);
+			poseAt(w, kAnimGate, w.anims[kAnimGate].length - 1);
 			w.objects[kBarriere].cursorType = 0xFF;
 		} else {
 			w.objects[kBarriere].cursorType = 4;

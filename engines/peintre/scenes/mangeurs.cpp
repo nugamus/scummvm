@@ -65,7 +65,7 @@ public:
 		_crying = _shut = false;
 		_cuckooDone = w.var(kCuckoo) == 0;
 		if (w.var(kStoveOpen)) {
-			poseAt(w, kAnimStove, w.anims[kAnimStove].length);
+			poseAt(w, kAnimStove, w.anims[kAnimStove].length - 1);
 			w.objects[kPortepoel].cursorType = 0xFF;
 			w.objects[kFagot].cursorType = 4;
 		}
@@ -73,7 +73,7 @@ public:
 			poseAt(w, kAnimWindow, w.anims[kAnimWindow].length / 2);
 			startSound(w, "fenclaq", true);
 		} else {
-			poseAt(w, kAnimWindow, w.anims[kAnimWindow].length);
+			poseAt(w, kAnimWindow, w.anims[kAnimWindow].length - 1);
 			_shut = _crying = true;
 		}
 		if (w.var(kKettle))

@@ -88,10 +88,10 @@ public:
 
 		const bool gate = w.var(kGateOpen) != 0, door = w.var(kDoorOpen) != 0;
 		if (gate)
-			poseAt(w, kAnimGate, w.anims[kAnimGate].length);
+			poseAt(w, kAnimGate, w.anims[kAnimGate].length - 1);
 		w.objects[kPortail].cursorType = w.objects[kPortail01].cursorType = gate ? 0xFF : 4;
 		if (door)
-			poseAt(w, kAnimDoor, w.anims[kAnimDoor].length);
+			poseAt(w, kAnimDoor, w.anims[kAnimDoor].length - 1);
 		w.objects[kPortemj].cursorType = door ? 0xFF : 4;
 		if (w.zoneSolved(12))
 			w.objects[kPendule].cursorType = 0x3C;
