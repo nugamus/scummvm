@@ -364,6 +364,16 @@ bool stepAnim(World &w, uint rec, int32 step, int32 end) {
 	return false;
 }
 
+int32 halfStep(World &w, uint rec) {
+	AnimRecord &a = w.anims[rec];
+	if (!a.playing)
+		return 0;
+	a.halfTicks += w.elapsed();
+	const int32 step = a.halfTicks / 2;
+	a.halfTicks %= 2;
+	return step;
+}
+
 bool loopAnim(World &w, uint rec, int32 step) {
 	AnimRecord &a = w.anims[rec];
 	if (!a.playing)

@@ -97,6 +97,7 @@ struct AnimRecord {
 	int32 length = 0;      ///< the first word of the track data
 	int32 frame = 0;
 	bool playing = false;
+	int32 halfTicks = 0;   ///< halfStep's odd tick carried over
 };
 
 /** A scene's own code (games/mission-sunlight/docs/<scene>.md). */
