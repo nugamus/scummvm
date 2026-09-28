@@ -56,7 +56,7 @@ public:
 	virtual int pixelScale() const { return 1; } // window pixels per logical pixel, rounded
 
 	// Enhancement: mipmapped, anisotropic scene textures (created after it is set)
-	bool filterTextures = false;
+	void setFilterTextures(bool filter) { _filterTextures = filter; }
 
 	// Textures from RGBA32 surfaces; texels with alpha 0 are cut out (colour keys)
 	virtual uint32 createTexture(const Graphics::Surface &rgba) = 0;
@@ -66,7 +66,7 @@ public:
 	virtual void begin3D(const float projection[16], const float view[16]) = 0;
 	virtual void setTexture(uint32 texture) = 0; // 0: untextured
 	virtual void setClamp(bool clamp) = 0; // texture coordinates clamped or wrapped
-	// How the following fans reach the frame (scene.md, Drawing order and blending):
+	// How the following fans reach the frame:
 	// opaque (depth written), alpha-blended by the vertex alpha or added (depth tested,
 	// not written). keyed: texels with texture alpha 0 (the colour key) are cut out.
 	// kTint: alpha-blended and pulled toward the eye, over faces drawn already
@@ -78,22 +78,22 @@ public:
 	// count / 2 lines between xyz pairs, width in frame pixels, depth tested, not written
 	virtual void drawLines(const float *xyz, uint count, byte r, byte g, byte b, float width) = 0;
 
-	// A 2D image over the frame at (x, y), drawn at present(); white (255, 255, 255) is
-	// transparent when keyed
+	// A 2D image over the frame at (x, y). keyed is unused: no caller asks for a colour key
 	virtual void drawImage(const Graphics::Surface &image, int x, int y, bool keyed) = 0;
-	// A filled rectangle over the frame, right/bottom exclusive, drawn at present()
-	void fillRect(int x0, int y0, int x1, int y1, byte r, byte g, byte b);
+	// A filled rectangle over the frame, right/bottom exclusive
+	virtual void fillRect(int x0, int y0, int x1, int y1, byte r, byte g, byte b);
 	virtual void clear() = 0; // black frame without 3D, for 2D-only screens
 	virtual void present() = 0;
 	// A thumbnail-sized copy of the frame drawn so far (before present), for saves
 	virtual Graphics::Surface *thumbnail(int width, int height) = 0;
 
 protected:
+	bool _filterTextures = false;
 	int _width = 0, _height = 0;
 };
 
 // A BMP as RGBA32 (caller frees), or nullptr. Some of the game's BMPs lack their last
-// row's padding (E-0024); the data is padded before decoding.
+// row's padding; the data is padded before decoding.
 Graphics::Surface *loadBitmap(Common::SeekableReadStream &s);
 Graphics::Surface *loadBitmap(const Common::Path &path);
 
