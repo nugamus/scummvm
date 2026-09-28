@@ -19,6 +19,8 @@
  *
  */
 
+#include "common/array.h"
+#include "common/endian.h"
 #include "common/stream.h"
 #include "common/textconsole.h"
 
@@ -70,18 +72,23 @@ Graphics::Surface *loadDMF(Common::SeekableReadStream &s) {
 				break;
 			surface = new Graphics::Surface();
 			surface->create(width, height, Graphics::PixelFormat::createFormatRGBA32());
+			const uint bytesPerTexel = bpp == 8 ? 1 : 2;
+			Common::Array<byte> row(width * bytesPerTexel);
 			for (int y = 0; y < height; y++) {
+				// A short read leaves zeros, as reads past the end return
+				Common::fill(row.begin(), row.end(), 0);
+				s.read(row.data(), row.size());
 				for (int x = 0; x < width; x++) {
 					byte r, g, b;
 					bool transparent;
 					if (bpp == 8) {
-						const byte *e = palette[s.readByte()];
+						const byte *e = palette[row[x]];
 						r = e[2];
 						g = e[1];
 						b = e[0];
 						transparent = keyed && r == key[0] && g == key[1] && b == key[2];
 					} else {
-						const uint16 p = s.readUint16LE();
+						const uint16 p = READ_LE_UINT16(&row[x * 2]);
 						if (bpp == 15) {
 							r = (p >> 10) & 0x1f;
 							g = (p >> 5) & 0x1f;
@@ -105,7 +112,7 @@ Graphics::Surface *loadDMF(Common::SeekableReadStream &s) {
 			break;
 		}
 		default:
-			// 0xfb22/0xfb23 are opaque; 0xfb31 (vector quantised) does not occur in the corpus
+			// 0xfb22/0xfb23 are opaque; 0xfb31 (vector quantised) is not used by the game
 			if (id == 0xfb31)
 				warning("DMF: vector-quantised pixels are not supported");
 			break;

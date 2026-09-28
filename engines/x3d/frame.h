@@ -38,8 +38,8 @@ namespace X3D {
 
 class Renderer;
 
-// A 2D screen loaded from Data/2DFRA/<name>.fra (engines/x3d/docs/spec/ui.md, Frames;
-// docs/formats/fra.ksy). Coordinates are absolute 640x480 frame pixels.
+// A 2D screen loaded from Data/2DFRA/<name>.fra: a list of views (bitmaps, edits, lists,
+// sliders) with properties. Coordinates are absolute 640x480 frame pixels.
 class Frame : Common::NonCopyable {
 public:
 	static const uint32 kCaretBlink = 530; // ms, the Windows default caret blink time
@@ -52,7 +52,7 @@ public:
 	int cursorAt(int view) const;                    // ucg@, -1 when none
 	const Common::String &commandAt(int view) const; // RCS@, empty when none
 
-	// Text edits (dEU#, dES#, idE#; ui.md "Players screen"): the first one takes typed
+	// Text edits (dEU#, dES#, idE#): the first one takes typed
 	// characters at its caret
 	void type(char c);
 	void backspace();
@@ -61,7 +61,7 @@ public:
 	// The edit's text, caret at its end
 	void setText(const Common::String &text);
 
-	// List views (AOL#, VAS#, cSU#; save.md "Lists"): rows 32 px high, one selected.
+	// List views (AOL#, VAS#, cSU#): rows 32 px high, one selected.
 	// names: the players list's names (cSU#), which a row click puts in the edit
 	void setList(const Common::Array<Common::String> &rows, int selected,
 				 const Common::Array<Common::String> &names = Common::Array<Common::String>());
@@ -78,7 +78,7 @@ public:
 	int idAt(int view) const { return view >= 0 ? _views[view].id : -1; }
 	bool hasEdit() const { return editView() >= 0; }
 
-	// Sliders (loV#, AoV#, BoV#; ui.md Settings): position 0..max
+	// Sliders (loV#, AoV#, BoV#): position 0..max
 	int sliderValue(int id) const;
 	int sliderMax(int id) const;
 	void setSliderValue(int id, int value);
@@ -131,7 +131,7 @@ private:
 	int listView() const;
 	Common::Array<Common::String> _rows;
 	int _selected = -1;
-	int _scroll = 0; // first shown row (save.md Lists, E-0600)
+	int _scroll = 0; // first shown row
 	bool _scrollDrag = false;
 	int scrollMax() const;
 	int scrollRange() const; // rows - visible rows, may be negative

@@ -26,13 +26,6 @@
 
 namespace X3D {
 
-static Common::String readName(Common::SeekableReadStream &s) {
-	char buf[33];
-	s.read(buf, 32);
-	buf[32] = 0;
-	return Common::String(buf);
-}
-
 // Whether count elements of at least bytes each fit in the rest of the stream
 static bool fits(Common::SeekableReadStream &s, uint32 count, uint32 bytes) {
 	return !s.eos() && count <= (s.size() - s.pos()) / bytes;
@@ -61,9 +54,9 @@ static void translation(float *m, float x, float y, float z) {
 }
 
 bool O3DFile::load(Common::SeekableReadStream &s) {
-	const Common::String signature = readName(s);
+	const Common::String signature = s.readString(0, 32);
 	if (signature != "(c) 1998 4X Tech. 0.95 (O)") {
-		// 1.00 adds a LOD block per object; no file in the corpus uses it
+		// 1.00 adds a LOD block per object; no game file uses it
 		warning("O3D: unsupported signature '%s'", signature.c_str());
 		return false;
 	}
@@ -73,7 +66,7 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 		return false;
 	materials.resize(n);
 	for (O3DMaterial &m : materials) {
-		m.name = readName(s);
+		m.name = s.readString(0, 32);
 		m.renderClass = s.readUint32LE();
 		s.read(m.colors, sizeof(m.colors));
 		s.skip(2 * 4); // shininess, strength
@@ -81,11 +74,11 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 		m.mode = s.readUint32LE();
 		m.wrap = s.readUint32LE() != 0;
 		if (s.readUint32LE()) {
-			m.textureMap = readName(s);
+			m.textureMap = s.readString(0, 32);
 			s.readUint32LE();
 		}
-		if (s.readUint32LE()) { // light map, unused in the corpus
-			readName(s);
+		if (s.readUint32LE()) { // light map, unused by the game
+			s.skip(32); // name
 			s.readUint32LE();
 		}
 	}
@@ -96,16 +89,16 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 	objects.resize(n);
 	for (uint i = 0; i < objects.size(); i++) {
 		O3DObject &o = objects[i];
-		o.name = readName(s);
+		o.name = s.readString(0, 32);
 		if (s.readUint32LE()) {
 			// The parent is an object loaded earlier in this file
-			const Common::String parent = readName(s);
+			const Common::String parent = s.readString(0, 32);
 			for (int j = i - 1; j >= 0 && o.parent < 0; j--)
 				if (objects[j].name == parent)
 					o.parent = j;
 		}
 
-		// Welded objects share their top object's vertex array (animation.md, E-0054)
+		// Welded objects share their top object's vertex array
 		o.ownCount = s.readUint32LE();
 		uint32 count = o.ownCount;
 		o.welded = s.readUint32LE() != 0;
@@ -153,9 +146,7 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 	// Faces and welded ranges index the array of the object's top: itself or the nearest
 	// ancestor with vertices
 	for (const O3DObject &o : objects) {
-		int top = &o - objects.begin();
-		while (top >= 0 && objects[top].vertices.empty())
-			top = objects[top].parent;
+		const int top = vertexOwner((int)(&o - objects.begin()));
 		const uint32 count = top >= 0 ? objects[top].vertices.size() / 3 : 0;
 		bool bad = o.welded && (o.weldFirst > count || o.ownCount > count - o.weldFirst);
 		for (const O3DFace &f : o.faces)

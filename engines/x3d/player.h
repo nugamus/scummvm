@@ -36,35 +36,35 @@ namespace X3D {
 
 class Collision;
 
-// Keys read by the keyboard camera, held state (engines/x3d/docs/spec/movement.md, Keys)
+// Keys read by the keyboard camera, held state
 struct Keys {
-	bool up = false, down = false, left = false, right = false;
-	bool pageUp = false, pageDown = false, ctrl = false, shift = false, space = false, crouch = false;
-	bool strafeLeft = false, strafeRight = false; // modern controls only
-	bool mouseTurn = false; // modern controls: the mouse turned the view since the last step
+	bool up = false;
+	bool down = false;
+	bool left = false;
+	bool right = false;
+	bool pageUp = false;
+	bool pageDown = false;
+	bool ctrl = false;
+	bool shift = false;
+	bool space = false;
+	bool crouch = false;
+	bool strafeLeft = false;  // modern controls only
+	bool strafeRight = false; // modern controls only
+	bool mouseTurn = false;   // modern controls: the mouse turned the view since the last step
 };
 
 // The first-person camera: movement, turning, collision and falls
 class Player {
 public:
 	void init(float scale); // camera defaults from the scene scale s
-	void setSphere(float radius, float offset) { _radius = radius; sphereOffset = offset; }
-	void syncState(Common::Serializer &s); // save.md CAMERA
+	void setSphere(float radius, float offset);
+	void syncState(Common::Serializer &s); // the camera state
 
 	// One logic step of dt seconds. Returns true when a fall ends with the landing sound.
 	bool tick(float dt, const Keys &keys, const Collision &collision);
 
-	Math::Vector3d eye;
-	float yaw = 0, pitch = (float)M_PI / 2, fov = 90, roll = 0;
-	float sphereOffset = 0; // eye minus collision sphere centre, along Z
-	bool canMove = true, canTurn = true;
-	bool runAllowed = true, jumpAllowed = true; // Ctrl runs, Shift jumps (never unset: on; U33's caravan turns them off)
 	void setEyeHeight(float h) { _eyeHeight = h; }
 	float eyeHeight() const { return _eyeHeight; }
-	bool collide = true;           // collision and ground snapping (U01's train turns it off)
-	Common::String groundObject;   // name of the object the last ground probe hit
-	const Scene::Model *groundModel = nullptr; // and the object itself
-	uint groundIndex = 0;
 	// The ground object is the object the scene finds by this name
 	bool standsOn(Scene &scene, const Common::String &name) const;
 
@@ -74,30 +74,65 @@ public:
 	bool falling() const { return _falling; }
 	bool jumping() const { return _jumping; }
 
+	// Camera state, read and set by the engine and the unit code
+	Math::Vector3d eye;
+	float yaw = 0;
+	float pitch = (float)M_PI / 2;
+	float fov = 90;
+	float roll = 0;
+	float sphereOffset = 0; // eye minus collision sphere centre, along Z
+	bool canMove = true;
+	bool canTurn = true;
+	bool runAllowed = true;  // Ctrl runs; U33's caravan turns it off
+	bool jumpAllowed = true; // Shift jumps; U33's caravan turns it off
+	bool collide = true;     // collision and ground snapping (U01's train turns it off)
+	Common::String groundObject; // name of the object the last ground probe hit
+	const Scene::Model *groundModel = nullptr; // and the object itself
+	uint groundIndex = 0;
+
 private:
 	Math::Vector3d slide(const Math::Vector3d &eye, const Math::Vector3d &velocity, const Collision &collision) const;
 
-	float _scale = 1, _speed = 2, _eyeHeight = 1.5f, _radius = 0.5f;
+	float _scale = 1;
+	float _speed = 2;
+	float _eyeHeight = 1.5f;
+	float _radius = 0.5f;
 	float _bob = 1; // head bob direction, kept across scenes
 	float _turn = 0.06f; // radians per step, turning and looking up or down
 
-	// A jump in progress (movement.md, Jump): z = z0 + s t - s t^2 / 2, the walk sampled
-	// once at the start
-	bool _jumping = false, _shiftWas = false;
-	bool _runToggle = false, _runOn = false, _ctrlWas = false; // the run_toggle option
-
-	// Crouching (movement.md, Crouch): lowering, down, rising; the standing eye height and
-	// sphere offset come back when it ends
-	enum { kStanding, kLowering, kCrouched, kRising } _crouch = kStanding;
-	bool _crouchWas = false;
-	bool _crouchToggle = false, _crouchLatched = false; // the crouch_toggle option
-	float _crouchTime = 0, _standHeight = 0, _standOffset = 0;
-	float _jumpTime = 0, _jumpZ = 0;
+	// A jump in progress: z = z0 + s t - s t^2 / 2, the walk sampled once at the start
+	bool _jumping = false;
+	bool _shiftWas = false;
+	float _jumpTime = 0;
+	float _jumpZ = 0;
 	Math::Vector3d _jumpVelocity;
+
+	// The run_toggle option
+	bool _runToggle = false;
+	bool _runOn = false;
+	bool _ctrlWas = false;
+
+	// Crouching: lowering, down, rising; the standing eye height and sphere offset come
+	// back when it ends
+	enum CrouchState {
+		kStanding,
+		kLowering,
+		kCrouched,
+		kRising
+	};
+	CrouchState _crouch = kStanding;
+	bool _crouchWas = false;
+	bool _crouchToggle = false;  // the crouch_toggle option
+	bool _crouchLatched = false;
+	float _crouchTime = 0;
+	float _standHeight = 0;
+	float _standOffset = 0;
 
 	// A fall in progress: drops _fallDrop from _fallZ, then slides once with _fallVelocity
 	bool _falling = false;
-	float _fallTime = 0, _fallZ = 0, _fallDrop = 0;
+	float _fallTime = 0;
+	float _fallZ = 0;
+	float _fallDrop = 0;
 	Math::Vector3d _fallVelocity;
 };
 

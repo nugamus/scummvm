@@ -31,7 +31,7 @@
 namespace X3D {
 
 Common::SeekableReadStream *openBinChunk(const Common::Path &file, const char *name) {
-	// Table of {char name[20], u32 offset, u32 size} before a trailing u32 count (E-0025)
+	// Table of {char name[20], u32 offset, u32 size} before a trailing u32 count
 	Common::File f;
 	if (!f.open(file))
 		return nullptr;
@@ -75,7 +75,7 @@ Scene::~Scene() {
 }
 
 bool Scene::load(const Common::String &scriptName) {
-	// Asset directory from the unit number; U00 borrows U04's (E-0034)
+	// Asset directory from the unit number; U00 borrows U04's
 	const Common::String unit = scriptName.substr(0, 3);
 	_dir = (unit.equalsIgnoreCase("U00") ? Common::String("U04") : unit) + "/";
 	_dataDir = unit + "/";
@@ -93,12 +93,14 @@ bool Scene::load(const Common::String &scriptName) {
 		delete s;
 	}
 
-	// The .X3D script (docs/formats/README.md)
+	// The .X3D script: keyword=field[,value] lines, ; comments
 	Common::File script;
 	if (!script.open(Common::Path(unit + "/" + scriptName)))
 		return false;
 	const Common::String text = script.readString(0, script.size());
 
+	// In the order of keywords[]
+	enum Keyword { kKeyScene, kKeyObject, kKeyAnimation, kKeyCamera, kKeyLight, kKeyLod };
 	static const char *const keywords[] = { "scene=", "object=", "animation=", "camera=", "light=", "lod=" };
 	uint i = 0;
 	while (i < text.size()) {
@@ -136,26 +138,27 @@ bool Scene::load(const Common::String &scriptName) {
 			i++;
 		field.replace('\\', '/');
 
-		// Lights (Q-0019) and cameras are not used yet
-		if (keyword == 4) {
-			// Every light of the file reaches every object loaded so far (lighting.md)
+		// scene= and camera= lines are skipped: the ambient, scale and field of view come
+		// from SCENE.BIN
+		if (keyword == kKeyLight) {
+			// Every light of the file reaches every object loaded so far
 			loadLights(field);
 			for (Model *m : _models)
 				m->lit = true;
-		} else if (keyword == 2 && !_models.empty()) {
-			bindAnimation(field, value.empty() ? 30.0f : atof(value.c_str()));
-		} else if (keyword == 1) {
+		} else if (keyword == kKeyAnimation && !_models.empty()) {
+			bindAnimation(field, value.empty() ? 30.0f : (float)atof(value.c_str()));
+		} else if (keyword == kKeyObject) {
 			Model *m = loadModel(field);
 			if (m) {
 				m->hidden = field.hasPrefixIgnoreCase("static/col");
 				_models.push_back(m);
 			}
-		} else if (keyword == 5 && !_models.empty()) {
+		} else if (keyword == kKeyLod && !_models.empty()) {
 			Model *lod = loadModel(field);
 			if (lod) {
-				const float d = MAX(0.0, atof(value.c_str()));
+				const float d = MAX(0.0f, (float)atof(value.c_str()));
 				_lodModels.push_back(lod);
-				// Only a LOD whose root is welded as the base's is attached (E-0530)
+				// Only a LOD whose root is welded as the base's is attached
 				if (!_models.back()->file.objects.empty() && !lod->file.objects.empty() &&
 				    _models.back()->file.objects[0].welded == lod->file.objects[0].welded)
 					attachLod(_models.back(), 0, lod, 0, d * d);
@@ -164,7 +167,7 @@ bool Scene::load(const Common::String &scriptName) {
 	}
 
 	// Camera types from the names, then names with one cut to start at their '*'
-	// ("$Z$*U02_10" -> "*U02_10"); animation nodes keep the full names (E-0271)
+	// ("$Z$*U02_10" -> "*U02_10"); animation nodes keep the full names
 	for (Common::Array<Model *> *list : { &_models, &_lodModels })
 		for (Model *m : *list)
 			setCameraTypes(*m);
@@ -182,9 +185,7 @@ void Scene::setCameraTypes(Model &m) {
 		const size_t star = o.name.findFirstOf('*');
 		if (o.cameraType && star != Common::String::npos)
 			o.name = o.name.substr(star);
-		int owner = i;
-		while (owner >= 0 && objects[owner].vertices.empty())
-			owner = objects[owner].parent;
+		const int owner = m.file.vertexOwner(i);
 		if (o.cameraType == 2 && owner >= 0 && (owner == (int)i || o.welded))
 			m.facingTop[owner] = true;
 	}
@@ -200,10 +201,11 @@ Scene::Model *Scene::loadModel(const Common::String &path) {
 	}
 
 	// A material whose name was loaded before is that earlier material: texture,
-	// transparency, draw mode, tiling and colours (E-0484)
+	// transparency, draw mode, tiling and colours
 	for (O3DMaterial &mat : m->file.materials) {
-		if (_materials.contains(mat.name))
-			mat = _materials[mat.name];
+		const auto it = _materials.find(mat.name);
+		if (it != _materials.end())
+			mat = it->_value;
 		else
 			_materials[mat.name] = mat;
 	}
@@ -226,16 +228,14 @@ void Scene::pose(Model &m) {
 	const Common::Array<O3DObject> &objects = m.file.objects;
 
 	// Each object transforms its own vertex range; welded objects write into their top
-	// object's shared array (animation.md, Welded objects)
+	// object's shared array
 	for (uint i = 0; i < objects.size(); i++) {
 		m.worldVertices[i].resize(objects[i].vertices.size());
 		m.worldNormals[i].resize(objects[i].normals.size());
 	}
 	for (uint i = 0; i < objects.size(); i++) {
 		const O3DObject &o = objects[i];
-		int top = i;
-		while (top >= 0 && objects[top].vertices.empty())
-			top = objects[top].parent;
+		const int top = m.file.vertexOwner(i);
 		if (top < 0)
 			continue;
 		const uint first = o.welded ? o.weldFirst : 0;
@@ -287,9 +287,7 @@ void Scene::pose(Model &m) {
 		b[3] = v.size() >= 3 ? sqrtf(r2) : -1;
 	}
 	for (uint i = 0; i < objects.size(); i++) {
-		int owner = i;
-		while (owner >= 0 && objects[owner].vertices.empty())
-			owner = objects[owner].parent;
+		const int owner = m.file.vertexOwner(i);
 		float lo[3] = { 1e30f, 1e30f, 1e30f }, hi[3] = { -1e30f, -1e30f, -1e30f };
 		bool any = false;
 		if (owner >= 0) {
@@ -412,7 +410,7 @@ bool Scene::interpolate(float alpha) {
 			moved = true;
 		}
 		// Every node is applied again in list order, so later nodes still override earlier
-		// ones (a talker's mouth over the body, E-0606)
+		// ones (a talker's mouth over the body)
 		animate(*p.file, p.animation, *n.model, p.object >= 0 ? p.object : n.object, frame);
 	}
 	return moved;
@@ -435,7 +433,7 @@ const Common::Array<byte> &Scene::lighting(const Model &m, uint owner) const {
 	m.colorFrame[owner] = _lightingState;
 
 	// D starts at the ambient, each light adds colour * multiplier * falloff * cos; the
-	// excess over 255 becomes S (lighting.md, Per-vertex colour)
+	// excess over 255 becomes S (specular)
 	const Common::Array<float> &v = m.worldVertices[owner], &n = m.worldNormals[owner];
 	out.resize(v.size() / 3 * 6);
 	for (uint i = 0; i < v.size() / 3; i++) {
@@ -501,7 +499,7 @@ void Scene::loadLights(const Common::String &path) {
 		l.hidden = f.readUint32LE() != 0;
 		l.attenuate = f.readUint32LE() != 0;
 		if (f.readUint32LE()) {
-			f.skip(5 * 4); // spot target and angles: no corpus sample (Q-0013)
+			f.skip(5 * 4); // spot target and angles: no file uses them
 			warning("%s: spot lights are drawn as omni lights", path.c_str());
 		}
 		_lights.push_back(l);
@@ -520,10 +518,10 @@ bool Scene::inView(const float *sphere) const {
 	const float y = v[0] * _up[0] + v[1] * _up[1] + v[2] * _up[2];
 	const float r = sphere[3];
 	// Signed distances to the four side planes (positive inside), then the near plane
-	return depth * _halfWidth - x > -r * sqrtf(1 + _halfWidth * _halfWidth) &&
-	       depth * _halfWidth + x > -r * sqrtf(1 + _halfWidth * _halfWidth) &&
-	       depth * _halfHeight - y > -r * sqrtf(1 + _halfHeight * _halfHeight) &&
-	       depth * _halfHeight + y > -r * sqrtf(1 + _halfHeight * _halfHeight) &&
+	return depth * _halfWidth - x > -r * _slackWidth &&
+	       depth * _halfWidth + x > -r * _slackWidth &&
+	       depth * _halfHeight - y > -r * _slackHeight &&
+	       depth * _halfHeight + y > -r * _slackHeight &&
 	       depth > -r;
 }
 
@@ -658,8 +656,7 @@ void Scene::pauseNode(const Common::String &name) {
 void Scene::setNodeFrame(const Common::String &name, float frame) {
 	if (AnimNode *n = findNode(name)) {
 		Playback &p = active(*n);
-		const A3DAnimation &a = p.file->animations[p.animation];
-		p.frame = CLIP(frame, p.first >= 0 ? p.first : (float)a.firstFrame, p.last >= 0 ? p.last : (float)a.lastFrame);
+		p.frame = CLIP(frame, p.lo(), p.hi());
 	}
 }
 
@@ -699,8 +696,7 @@ float Scene::nodeLastFrame(const Common::String &name) {
 	AnimNode *n = findNode(name);
 	if (!n)
 		return 0;
-	Playback &p = active(*n);
-	return p.last >= 0 ? p.last : p.file->animations[p.animation].lastFrame;
+	return active(*n).hi();
 }
 
 bool Scene::nodeRunning(const Common::String &name) {
@@ -804,8 +800,8 @@ Scene::Model *Scene::addModel(const Common::String &path, const Common::String &
 	m->lit = !_lights.empty();
 	setCameraTypes(*m);
 	_models.push_back(m);
-	// One node for the whole file on the whole tree (u03.md cutscene step 2), whatever the
-	// root's name
+	// One node for the whole file on the whole tree (U03's cutscene), whatever the root's
+	// name
 	if (!animation.empty()) {
 		if (const A3DFile *file = clipFile(animation))
 			addNode(file, 0, m, 0, fps);
@@ -884,7 +880,7 @@ void Scene::startAnimation(const Common::String &objectName) {
 }
 
 void Scene::setAnimationState(const Common::String &objectName, float frame, bool paused, float fps, bool loop) {
-	// INFOOBJ finds its node by "equal or contains" (E-0271): *U02_10 is node $Z$*U02_10
+	// INFOOBJ finds its node by "equal or contains": *U02_10 is node $Z$*U02_10
 	AnimNode *n = findNode(objectName);
 	Common::String lower = objectName;
 	lower.toLowercase();
@@ -907,8 +903,9 @@ void Scene::setAnimationState(const Common::String &objectName, float frame, boo
 }
 
 const A3DFile *Scene::clipFile(const Common::String &path) {
-	if (_clipFiles.contains(path))
-		return _clipFiles[path];
+	const auto it = _clipFiles.find(path);
+	if (it != _clipFiles.end())
+		return it->_value;
 	Common::File f;
 	A3DFile *file = new A3DFile();
 	if (!f.open(Common::Path(_dir + path)) || !file->load(f) || file->animations.empty()) {
@@ -938,8 +935,8 @@ void Scene::playClip(const Common::String &objectName, const Common::String &pat
 }
 
 void Scene::backToBase(const Common::String &objectName) {
-	// Slot 0 active and running at frame 1, clamped (TakeCard, E-0057); only where a unit
-	// asks: a clip that ran back to its start stays the active one (U04's door, E-0334)
+	// Slot 0 active and running at frame 1, clamped (TakeCard); only where a unit
+	// asks: a clip that ran back to its start stays the active one (U04's door)
 	AnimNode *n = findNode(objectName);
 	if (!n)
 		return;
@@ -999,7 +996,7 @@ int Scene::addFaceClip(const Common::String &faceObject, const Common::String &p
 	const A3DFile *file = findFace(faceObject, owner, model, object) ? clipFile(path) : nullptr;
 	if (!file)
 		return -1;
-	// The sub-animation named like the face (E-0125). Else, as a fix (the original leaves
+	// The sub-animation named like the face. Else, as a fix (the original leaves
 	// the slot empty), the one at the face's place: the same child of the parent's
 	// namesake (U02_04's B.A3D still calls his face $$$DUMMY.Dummy01)
 	int found = -1;
@@ -1056,9 +1053,7 @@ Common::Array<Math::Vector3d> Scene::surfacePoints(const Model *m, uint o, const
 		int a = d;
 		while (a >= 0 && a != (int)o)
 			a = m->file.objects[a].parent;
-		int owner = d;
-		while (owner >= 0 && m->file.objects[owner].vertices.empty())
-			owner = m->file.objects[owner].parent;
+		const int owner = m->file.vertexOwner(d);
 		if (a < 0 || owner < 0)
 			continue;
 		const Common::Array<float> &v = m->worldVertices[owner];
@@ -1105,27 +1100,26 @@ Math::Vector3d Scene::objectPosition(const Common::String &name) const {
 void Scene::Playback::advance(float dt) {
 	if (!running)
 		return;
-	const A3DAnimation &a = file->animations[animation];
-	const float lo = first >= 0 ? first : a.firstFrame;
-	const float hi = last >= 0 ? last : a.lastFrame;
+	const float from = lo();
+	const float to = hi();
 	frame += (backward ? -dt : dt) * fps;
 	if (!loop && pingPong) {
-		if (frame >= hi || frame <= lo) {
-			frame = CLIP(frame, lo, hi);
-			backward = frame >= hi;
+		if (frame >= to || frame <= from) {
+			frame = CLIP(frame, from, to);
+			backward = frame >= to;
 		}
 	} else if (!loop) {
-		frame = CLIP(frame, lo, hi);
-		if (backward ? frame <= lo : frame >= hi)
+		frame = CLIP(frame, from, to);
+		if (backward ? frame <= from : frame >= to)
 			running = false;
-	} else if (hi <= lo) {
-		frame = lo;
-	} else if (frame > hi) {
+	} else if (to <= from) {
+		frame = from;
+	} else if (frame > to) {
 		// The original's fmod(frame, last) + first, the same for overshoots under one loop,
 		// kept inside the range for longer ones
-		frame = lo + fmodf(frame - lo, hi - lo);
-	} else if (frame < lo) {
-		frame = hi - fmodf(lo - frame, hi - lo);
+		frame = from + fmodf(frame - from, to - from);
+	} else if (frame < from) {
+		frame = to - fmodf(from - frame, to - from);
 	}
 	if (stopAt >= 0 && fabsf(frame - stopAt) <= 2 * dt * fps) {
 		frame = stopAt;
@@ -1211,10 +1205,10 @@ void Scene::syncState(Common::Serializer &s) {
 		for (int k = 1; k < 16; k++) {
 			Common::String extra = n.slots[k].path;
 			s.syncString(extra, 2);
-			if (s.isLoading())
+			if (s.isLoading()) {
 				n.slots[k].file = extra.empty() ? nullptr : clipFile(extra);
-			if (s.isLoading())
 				n.slots[k].path = extra;
+			}
 			if (!extra.empty() && !syncPlayback(s, n.slots[k], n.model))
 				n.slots[k].file = nullptr;
 		}
@@ -1243,10 +1237,11 @@ void Scene::attachLod(Model *base, uint baseObject, const Model *lod, uint lodOb
 }
 
 uint32 Scene::texture(const Common::String &mapName) {
-	if (_textures.contains(mapName))
-		return _textures[mapName];
+	const auto it = _textures.find(mapName);
+	if (it != _textures.end())
+		return it->_value;
 
-	// Map names end ".TGA"; the file is the .dmf of the same name in Maps/ (E-0038)
+	// Map names end ".TGA"; the file is the .dmf of the same name in Maps/
 	Common::String name = mapName;
 	const size_t dot = name.findFirstOf('.');
 	if (dot != Common::String::npos)
@@ -1291,7 +1286,7 @@ uint32 Scene::keyMask(const Common::String &mapName) {
 }
 
 void Scene::draw(const Camera &cam, int width, int height) {
-	// Projection: x by 1/tan(fov/2) in a 4:3 frame, y by 4/3 of that (E-0040). Wider
+	// Projection: x by 1/tan(fov/2) in a 4:3 frame, y by 4/3 of that. Wider
 	// outputs keep the 4:3 frame's vertical extent. The original's near/far are 0.1 and
 	// 1,000,000 (nothing is cut off); TinyGL's depth buffer needs a tighter range: 1 to
 	// 20000, or out to the farthest object
@@ -1302,6 +1297,8 @@ void Scene::draw(const Camera &cam, int width, int height) {
 	for (const Model *m : _models)
 		for (uint i = 0; !m->hidden && i < m->file.objects.size(); i++) {
 			const float *b = &m->bounds[i * 4];
+			if (b[3] < 0)
+				continue;
 			const float d[3] = { b[0] - cam.position[0], b[1] - cam.position[1], b[2] - cam.position[2] };
 			f = MAX(f, sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) + b[3]);
 		}
@@ -1312,9 +1309,9 @@ void Scene::draw(const Camera &cam, int width, int height) {
 		0, 0, 2 * f * n / (n - f), 0
 	};
 
-	// View: camera axes right, up, forward (engines/x3d/docs/spec/scene.md); GL looks down -z
+	// View: camera axes right, up, forward; GL looks down -z
 	const float a = cam.yaw, e = cam.pitch;
-	const float r = cam.roll * M_PI / 180;
+	const float r = cam.roll * (float)M_PI / 180;
 	const float right0[3] = { -sinf(a), -cosf(a), 0 };
 	const float up0[3] = { cosf(e) * cosf(a), -cosf(e) * sinf(a), sinf(e) };
 	float right[3], up[3];
@@ -1347,8 +1344,10 @@ void Scene::draw(const Camera &cam, int width, int height) {
 	}
 	_halfWidth = 1 / sx;
 	_halfHeight = 1 / sy;
+	_slackWidth = sqrtf(1 + _halfWidth * _halfWidth);
+	_slackHeight = sqrtf(1 + _halfHeight * _halfHeight);
 
-	// E-0058: camera type 2 draws with the view rotation of yaw pi/2 and the camera's
+	// Camera type 2 draws with the view rotation of yaw pi/2 and the camera's
 	// pitch, keeping the object's origin where the true view puts it. In world terms an
 	// offset d from the origin becomes d * R(pi/2, e) * R(a, e)^T.
 	{
@@ -1393,7 +1392,7 @@ void Scene::draw(const Camera &cam, int width, int height) {
 }
 
 void Scene::faceCamera(const Model &m, uint object, Common::Array<float> &v) const {
-	// Welded or not, the object's own vertices turn about its own origin (E-0270)
+	// Welded or not, the object's own vertices turn about its own origin
 	const float *w = m.file.objects[object].world;
 	Common::Array<bool> &done = _faceDone;
 	done.resize(0);
@@ -1430,17 +1429,15 @@ void Scene::drawnLod(const Model *m, uint i, const Model *&drawn, uint &object) 
 }
 
 const Common::Array<float> *Scene::drawnVertices(const Model &m, uint object) {
-	// Weld objects index the vertices of the nearest ancestor that has some (Q-0020)
+	// Weld objects index the vertices of the nearest ancestor that has some
 	const Common::Array<O3DObject> &objects = m.file.objects;
-	int owner = object;
-	while (owner >= 0 && objects[owner].vertices.empty())
-		owner = objects[owner].parent;
+	const int owner = m.file.vertexOwner(object);
 	if (owner < 0)
 		return nullptr;
 	const Common::Array<float> *vertices = &m.worldVertices[owner];
 
 	// TODO: only camera type 2 ($Z$, the only one in U01); types 1 and 3 fix the yaw at
-	// -pi/2 instead (E-0045, E-0058)
+	// -pi/2 instead
 	if (objects[object].cameraType == 2) {
 		_facingVertices.resize(vertices->size());
 		Common::copy(vertices->begin(), vertices->end(), _facingVertices.begin());
@@ -1455,9 +1452,7 @@ void Scene::drawObject(const Model &m, uint object) {
 	const Common::Array<float> *vertices = drawnVertices(m, object);
 	if (!vertices)
 		return;
-	int owner = object;
-	while (objects[owner].vertices.empty())
-		owner = objects[owner].parent;
+	const int owner = m.file.vertexOwner(object);
 
 	for (const O3DFace &face : objects[object].faces) {
 		const O3DMaterial &mat = m.file.materials[face.material];
@@ -1469,13 +1464,13 @@ void Scene::drawObject(const Model &m, uint object) {
 		Deferred &f = deferred ? _deferred[_deferredCount++] : opaque;
 		f.tex = mat.textureMap.empty() ? 0 : texture(mat.textureMap);
 		f.clamp = !mat.wrap;
-		// The colour key cuts texels only in draw modes 1..3 (E-0481)
+		// The colour key cuts texels only in draw modes 1..3
 		f.keyed = mat.mode >= 1 && mat.mode <= 3;
 		f.mask = f.keyed && f.tex ? keyMask(mat.textureMap) : 0;
 		f.additive = mat.mode == 2;
 		f.alpha = mat.transparency ? (byte)(255 - 2.55f * MIN<uint32>(mat.transparency, 100)) : 255;
 
-		// Class 0 draws the texture as stored; class 2 is lit per vertex (lighting.md)
+		// Class 0 draws the texture as stored; class 2 is lit per vertex
 		const Common::Array<byte> *lit = mat.renderClass == 0 ? nullptr : &lighting(m, owner);
 		f.lit = lit != nullptr;
 		f.hasUV = !face.uvs.empty();
@@ -1670,16 +1665,13 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 					top = lod.object;
 				}
 			const Common::Array<O3DObject> &dobjects = drawn->file.objects;
-			// Camera-facing objects are picked as drawn (E-0270)
+			// Camera-facing objects are picked as drawn
 			Common::Array<float> &facing = _facingVertices;
 			const Common::Array<float> *vp = &drawn->worldVertices[top];
 			for (uint o = top; drawn->facingTop[top] && o < dobjects.size(); o++) {
 				if (dobjects[o].cameraType != 2)
 					continue;
-				int owner = o;
-				while (owner >= 0 && dobjects[owner].vertices.empty())
-					owner = dobjects[owner].parent;
-				if (owner != (int)top || (o != top && !dobjects[o].welded))
+				if (drawn->file.vertexOwner(o) != (int)top || (o != top && !dobjects[o].welded))
 					continue;
 				if (vp != &facing) {
 					facing.resize(vp->size());
@@ -1731,10 +1723,7 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 
 			for (uint o = top; o < dobjects.size(); o++) {
 				// The top's own faces and those of every welded object below it
-				int owner = o;
-				while (owner >= 0 && dobjects[owner].vertices.empty())
-					owner = dobjects[owner].parent;
-				if (owner != (int)top || (o != top && !dobjects[o].welded))
+				if (drawn->file.vertexOwner(o) != (int)top || (o != top && !dobjects[o].welded))
 					continue;
 				const uint base = drawn == m ? o : i;
 				if ((m->hiddenObjects[base] && !m->pickWhenHidden[base]) || m->unpickable[base])
@@ -1749,7 +1738,7 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 					// TODO: faces crossing the near plane are skipped, not clipped
 					if (!usable)
 						continue;
-					// The any-corner test (E-0607): corners k = 1..n-1, then 0, with
+					// The any-corner test: corners k = 1..n-1, then 0, with
 					// n_k = (v[k-1] - v[k]) x (v[k+1] - v[k]); front at the first k where
 					// n_k . v[k-1] < -0.01 (collinear corners give 0 and are passed over)
 					float nrm[3] = { 0, 0, 0 };
@@ -1784,8 +1773,8 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 						continue;
 					const float d = (nrm[0] * v0[0] + nrm[1] * v0[1] + nrm[2] * v0[2]) / len / mr;
 					if (d > 0 && d < depth) {
-						// The face's own object: a welded card in a hand is its own hotspot
-						// (E-0076). Through a LOD, the base object.
+						// The face's own object: a welded card in a hand is its own
+						// hotspot. Through a LOD, the base object.
 						depth = d;
 						model = m;
 						object = drawn == m ? o : i;

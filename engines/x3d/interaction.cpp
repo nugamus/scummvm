@@ -42,11 +42,6 @@
 
 namespace X3D {
 
-// A NUL-terminated string in a fixed-size field (the whole field is consumed)
-static Common::String readString(Common::SeekableReadStream &s, uint size) {
-	return s.readString(0, size);
-}
-
 // A BMP image as a surface in the screen format, or nullptr
 static Graphics::Surface *decodeBitmap(Common::SeekableReadStream &s) {
 	Graphics::Surface *rgba = loadBitmap(s);
@@ -58,18 +53,18 @@ static Graphics::Surface *decodeBitmap(Common::SeekableReadStream &s) {
 	return screen;
 }
 
-// Cursor kinds 0..5 (interaction.md, Cursors): EXE bitmap resources and their hotspots
+// Cursor kinds 0..5: EXE bitmap resources and their hotspots
 static const char *const kCursorNames[] = {
 	"CUR_DEFAULT.BMP", "CUR_WAIT.BMP", "CUR_CLIC.BMP", "CUR_VOICE.BMP", "CUR_TAKE.BMP", "CUR_USE.BMP"
 };
 static const int kCursorHotspots[][2] = { { 0, 0 }, { 9, 2 }, { 9, 2 }, { 10, 10 }, { 10, 4 }, { 10, 10 } };
 
-Interaction::Interaction(Scene &scene, Sound &sound, Talk &talk) : _scene(scene), _sound(sound), _talk(talk) {
+Interaction::Interaction(Scene &scene, Sound &sound, Talk &talk) : _sound(sound), _talk(talk), _scene(scene) {
 	// The cursors are resources of the game's EXE: next to Data/ in an installed copy,
 	// under INSTALL/02_PR/ on the CD; without it every kind is Windows' arrow (setCursor)
 	Common::PEResources exe;
 	const bool found = exe.loadFromEXE("MissionMonet.exe") || exe.loadFromEXE("INSTALL/02_PR/MissionMonet.exe");
-	for (int i = 0; found && i < ARRAYSIZE(kCursorNames); i++) {
+	for (uint i = 0; found && i < ARRAYSIZE(kCursorNames); i++) {
 		Common::SeekableReadStream *res = exe.getResource(Common::kWinBitmap, Common::WinResourceID(kCursorNames[i]));
 		if (!res)
 			continue;
@@ -114,12 +109,12 @@ Interaction::~Interaction() {
 void Interaction::load(const Common::String &unitDir) {
 	_soundDir = unitDir + "Sound/";
 
-	// Hotspots and their initial state (E-0072)
+	// Hotspots and their initial state; strings are NUL-terminated in fixed-size fields
 	if (Common::SeekableReadStream *s = openBinChunk(Common::Path(unitDir + "INFOOBJ.BIN"), "#OBJECTS#")) {
 		const uint32 count = s->readUint32LE();
 		for (uint32 i = 0; i < count && !s->err(); i++) {
 			Hotspot h;
-			h.name = readString(*s, 40);
+			h.name = s->readString(0, 40);
 			h.type = s->readUint32LE();
 			h.cursor = s->readUint32LE();
 			const bool visible = s->readUint32LE() != 0;
@@ -128,7 +123,7 @@ void Interaction::load(const Common::String &unitDir) {
 			const float fps = s->readUint32LE();
 			const bool loop = s->readUint32LE() != 0;
 			if (!visible) {
-				// Hidden at load means out of collision too, the object only (E-0272)
+				// Hidden at load means out of collision too, the object only
 				_scene.hideObject(h.name);
 				if (collision)
 					collision->setEnabled(h.name, false);
@@ -143,25 +138,25 @@ void Interaction::load(const Common::String &unitDir) {
 
 	debugC(1, kDebugLoad, "%u hotspots in %sINFOOBJ.BIN", _hotspots.size(), unitDir.c_str());
 
-	// Click actions (E-0071)
+	// Click actions
 	if (Common::SeekableReadStream *s = openBinChunk(Common::Path(unitDir + "INFOACT.BIN"), "#ACTIONS#")) {
 		const uint32 count = s->readUint32LE();
 		for (uint32 i = 0; i < count && !s->err(); i++) {
 			Action a;
 			a.id = s->readUint32LE();
-			a.name = readString(*s, 30);
-			a.condition = readString(*s, 258);
+			a.name = s->readString(0, 30);
+			a.condition = s->readString(0, 258);
 			a.maxRuns = s->readSint32LE();
 			a.trigger = s->readUint32LE();
-			a.item = readString(*s, 32);
+			a.item = s->readString(0, 32);
 			a.hotspotType = s->readUint32LE();
-			a.hotspot = readString(*s, 32);
+			a.hotspot = s->readString(0, 32);
 			a.targetType = s->readUint32LE();
-			a.target = readString(*s, 32);
+			a.target = s->readString(0, 32);
 			const uint32 steps = s->readUint32LE();
 			for (uint32 k = 0; k < 10; k++) {
 				const uint32 op = s->readUint32LE();
-				const Common::String arg = readString(*s, 64);
+				const Common::String arg = s->readString(0, 64);
 				if (k < steps) {
 					a.ops.push_back(op);
 					a.args.push_back(arg);
@@ -306,6 +301,11 @@ void Interaction::setCondition(uint32 id, const Common::String &condition) {
 			a.condition = condition;
 }
 
+void Interaction::setRuns(uint32 id, int runs) {
+	if (id < kIds)
+		_runs[id] = runs;
+}
+
 int Interaction::runs(uint32 id) const {
 	return id < kIds ? _runs[id] : 0;
 }
@@ -418,7 +418,7 @@ void Interaction::click(int hotspot, Common::StringArray &unitActions) {
 	}
 }
 
-// Sound/<name>.WAV, or Sound/<name> when the name has the extension (sound.md)
+// Sound/<name>.WAV, or Sound/<name> when the name has the extension
 Common::Path Interaction::soundPath(const Common::String &name) const {
 	return Common::Path(_soundDir + (name.hasSuffixIgnoreCase(".wav") ? name : name + ".WAV"));
 }
@@ -429,7 +429,7 @@ Common::String Interaction::hotspotName(const Action &a) const {
 
 void Interaction::syncState(Common::Serializer &s) {
 	// The original does not save an action's private run counter, so after its loads a
-	// multi-run action counts from 0 again (save.md); the engine saves and restores the count
+	// multi-run action counts from 0 again; the engine saves and restores the count
 	Common::String held = _heldItem;
 	s.syncString(held);
 	uint32 n = _hotspots.size();
@@ -463,8 +463,8 @@ void Interaction::take(const Common::String &hotspot) {
 		_hotspots[target].cursor = 0;
 	_scene.hideObject(name);
 	if (collision)
-		collision->setEnabled(name, false); // the object's own flag (E-0272)
-	holdItem(name.substr(1, 6)); // six characters after the '*' (E-0204)
+		collision->setEnabled(name, false); // the object's own flag
+	holdItem(name.substr(1, 6)); // six characters after the '*'
 	if (inventory)
 		inventory->show();
 }
@@ -491,7 +491,7 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 	for (uint k = 0; k < a.ops.size(); k++) {
 		const Common::String &arg = a.args[k];
 		switch (a.ops[k]) {
-		case 1: // voice: a character talks, anything else speaks from the hotspot (sound.md)
+		case 1: // voice: a character talks, anything else speaks from the hotspot
 			if (a.targetType == 6 || (target >= 0 && _hotspots[target].type == 6)) {
 				const Common::String character = targetName.hasPrefix("*") ? targetName.substr(1) : targetName;
 				if (!_talk.say(character, arg))
@@ -513,7 +513,7 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 			if (target >= 0)
 				_hotspots[target].cursor = atoi(arg.c_str());
 			break;
-		case 9: // 0 shows, anything else hides (E-0088)
+		case 9: // 0 shows, anything else hides
 			_scene.hideObject(targetName, atoi(arg.c_str()) != 0);
 			if (collision)
 				collision->setEnabled(targetName, atoi(arg.c_str()) == 0);

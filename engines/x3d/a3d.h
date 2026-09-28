@@ -33,7 +33,7 @@ namespace X3D {
 
 struct O3DObject;
 
-// .A3D keyframe animation (docs/formats/a3d.ksy, engines/x3d/docs/spec/animation.md)
+// .A3D keyframe animation: per object, TCB translation, linear scale and slerped rotation keys
 
 struct A3DTrack {
 	Common::Array<uint32> frames;
@@ -45,7 +45,7 @@ struct A3DAnimation {
 	Common::String name;
 	int parent = -1; // index into A3DFile::animations
 	uint32 firstFrame = 0, lastFrame = 0;
-	A3DTrack translation, scale, rotation; // hide and morph have no keys in the corpus
+	A3DTrack translation, scale, rotation; // hide and morph have no keys in the game
 };
 
 struct A3DFile {

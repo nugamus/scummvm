@@ -45,25 +45,28 @@ class Scene;
 class Sound;
 class Talk;
 
-// Hotspots, cursors and click actions of a unit (engines/x3d/docs/spec/interaction.md)
+// Hotspots, cursors and click actions of a unit
 class Interaction {
 public:
 	Interaction(Scene &scene, Sound &sound, Talk &talk);
-
-	Math::Vector3d eye; // the camera position, for voices that play at the listener
 	~Interaction();
+
+	// State set by the engine
+	Math::Vector3d eye;             // the camera position, for voices that play at the listener
+	Inventory *inventory = nullptr; // take and use-up steps show and hide it
+	Collision *collision = nullptr; // take and step 9 switch objects out of it
+	bool actionsEnabled = true;     // false: no action cursors, clicks do nothing
 
 	// Data/Uxx/INFOOBJ.BIN hotspots and INFOACT.BIN actions
 	void load(const Common::String &unitDir);
 
 	// Hotspot index for a picked object, given its name then its parents' names, or -1
-	// (interaction.md, Hotspots)
 	int hotspotFor(const Common::StringArray &names) const;
 
 	// Sets the cursor for the hotspot under the mouse (-1: none); call every frame
 	void hover(int hotspot, uint32 millis);
 
-	// Runs the hotspot's first runnable action; op-10 names go to unitActions
+	// Runs the hotspot's first runnable action; step-10 names go to unitActions
 	void click(int hotspot, Common::StringArray &unitActions);
 
 	void setCursorKind(const Common::String &hotspot, uint kind);
@@ -74,15 +77,13 @@ public:
 	void showCursor(uint kind);
 	// Window pixels per game pixel, so cursors keep their size at high resolutions
 	void setCursorScale(int scale);
-	Inventory *inventory = nullptr; // take and use-up steps show and hide it
-	Collision *collision = nullptr; // take and op 9 switch objects out of it (E-0252, E-0088)
 
 	// Unit code access to actions by id (Mnn)
 	void runAction(uint32 id, Common::StringArray &unitActions); // steps, then count the run
 	void setCondition(uint32 id, const Common::String &condition);
-	void exhaust(uint32 id); // count := max runs, exhausted, no step run (u05.md)
-	void setRuns(uint32 id, int runs) { if (id < kIds) _runs[id] = runs; } // U33's M02 flag
-	uint32 lastRun() const { return _lastRun; } // the id of the action run last (U04's paintings)
+	void exhaust(uint32 id); // count := max runs, exhausted, no step run
+	void setRuns(uint32 id, int runs);
+	uint32 lastRun() const { return _lastRun; } // the id of the action run last
 	int runs(uint32 id) const;
 	bool exhausted(uint32 id) const;
 	// Steps 2 and 3 run by unit code: take a hotspot's object, use up the held item on one
@@ -92,34 +93,38 @@ public:
 	uint hotspotCount() const { return _hotspots.size(); }
 	Common::StringArray hotspotNames() const;
 	const Common::String &hotspotName(int index) const { return _hotspots[index].name; }
-	// A click on it would do something: an action cursor, or a runnable action (E-0251)
+	// A click on it would do something: an action cursor, or a runnable action
 	bool clickable(int index) const;
 
-	bool actionsEnabled = true;
-
-	// Saved state (save.md CURSOR, ACTIONS, OBJECTS): the held item, run counts,
-	// exhaustion and conditions, hotspot cursors
+	// Saved state: the held item, run counts, exhaustion and conditions, hotspot cursors
 	void syncState(Common::Serializer &s);
 
 private:
 	struct Hotspot {
 		Common::String name; // "*U01_04"
 		Common::String lowerName; // name in lower case, for hotspotFor
-		uint32 type, cursor;
+		uint32 type;
+		uint32 cursor;
 	};
 
 	struct Action {
 		uint32 id;
-		Common::String name, condition, item, hotspot, target;
+		Common::String name;
+		Common::String condition;
+		Common::String item;
+		Common::String hotspot;
+		Common::String target;
 		int32 maxRuns;
-		uint32 trigger, hotspotType, targetType;
+		uint32 trigger;
+		uint32 hotspotType;
+		uint32 targetType;
 		int hotspotIndex = -1; // findHotspot(hotspot), set at load
-		bool running = false;  // inside run(): op 14 does not enter it again
+		bool running = false;  // inside run(): step 14 does not enter it again
 		Common::Array<uint32> ops;
 		Common::StringArray args;
 	};
 
-	// Run counts and exhausted flags belong to the action id, not the record (E-0250):
+	// Run counts and exhausted flags belong to the action id, not the record:
 	// two records with one id share them
 	static const uint kIds = 256;
 	int _runs[kIds] = {};

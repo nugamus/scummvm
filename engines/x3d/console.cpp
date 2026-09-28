@@ -25,9 +25,33 @@
 namespace X3D {
 
 Console::Console(X3DEngine *vm) : GUI::Debugger(), _vm(vm) {
-	static const char *const commands[] = { "where", "goto", "lookat", "click", "hotspots", "give", "hold", "bar", "press", "probe",
-	                                        "objs", "node", "pos", "act", "exhaust", "gauge", "save", "load", "page", "savemenu",
-	                                        "loadmenu", "view3d", "overlay" };
+	// All commands go to X3DEngine::command. Arguments:
+	//   where                          camera position, angles and the ground below
+	//   goto <x> <y> <z> [yaw [pitch]] move the camera there (a cut)
+	//   lookat <object> [ms]           turn the camera to an object's centre
+	//   click [<x> <y> | <object>]     click at the mouse, a screen point or an object
+	//   hotspots                       the unit's hotspots and their positions
+	//   give <item>                    add an item to the inventory bar
+	//   hold <item | ->                put an item on the cursor ("-": none)
+	//   bar                            show or hide the inventory bar, as Space
+	//   press <up|down|shift|crouch> <ms>   hold a key for ms
+	//   probe <x> <y> <z>              the ground below a point
+	//   objs <text>                    every object whose name contains the text
+	//   node <name>                    an animation node's frame
+	//   pos <object>                   an object's origin and centre
+	//   act <id>                       run action Mnn, bypassing the click
+	//   exhaust <id>                   mark action Mnn exhausted
+	//   gauge <ms>                     end the running gauge after ms
+	//   save <slot>, load <slot>       save or load a ScummVM slot
+	//   page <painting | credits | settings | gallery | loupe <painting>>   show a 2D page
+	//   savemenu, loadmenu             the game's save and load screens
+	//   view3d <painting>              the painting's 3D gallery scene
+	//   overlay                        the hotspot overlay on or off, as its key
+	static const char *const commands[] = {
+		"where", "goto", "lookat", "click", "hotspots", "give", "hold", "bar", "press", "probe",
+		"objs", "node", "pos", "act", "exhaust", "gauge", "save", "load", "page", "savemenu",
+		"loadmenu", "view3d", "overlay"
+	};
 	for (const char *c : commands)
 		registerCmd(c, WRAP_METHOD(Console, cmd));
 }

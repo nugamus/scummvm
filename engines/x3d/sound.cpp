@@ -58,16 +58,16 @@ void Sound::prune() {
 	}
 }
 
-void Sound::play(const Common::Path &path, int group, int v, bool loop) {
+bool Sound::play(const Common::Path &path, int group, int v, bool loop) {
 	Common::File *f = new Common::File();
 	if (!f->open(path)) {
 		warning("Missing sound %s", path.toString().c_str());
 		delete f;
-		return;
+		return false;
 	}
 	Audio::RewindableAudioStream *wav = Audio::makeWAVStream(f, DisposeAfterUse::YES);
 	if (!wav)
-		return;
+		return false;
 	Audio::AudioStream *stream = loop ? Audio::makeLoopingAudioStream(wav, 0) : wav;
 
 	static const Audio::Mixer::SoundType types[] = {
@@ -81,6 +81,7 @@ void Sound::play(const Common::Path &path, int group, int v, bool loop) {
 	_mixer->playStream(types[p.group], &p.handle, stream, -1, 0);
 	apply(p);
 	_playing.push_back(p);
+	return true;
 }
 
 void Sound::stopGroup(int group) {
@@ -96,14 +97,19 @@ void Sound::stopAll() {
 	_playing.clear();
 }
 
-// "Playing" ends at the audible end; the original's early end for streamed sounds
-// (sound.md) is not modelled
+// "Playing" ends at the audible end; the original's early end for streamed sounds is
+// not modelled
 bool Sound::isGroupPlaying(int group) {
 	prune();
 	for (const Playing &p : _playing)
 		if (p.group == group)
 			return true;
 	return false;
+}
+
+int Sound::groupVolume(int group) const {
+	assert(validGroup(group));
+	return _groupVolume[group];
 }
 
 void Sound::setGroupVolume(int group, int g) {
@@ -132,9 +138,8 @@ bool Sound::emit(Emitter e, const Common::Path &path, const Math::Vector3d &posi
 		return false;
 	em.position = position;
 	stopGroup(em.group);
-	play(path, em.group, 100, loop);
+	em.owns = play(path, em.group, 100, loop);
 	em.lastName = name;
-	em.owns = !_playing.empty() && _playing.back().group == em.group;
 	if (em.owns)
 		em.handle = _playing.back().handle;
 	return true;
