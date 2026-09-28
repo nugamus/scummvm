@@ -19,7 +19,6 @@
  *
  */
 
-#include "common/config-manager.h"
 #include "common/serializer.h"
 
 #include "x3d/collision.h"
@@ -105,18 +104,6 @@ void U01::start(bool newGame, bool video) {
 	_vm->sound()->play(Common::Path(scene->dir() + "Sound/U01.WAV"), Sound::kAmbient, 85, true);
 	if (!newGame)
 		return;
-
-	// Development shortcut: dev_handover goes straight to the end of the entry
-	if (ConfMan.getBool("dev_handover")) {
-		const float handover[3] = { -466.36f, -452.495f, 30.48f };
-		_vm->setView(handover, 4.7f, kHalfPi);
-		if (!_vm->inventory()->has("U02_01P"))
-			_vm->inventory()->add("U02_01P");
-		scene->playClip("*U01_02", "Anim/U01_02/Action03.A3D");
-		player.canMove = player.canTurn = false;
-		interaction->setCursorKind("*U01_01", 3);
-		return;
-	}
 
 	_vm->suspend(true);
 	interaction->setCursorKind("*U01_02", 0);

@@ -204,7 +204,7 @@ public:
 	// A debugger command (console.h): where, goto, lookat, click, hotspots, give, hold, pos, act,
 	// save <slot>, load <slot>, savemenu, loadmenu, page <credits|settings|gallery|loupe p|painting>, exhaust <id>, view3d <painting>
 	Common::String command(const Common::String &line);
-	void queueCommand(const Common::String &line) { _devCommands.insert_at(0, "0:" + line); } // runs on the next frame
+	void queueCommand(const Common::String &line) { _queuedCommands.push_back(line); } // runs on the next frame
 
 	static constexpr float kKeep = 100.0f;
 	bool u02Warned = false; // U02's gauge warning, said once per process
@@ -264,14 +264,8 @@ private:
 	bool _hoverNow = false, _clickNow = false;
 	int _hotspot = -1;
 	uint32 _last = 0, _pending = 0, _logicMs = 0, _lastClick = 0, _frames = 0, _fpsStart = 0;
-	Common::Array<int> _devClicks;
-	Common::StringArray _devCommands; // "ms:command", from dev_commands
+	Common::StringArray _queuedCommands; // console commands for the next frame
 	bool _restoring = false;
-	Common::String _devSnap; // console "snap": the next frame's file
-	uint32 _devUp = 0, _devDown = 0, _devShift = 0, _devCrouch = 0; // console "press": held until these times (ms)
-	uint32 _sceneStart = 0, _devStart = 0;
-	bool _devParsed = false, _devMenuParsed = false;
-	Common::StringArray _devMenu; // dev_menu answers for the next menus
 	Common::String _nextScene, _sceneName;
 	Common::Array<byte> _pendingLoad; // a save's scene state, restored by playScene
 	uint32 _pendingVersion = 1;
