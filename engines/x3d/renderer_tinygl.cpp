@@ -74,7 +74,7 @@ public:
 		tglLoadMatrixf(view);
 		tglEnable(TGL_DEPTH_TEST);
 		tglDepthFunc(TGL_LEQUAL);
-		// D3D's default culling: xd3d never sets D3DRENDERSTATE_CULLMODE (E-0205)
+		// D3D's default culling: the original never sets a cull mode
 		tglEnable(TGL_CULL_FACE);
 		tglCullFace(TGL_BACK);
 		tglFrontFace(TGL_CCW);
@@ -154,7 +154,7 @@ public:
 	}
 
 	void drawLines(const float *xyz, uint count, byte r, byte g, byte b, float width) override {
-		// ponytail: TinyGL declares tglLineWidth without implementing it; lines are 1 px
+		// TinyGL declares tglLineWidth without implementing it; lines are 1 px
 		tglColor4ub(r, g, b, 255);
 		tglBegin(TGL_LINES);
 		for (uint i = 0; i < count; i++)
@@ -169,7 +169,6 @@ public:
 		delete converted;
 		i.x = x;
 		i.y = y;
-		i.keyed = keyed;
 		_images.push_back(i);
 	}
 
@@ -204,24 +203,19 @@ public:
 
 private:
 	void composite(Graphics::Surface &frame) const {
-		const uint32 white = frame.format.RGBToColor(255, 255, 255);
 		for (const Image &i : _images) {
 			Common::Rect r(i.x, i.y, i.x + i.surface.w, i.y + i.surface.h);
 			r.clip(Common::Rect(frame.w, frame.h));
 			if (r.isEmpty())
 				continue;
 			const Common::Rect src(r.left - i.x, r.top - i.y, r.right - i.x, r.bottom - i.y);
-			if (i.keyed)
-				frame.copyRectToSurfaceWithKey(i.surface, r.left, r.top, src, white);
-			else
-				frame.copyRectToSurface(i.surface, r.left, r.top, src);
+			frame.copyRectToSurface(i.surface, r.left, r.top, src);
 		}
 	}
 
 	struct Image {
 		Graphics::Surface surface;
 		int x, y;
-		bool keyed;
 	};
 
 	Common::Array<Image> _images;

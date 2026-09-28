@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/array.h"
 #include "common/debug.h"
 #include "common/system.h"
 
@@ -58,6 +59,11 @@ public:
 			glGetFloatv(kGLMaxTextureMaxAnisotropy, &most);
 			_anisotropy = MIN<GLfloat>(most, 8);
 		}
+	}
+
+	~OpenGLRenderer() override {
+		for (const CachedImage &i : _images)
+			deleteTexture(i.texture);
 	}
 
 	bool updateSize(bool widescreen) override {
@@ -106,9 +112,9 @@ public:
 		GLuint id;
 		glGenTextures(1, &id);
 		glBindTexture(GL_TEXTURE_2D, id);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterTextures ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, _filterTextures ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		if (filterTextures) {
+		if (_filterTextures) {
 			glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
 			if (_anisotropy)
 				glTexParameterf(GL_TEXTURE_2D, kGLTextureMaxAnisotropy, _anisotropy);
@@ -138,7 +144,7 @@ public:
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LEQUAL);
 		glDepthMask(GL_TRUE);
-		// D3D's default culling: xd3d never sets D3DRENDERSTATE_CULLMODE (E-0205)
+		// D3D's default culling: the original never sets a cull mode
 		glEnable(GL_CULL_FACE);
 		glCullFace(GL_BACK);
 		glFrontFace(GL_CCW);
@@ -229,64 +235,35 @@ public:
 	}
 
 	void drawImage(const Graphics::Surface &image, int x, int y, bool keyed) override {
-		// Upload, draw at pixel coordinates in an orthographic view, discard
-		Graphics::Surface *rgba = image.convertTo(Graphics::PixelFormat::createFormatRGBA32());
-		if (keyed) {
-			const uint32 white = rgba->format.ARGBToColor(255, 255, 255, 255);
-			const uint32 clear = rgba->format.ARGBToColor(0, 255, 255, 255);
-			for (int j = 0; j < rgba->h; j++)
-				for (int i = 0; i < rgba->w; i++)
-					if (rgba->getPixel(i, j) == white)
-						rgba->setPixel(i, j, clear);
-		}
-		// Without NPOT support the image goes into the corner of a power-of-two texture
-		int w = rgba->w, h = rgba->h;
-		if (!OpenGLContext.NPOTSupported) {
-			w = h = 1;
-			while (w < rgba->w)
-				w <<= 1;
-			while (h < rgba->h)
-				h <<= 1;
-		}
-		GLuint texture;
-		glGenTextures(1, &texture);
-		glBindTexture(GL_TEXTURE_2D, texture);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rgba->w, rgba->h, GL_RGBA, GL_UNSIGNED_BYTE, rgba->getPixels());
-		const float u = (float)rgba->w / w, v = (float)rgba->h / h;
-		rgba->free();
-		delete rgba;
-
-		setViewport();
-		glMatrixMode(GL_PROJECTION);
-		glLoadIdentity();
-		glOrtho(0, _width, _height, 0, -1, 1);
-		glMatrixMode(GL_MODELVIEW);
-		glLoadIdentity();
-		glDisable(GL_DEPTH_TEST);
-		glDisable(GL_CULL_FACE); // the flipped 2D view winds the quad backward
-		glDisable(GL_BLEND);
-		glEnable(GL_ALPHA_TEST);
-		glAlphaFunc(GL_GREATER, 0.5f);
+		const CachedImage &c = cachedImage(image);
+		begin2D();
 		glEnable(GL_TEXTURE_2D);
-		glBindTexture(GL_TEXTURE_2D, texture);
+		glBindTexture(GL_TEXTURE_2D, c.texture);
 		glColor3ub(255, 255, 255);
 		glBegin(GL_QUADS);
 		glTexCoord2f(0, 0);
 		glVertex2i(x, y);
-		glTexCoord2f(u, 0);
+		glTexCoord2f(c.u, 0);
 		glVertex2i(x + image.w, y);
-		glTexCoord2f(u, v);
+		glTexCoord2f(c.u, c.v);
 		glVertex2i(x + image.w, y + image.h);
-		glTexCoord2f(0, v);
+		glTexCoord2f(0, c.v);
 		glVertex2i(x, y + image.h);
 		glEnd();
-		deleteTexture(texture);
-		_texture = ~0u;
-		_blend = -1;
+	}
+
+	void fillRect(int x0, int y0, int x1, int y1, byte r, byte g, byte b) override {
+		if (x1 <= x0 || y1 <= y0)
+			return;
+		begin2D();
+		glDisable(GL_TEXTURE_2D);
+		glColor3ub(r, g, b);
+		glBegin(GL_QUADS);
+		glVertex2i(x0, y0);
+		glVertex2i(x1, y0);
+		glVertex2i(x1, y1);
+		glVertex2i(x0, y1);
+		glEnd();
 	}
 
 	void clear() override {
@@ -300,6 +277,16 @@ public:
 
 	void present() override {
 		g_system->updateScreen();
+		// Images not drawn for a while are dropped (their surfaces may be gone)
+		_frame++;
+		for (uint i = 0; i < _images.size();) {
+			if (_frame - _images[i].lastFrame > kImageKeepFrames) {
+				deleteTexture(_images[i].texture);
+				_images.remove_at(i);
+			} else {
+				i++;
+			}
+		}
 	}
 
 	Graphics::Surface *thumbnail(int width, int height) override {
@@ -313,6 +300,103 @@ public:
 	}
 
 private:
+	// 2D images keep their texture between frames: static bitmaps are uploaded once. An
+	// entry is found by the surface's pixels, size, pitch and format, and re-uploaded when
+	// a hash of its pixels changes (video frames, edits, lists, or a new surface at a freed
+	// one's address)
+	struct CachedImage {
+		const void *pixels;
+		int w, h, pitch;
+		Graphics::PixelFormat format;
+		uint32 hash;
+		GLuint texture;
+		float u, v; // the image's extent in its texture
+		uint32 lastFrame;
+	};
+	static const uint32 kImageKeepFrames = 10; // presents an unused texture survives
+
+	static uint32 hashPixels(const Graphics::Surface &image) {
+		uint32 hash = 2166136261u; // FNV-1a
+		const uint rowBytes = image.w * image.format.bytesPerPixel;
+		for (int y = 0; y < image.h; y++) {
+			const byte *row = (const byte *)image.getBasePtr(0, y);
+			for (uint i = 0; i < rowBytes; i++)
+				hash = (hash ^ row[i]) * 16777619u;
+		}
+		return hash;
+	}
+
+	const CachedImage &cachedImage(const Graphics::Surface &image) {
+		const uint32 hash = hashPixels(image);
+		CachedImage *c = nullptr;
+		for (CachedImage &i : _images)
+			if (i.pixels == image.getPixels() && i.w == image.w && i.h == image.h && i.pitch == image.pitch && i.format == image.format) {
+				c = &i;
+				break;
+			}
+		if (c && c->hash == hash) {
+			c->lastFrame = _frame;
+			return *c;
+		}
+
+		Graphics::Surface *rgba = image.convertTo(Graphics::PixelFormat::createFormatRGBA32());
+		if (!c) {
+			// Without NPOT support the image goes into the corner of a power-of-two texture
+			int w = rgba->w, h = rgba->h;
+			if (!OpenGLContext.NPOTSupported) {
+				w = h = 1;
+				while (w < rgba->w)
+					w <<= 1;
+				while (h < rgba->h)
+					h <<= 1;
+			}
+			CachedImage n;
+			n.pixels = image.getPixels();
+			n.w = image.w;
+			n.h = image.h;
+			n.pitch = image.pitch;
+			n.format = image.format;
+			n.u = (float)rgba->w / w;
+			n.v = (float)rgba->h / h;
+			glGenTextures(1, &n.texture);
+			glBindTexture(GL_TEXTURE_2D, n.texture);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			_images.push_back(n);
+			c = &_images.back();
+		} else {
+			glBindTexture(GL_TEXTURE_2D, c->texture);
+		}
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rgba->w, rgba->h, GL_RGBA, GL_UNSIGNED_BYTE, rgba->getPixels());
+		rgba->free();
+		delete rgba;
+		c->hash = hash;
+		c->lastFrame = _frame;
+		_texture = ~0u;
+		return *c;
+	}
+
+	// Pixel coordinates in an orthographic view over the frame, no depth, no blending
+	void begin2D() {
+		setViewport();
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		glOrtho(0, _width, _height, 0, -1, 1);
+		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_CULL_FACE); // the flipped 2D view winds the quad backward
+		glDisable(GL_BLEND);
+		glEnable(GL_ALPHA_TEST);
+		glAlphaFunc(GL_GREATER, 0.5f);
+		_texture = ~0u;
+		_blend = -1;
+	}
+
+	Common::Array<CachedImage> _images;
+	uint32 _frame = 0;
 	Common::Rect _viewport; // in window pixels, top-left origin
 	int _windowHeight = 480;
 	GLfloat _anisotropy = 0; // the most anisotropic filtering used, 0 without the extension
