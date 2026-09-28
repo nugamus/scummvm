@@ -36,7 +36,7 @@ namespace X3D {
 struct O3DMaterial {
 	Common::String name;
 	uint32 renderClass = 2; // 0 unlit, 2 RGB lit (lighting.md)
-	byte colors[4][3];
+	byte colors[4][3] = {};
 	bool wrap = true;       // tiling: false clamps texture coordinates
 	uint32 transparency = 0; // percent (+0x4c, E-0480)
 	uint32 mode = 0;         // draw mode (+0x50): 1 and 3 colour-keyed, 2 additive (E-0481)
@@ -46,8 +46,8 @@ struct O3DMaterial {
 struct O3DFace {
 	Common::Array<uint32> indices;
 	Common::Array<float> uvs; // u, v per index; empty without UVs
-	uint32 material;
-	float normal[3]; // object-local plane normal, the front side for collision
+	uint32 material = 0;
+	float normal[3] = {}; // object-local plane normal, the front side for collision
 };
 
 struct O3DObject {
@@ -58,8 +58,8 @@ struct O3DObject {
 	Common::Array<float> normals;  // x, y, z per vertex, object-local
 	Common::Array<O3DFace> faces;
 	// Live transform: loaded from the file, rewritten by animations (animation.md)
-	float pivot[3], localPosition[3], localScale[3];
-	float matrix[16]; // row-vector form, translation in elements 12..14
+	float pivot[3] = {}, localPosition[3] = {}, localScale[3] = {};
+	float matrix[16] = {}; // row-vector form, translation in elements 12..14
 
 	// A welded object transforms vertices weldFirst .. weldFirst + ownCount - 1 of its top
 	// object's array (the nearest ancestor with vertices); others own [0, ownCount)
@@ -67,7 +67,7 @@ struct O3DObject {
 	uint32 weldFirst = 0, ownCount = 0;
 
 	// Object-local to world, row-vector form (engines/x3d/docs/spec/scene.md, Geometry)
-	float world[16];
+	float world[16] = {};
 };
 
 struct O3DFile {

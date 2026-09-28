@@ -157,6 +157,7 @@ bool Frame::load(const Common::String &name) {
 				break;
 			default:
 				warning("Frame %s: unknown property %08x", name.c_str(), tag);
+				_views.push_back(v); // the destructor frees its bitmaps
 				return false;
 			}
 		}
@@ -179,8 +180,7 @@ int Frame::cursorAt(int view) const {
 }
 
 const Common::String &Frame::commandAt(int view) const {
-	static const Common::String none;
-	return view >= 0 && _views[view].enabled ? _views[view].command : none;
+	return view >= 0 && _views[view].enabled ? _views[view].command : _noCommand;
 }
 
 int Frame::editView() const {

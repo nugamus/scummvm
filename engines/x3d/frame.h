@@ -23,6 +23,7 @@
 #define X3D_FRAME_H
 
 #include "common/array.h"
+#include "common/noncopyable.h"
 #include "common/ptr.h"
 #include "common/rect.h"
 #include "common/str.h"
@@ -39,7 +40,7 @@ class Renderer;
 
 // A 2D screen loaded from Data/2DFRA/<name>.fra (engines/x3d/docs/spec/ui.md, Frames;
 // docs/formats/fra.ksy). Coordinates are absolute 640x480 frame pixels.
-class Frame {
+class Frame : Common::NonCopyable {
 public:
 	static const uint32 kCaretBlink = 530; // ms, the Windows default caret blink time
 
@@ -139,6 +140,7 @@ private:
 	int editView() const;
 
 	Common::Array<View> _views;
+	const Common::String _noCommand; // commandAt's empty result
 };
 
 } // End of namespace X3D

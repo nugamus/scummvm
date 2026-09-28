@@ -33,6 +33,11 @@ static Common::String readName(Common::SeekableReadStream &s) {
 	return Common::String(buf);
 }
 
+// Whether count elements of at least bytes each fit in the rest of the stream
+static bool fits(Common::SeekableReadStream &s, uint32 count, uint32 bytes) {
+	return !s.eos() && count <= (s.size() - s.pos()) / bytes;
+}
+
 static void readFloats(Common::SeekableReadStream &s, float *out, uint n) {
 	for (uint i = 0; i < n; i++)
 		out[i] = s.readFloatLE();
@@ -63,7 +68,10 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 		return false;
 	}
 
-	materials.resize(s.readUint32LE());
+	uint32 n = s.readUint32LE();
+	if (!fits(s, n, 76))
+		return false;
+	materials.resize(n);
 	for (O3DMaterial &m : materials) {
 		m.name = readName(s);
 		m.renderClass = s.readUint32LE();
@@ -82,7 +90,10 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 		}
 	}
 
-	objects.resize(s.readUint32LE());
+	n = s.readUint32LE();
+	if (!fits(s, n, 4))
+		return false;
+	objects.resize(n);
 	for (uint i = 0; i < objects.size(); i++) {
 		O3DObject &o = objects[i];
 		o.name = readName(s);
@@ -102,17 +113,27 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 			o.weldFirst = s.readUint32LE();
 			count = s.readUint32LE();
 		}
+		if (!fits(s, count, 6 * 4))
+			return false;
 		o.vertices.resize(count * 3);
 		readFloats(s, o.vertices.data(), count * 3);
 		o.normals.resize(count * 3);
 		readFloats(s, o.normals.data(), count * 3);
 
-		o.faces.resize(s.readUint32LE());
+		n = s.readUint32LE();
+		if (!fits(s, n, 6 * 4))
+			return false;
+		o.faces.resize(n);
 		for (O3DFace &f : o.faces) {
-			f.indices.resize(s.readUint32LE());
+			n = s.readUint32LE();
+			if (!fits(s, n, 4))
+				return false;
+			f.indices.resize(n);
 			for (uint32 &index : f.indices)
 				index = s.readUint32LE();
 			if (s.readUint32LE()) {
+				if (!fits(s, f.indices.size(), 2 * 4))
+					return false;
 				f.uvs.resize(f.indices.size() * 2);
 				readFloats(s, f.uvs.data(), f.uvs.size());
 			}
@@ -127,11 +148,23 @@ bool O3DFile::load(Common::SeekableReadStream &s) {
 		readFloats(s, o.localPosition, 3);
 		readFloats(s, o.localScale, 3);
 		readFloats(s, o.matrix, 16);
+	}
 
+	// Faces and welded ranges index the array of the object's top: itself or the nearest
+	// ancestor with vertices
+	for (const O3DObject &o : objects) {
+		int top = &o - objects.begin();
+		while (top >= 0 && objects[top].vertices.empty())
+			top = objects[top].parent;
+		const uint32 count = top >= 0 ? objects[top].vertices.size() / 3 : 0;
+		bool bad = o.welded && (o.weldFirst > count || o.ownCount > count - o.weldFirst);
 		for (const O3DFace &f : o.faces)
 			for (uint32 index : f.indices)
-				if (f.material >= materials.size() || (count && index >= count))
-					error("O3D: face out of range in '%s'", o.name.c_str());
+				bad = bad || f.material >= materials.size() || index >= count;
+		if (bad) {
+			warning("O3D: face or welded vertex out of range in '%s'", o.name.c_str());
+			return false;
+		}
 	}
 
 	updateWorld();
