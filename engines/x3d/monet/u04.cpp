@@ -666,7 +666,12 @@ void U04::row(bool forward) {
 	float yaw = atan2f(-d.y(), d.x()), pitch = acosf(CLIP(-d.z() / len, -1.0f, 1.0f));
 	while (yaw < 0)
 		yaw += 6.283f;
-	if (fabs(trunc(player.yaw - yaw)) + fabs(trunc(player.pitch - pitch)) >= 1) {
+	// The original compares the raw angles, so crossing 0/2pi counts as a full turn and
+	// rows stall for a 1-s turn there (twice going forward); the difference the short way
+	// round removes that stall (a fix, user 2026-09-28)
+	float dYaw = player.yaw - yaw;
+	dYaw -= 2 * (float)M_PI * floorf(dYaw / (2 * (float)M_PI) + 0.5f);
+	if (fabs(trunc(dYaw)) + fabs(trunc(player.pitch - pitch)) >= 1) {
 		_vm->moveTo(1000, nullptr, yaw, pitch);
 	} else {
 		player.yaw = yaw;
