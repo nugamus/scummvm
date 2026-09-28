@@ -49,6 +49,8 @@ public:
 	bool playStream(const Common::String &name);
 	void stopStream();
 	bool isStreamPlaying() const;
+	/** Pauses or resumes the stream (the option menu from 3D, 0x416961 / 0x416987). */
+	void pauseStream(bool pause);
 
 	/** The player's volume, DirectSound attenuation (0 = full, -5000 = silent). */
 	void setVolume(int32 attenuation);

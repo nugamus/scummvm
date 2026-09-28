@@ -527,10 +527,9 @@ void World::requestMuseum() {
 	_scene = kSceneMusee;
 	if (sceneComplete(left) && kScenes[left].returnMovie) {
 		stopAllSounds();
-		int last = -1;
-		for (int i = 0; kScenes[left].zones[i] >= 0; i++)
-			last = kScenes[left].zones[i];
-		if (last >= 0)
+		// 0x41f14b marks the last zone entered (0x502860, the block's +0x3E).
+		const int last = _vm->state().currentZone();
+		if (last < 25)
 			var(0x4abb70 + 4 * last) = 1;
 		requestMovie(kScenes[left].returnMovie);
 	} else {
@@ -661,9 +660,13 @@ void World::afterZone(int code) {
 		break;
 	}
 	if (code == -3) {
-		_prevScene = _scene;
-		_scene = kSceneMusee;
-		load(_scene, _prevScene, false);
+		// RetourM (0x42f2c2): the way back to the museum, with the scene's return movie
+		// when it is complete (0x41f14b), as Backspace.
+		requestMuseum();
+		if (_reload) {
+			_reload = false;
+			load(_scene, _prevScene, false);
+		}
 		return;
 	}
 	// Back at the saved spot, pitch 0 (case C).
