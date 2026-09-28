@@ -20,6 +20,7 @@
  */
 
 #include "common/config-manager.h"
+#include "common/endian.h"
 #include "common/translation.h"
 
 #include "backends/keymapper/action.h"
@@ -217,7 +218,7 @@ protected:
 	}
 
 private:
-	enum { kSliderCmd = 'X3SL' };
+	enum { kSliderCmd = MKTAG('X', '3', 'S', 'L') };
 
 	void showValue(uint i) {
 		_values[i]->setLabel(Common::String::format("%d%s", _sliders[i]->getValue(), sliderList[i].unit));
@@ -240,10 +241,9 @@ const ADExtraGuiOptionsMap *X3DMetaEngine::getAdvancedExtraGuiOptions() const {
 void X3DMetaEngine::registerDefaultSettings(const Common::String &target) const {
 	AdvancedMetaEngine<ADGameDescription>::registerDefaultSettings(target);
 	// ScummVM's hotspot overlay marks objects with squares in this game unless the player
-	// chose another marker (the game's options, or the global ones).
-	if (!target.empty() && ConfMan.hasGameDomain(target) && !ConfMan.hasKey("hotspot_marker", target) &&
-	    !ConfMan.hasKey("hotspot_marker", Common::ConfigManager::kApplicationDomain))
-		ConfMan.setInt("hotspot_marker", Graphics::kMarkerSquare, target);
+	// chose another marker (the game's options, or the global ones); nothing is written
+	// to the configuration
+	ConfMan.registerDefault("hotspot_marker", Graphics::kMarkerSquare);
 }
 
 const char *X3DMetaEngine::getName() const {
