@@ -20,13 +20,13 @@
  */
 
 // Monet's own game layer: its units, the players, the Option pages, the save and load
-// screens and the gallery (games/monet/docs/, engines/x3d/docs/spec/ui.md and save.md)
+// screens and the gallery
 
 #include "common/config-manager.h"
-#include "common/ptr.h"
-#include "common/savefile.h"
 #include "common/events.h"
 #include "common/file.h"
+#include "common/ptr.h"
+#include "common/savefile.h"
 #include "common/system.h"
 
 #include "audio/mixer.h"
@@ -36,11 +36,12 @@
 #include "graphics/surface.h"
 
 #include "x3d/frame.h"
-#include "x3d/monet/gallery3d.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
 #include "x3d/renderer.h"
 #include "x3d/sound.h"
+#include "x3d/x3d.h"
+#include "x3d/monet/gallery3d.h"
 #include "x3d/monet/u00.h"
 #include "x3d/monet/u01.h"
 #include "x3d/monet/u02.h"
@@ -50,25 +51,25 @@
 #include "x3d/monet/u06.h"
 #include "x3d/monet/u07.h"
 #include "x3d/monet/u33.h"
-#include "x3d/x3d.h"
 
 namespace X3D {
 
 void X3DEngine::saveMenu() {
-	// OptionSave (save.md): slots 1..98, the first free one selected; OK saves and stays
+	// OptionSave: slots 1..98, the first free one selected; OK saves and stays
 	Frame frame;
 	if (!frame.load("OptionSave"))
 		return;
 	// The original appends typing to "Save without name"; here typing replaces it
-	frame.setText("Save without name");
+	frame.setText(message(300));
 	Common::StringArray names;
 	names.resize(99);
 	for (const SaveStateDescriptor &d : getMetaEngine()->listSaves(_targetName.c_str()))
 		if (d.getSaveSlot() >= 1 && d.getSaveSlot() <= 98)
 			names[d.getSaveSlot()] = d.getDescription();
+	// Rows read "<slot + 1> - <name>", as the original numbers them
 	MenuList list;
 	for (int s = 1; s <= 98; s++) {
-		list.rows.push_back(Common::String::format("%d - %s", s + 1, names[s].empty() ? "Empty" : names[s].c_str()));
+		list.rows.push_back(Common::String::format("%d - %s", s + 1, names[s].empty() ? message(1).c_str() : names[s].c_str()));
 		if (list.selected < 0 && names[s].empty())
 			list.selected = s - 1;
 	}
@@ -80,12 +81,12 @@ void X3DEngine::saveMenu() {
 			return;
 		if (c == "OptionSelectSave" || c == "enter") {
 			// The frame stays open with the saved row selected and the edit's text kept;
-			// Back, Main menu and Quit switch to their ...N bitmaps (E-0622)
-			const Common::String name = _menuText.empty() ? "Save without name" : _menuText;
+			// Back, Main menu and Quit switch to their ...N bitmaps
+			const Common::String name = _menuText.empty() ? message(300) : _menuText;
 			const int s = list.selected + 1;
 			if (saveGameState(s, name).getCode() == Common::kNoError)
 				list.rows[s - 1] = Common::String::format("%d - %s", s + 1, name.c_str());
-			for (int id : {2, 3, 5}) {
+			for (int id : { 2, 3, 5 }) {
 				const int v = frame.indexOf(id);
 				Common::String bmp = v >= 0 ? frame.bitmapName(v) : "";
 				if (bmp.size() >= 5) {
@@ -109,7 +110,7 @@ void X3DEngine::saveMenu() {
 }
 
 bool X3DEngine::loadMenu() {
-	// OptionLoad (save.md): the used slots only, nothing selected; OK loads
+	// OptionLoad: the used slots only, as "<slot + 1> - <name>", nothing selected; OK loads
 	MenuList list;
 	Common::Array<int> slots;
 	for (const SaveStateDescriptor &d : getMetaEngine()->listSaves(_targetName.c_str())) {
@@ -128,7 +129,7 @@ bool X3DEngine::loadMenu() {
 }
 
 // The players and the unit of each one's last save, one "unit name" line per player, in
-// the savefile <target>.players; "*" before the unit marks the current player (ui.md)
+// the savefile <target>.players; "*" before the unit marks the current player
 void X3DEngine::readPlayers(Common::StringArray &names, Common::Array<int> &units, Common::String *current) const {
 	Common::ScopedPtr<Common::InSaveFile> in(_saveFileMan->openForLoading(_targetName + ".players"));
 	while (in && !in->eos() && !in->err()) {
@@ -178,7 +179,7 @@ bool X3DEngine::selectPlayer(const Common::String &name) {
 
 Common::Error X3DEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
 	const Common::Error result = Engine::saveGameState(slot, desc, isAutosave);
-	// The player's unit number follows every save: it unlocks the gallery (ui.md)
+	// The player's unit number follows every save: it unlocks the gallery
 	if (result.getCode() == Common::kNoError && !_playerName.empty()) {
 		Common::StringArray names;
 		Common::Array<int> units;
@@ -194,13 +195,13 @@ Common::Error X3DEngine::saveGameState(int slot, const Common::String &desc, boo
 void X3DEngine::gameOver() {
 	_inGameOver = true; // cleared when the next scene starts
 	_sound->stopAll();
-	storeHeldItem(); // the caught path stores it (E-0210)
+	storeHeldItem(); // the caught path stores it
 	if (!loadMenu())
 		afterOptionMenu(optionMenu());
 }
 
 Unit *X3DEngine::createUnit(const Common::String &sceneName) {
-	// The gallery's 3D view of a painting (ui.md): unit class 50 on the painting's scene
+	// The gallery's 3D view of a painting: unit class 50 on the painting's scene
 	const bool view3d = !_gallery3D.empty() && sceneName.equalsIgnoreCase(Gallery3D::sceneFor(_gallery3D));
 	const Common::String painting = _gallery3D;
 	_gallery3D.clear();
@@ -234,7 +235,7 @@ Unit *X3DEngine::createUnit(const Common::String &sceneName) {
 }
 
 void X3DEngine::showPainting(const Common::String &name) {
-	// TableauJeu (ui.md, Other frames): full screen until a click, Escape blocked; then
+	// TableauJeu: full screen until a click, Escape blocked; then
 	// the voice stops
 	Frame frame;
 	if (!frame.load("TableauJeu"))
@@ -249,7 +250,7 @@ void X3DEngine::showPainting(const Common::String &name) {
 }
 
 void X3DEngine::credits() {
-	// Credits (ui.md): a click or 6 s turns the page; page 1 shows twice (the frame's
+	// Credits: a click or 6 s turns the page; page 1 shows twice (the frame's
 	// first name has no extension), a key leaves
 	Frame frame;
 	if (!frame.load("Credits"))
@@ -265,7 +266,7 @@ void X3DEngine::credits() {
 }
 
 void X3DEngine::settings() {
-	// OptionReglages (ui.md Settings): music is group 1, voice groups 2 and 3. The sliders
+	// OptionReglages: music is group 1, voice groups 2 and 3. The sliders
 	// are ScummVM's music and speech/effects volumes, so they agree with the launcher's
 	Frame frame;
 	if (!frame.load("OptionReglages"))
@@ -289,7 +290,6 @@ void X3DEngine::settings() {
 }
 
 // The gallery's paintings in unlock order and the saved unit that unlocks up to each
-// (ui.md Gallery)
 static const char *const kPaintings[] = {
 	"U11_01", "U11_02", "U11_03", "U12_03", "U12_04", "U13_14", "U13_05", "U13_13", "U13_03",
 	"U13_01", "U13_12", "U13_11", "U13_06", "U13_04", "U14_01", "U13_15", "U14_02", "U14_05",
@@ -397,10 +397,11 @@ void X3DEngine::returnToPainting(const Common::String &painting) {
 }
 
 void X3DEngine::magnifier(const Common::String &painting) {
-	// Loupe (ui.md): the parts listed in Media.txt stitched together, panned from the
+	// Loupe: the parts listed in Media.txt stitched together, panned from the
 	// edges, left on a click
 	Common::File media;
-	int cols = 0, rows = 0;
+	int cols = 0;
+	int rows = 0;
 	if (media.open("2dbit/Media.txt")) {
 		while (!media.eos()) {
 			const Common::String line = media.readLine();
@@ -415,7 +416,8 @@ void X3DEngine::magnifier(const Common::String &painting) {
 	if (cols <= 0 || rows <= 0)
 		return;
 	Common::Array<Graphics::Surface *> parts;
-	int width = 0, height = 0;
+	int width = 0;
+	int height = 0;
 	for (int i = 0; i < cols * rows; i++) {
 		parts.push_back(loadBitmap(Common::Path(Common::String::format("2dbit/%sLoupe%d.BMP", painting.c_str(), i + 1))));
 		if (!parts.back()) {
@@ -440,20 +442,25 @@ void X3DEngine::magnifier(const Common::String &painting) {
 	}
 
 	const int x2d = (_renderer->width() - 640) / 2;
-	int ox = 0, oy = 0;
+	int ox = 0;
+	int oy = 0;
 	uint32 lastPan = 0;
 	bool done = false;
 	while (!done && !shouldQuit()) {
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
-			actionToKey(e);
+			processEvent(e);
 			if (e.type == Common::EVENT_MOUSEMOVE)
 				_mouse = e.mouse;
-			if (e.type == Common::EVENT_LBUTTONDOWN || (e.type == Common::EVENT_KEYDOWN && e.kbd.keycode == Common::KEYCODE_ESCAPE))
+			if (e.type == Common::EVENT_LBUTTONDOWN || (e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START && e.customType == kActionMenu))
 				done = true;
 		}
-		const int mx = _mouse.x - x2d, my = _mouse.y;
-		const int left = mx < 30, right = mx >= 610, top = my < 30, bottom = my >= 450;
+		const int mx = _mouse.x - x2d;
+		const int my = _mouse.y;
+		const bool left = mx < 30;
+		const bool right = mx >= 610;
+		const bool top = my < 30;
+		const bool bottom = my >= 450;
 		static const int kinds[3][3] = { { 12, 13, 9 }, { 10, 0, 7 }, { 11, 6, 8 } }; // [v][h]
 		if (_interaction)
 			_interaction->showCursor(kinds[top ? 0 : bottom ? 2 : 1][left ? 0 : right ? 2 : 1]);
@@ -482,7 +489,7 @@ void X3DEngine::magnifier(const Common::String &painting) {
 
 Common::String X3DEngine::optionMenu() {
 	for (;;) {
-		// Load and Gallery are greyed when empty and still react (ui.md, Q-0063)
+		// Load and Gallery are greyed when empty and still react
 		Frame frame;
 		if (!frame.load("Option"))
 			return "";
@@ -518,13 +525,13 @@ Common::String X3DEngine::optionMenu() {
 
 void X3DEngine::afterOptionMenu(const Common::String &command) {
 	if (command == "OptionNouvelleP") {
-		// A new game starts at the scene named in App.bin #GAME# (E-0037)
+		// A new game starts at the scene named in App.bin #GAME#
 		Common::String scene = "U01.X3D";
 		if (Common::SeekableReadStream *game = openBinChunk("App.bin", "#GAME#")) {
 			scene = game->readString(0, 30);
 			delete game;
 		}
-		// A new game drops a held item and empties the bar (E-0212)
+		// A new game drops a held item and empties the bar
 		_practice = false;
 		if (_interaction)
 			_interaction->holdItem("");
@@ -533,7 +540,7 @@ void X3DEngine::afterOptionMenu(const Common::String &command) {
 	} else if (command == "Gallery3D") {
 		gotoScene(Gallery3D::sceneFor(_gallery3D));
 	} else if (command == "OptionEntrenement") {
-		// Practice keeps the bar (E-0212); a held item is stored by the scene switch
+		// Practice keeps the bar; a held item is stored by the scene switch
 		_practice = true;
 		gotoScene("U00.X3D");
 	}
