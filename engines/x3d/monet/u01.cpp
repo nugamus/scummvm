@@ -388,6 +388,7 @@ void U01::ride(float dt) {
 	player.eye.set(p.x() - 40 * d.x(), p.y() - 40 * d.y(), p.z() - 20 * d.z());
 	player.yaw = yaw;
 	player.pitch = kHalfPi;
+	_vm->rideView();
 
 	// The siding: with the points thrown the train leaves on U01_20A.A3D (E-0083, E-0087)
 	const float frame = scene->nodeFrame("*U01_20");
