@@ -516,7 +516,10 @@ bool World::load(int scene, int prevScene, bool keepCamera) {
 // Requests (scene.md "Moving between the museum and the scenes", "3D <-> 2D")
 
 void World::requestScene(int target) {
-	_prevScene = _scene;
+	// A second request in the same tick (a click exit, then a walk-out) only changes the
+	// target: the previous scene stays the one being left (the original sets it each time).
+	if (!_reload)
+		_prevScene = _scene;
 	_scene = target;
 	_reload = true;
 }

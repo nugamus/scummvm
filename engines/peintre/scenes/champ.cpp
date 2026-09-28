@@ -96,10 +96,11 @@ public:
 			w.anims[kAnimScythe].playing = false;
 		}
 
-		if (w.camera().x < -16000)
-			w.requestScene(kSceneEglise);
-		else if (w.camera().z < -0x157c)
+		// Both tests run in turn; the second (jardin) wins.
+		if (w.camera().z < -0x157c)
 			w.requestScene(kSceneJardin);
+		else if (w.camera().x < -16000)
+			w.requestScene(kSceneEglise);
 	}
 };
 
