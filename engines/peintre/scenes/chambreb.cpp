@@ -268,9 +268,10 @@ private:
 			_chair = true;
 			w.anims[kAnimChair].playing = false;
 		}
-		_toggle = !_toggle;
+		// 0x41cee9: the shoes advance by the toggle, which then flips (every other tick).
 		if (_toggle)
 			loopAnim(w, kAnimShoes, 1);
+		_toggle = !_toggle;
 		if (stepAnim(w, kAnimMirror, 1)) {
 			w.setHidden(node(w, kMirroirmor), false);
 			w.anims[kAnimMirror].playing = false;

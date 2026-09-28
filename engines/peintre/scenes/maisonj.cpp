@@ -145,12 +145,13 @@ public:
 
 		// Q-0237: nothing here leaves for hopiext (7 -> 2).
 		const Camera &c = w.camera();
-		if (c.z < -12500)
-			w.requestScene(kScenePont);
+		// 0x428e63 tests pont, terrasse, chambre in turn and the last match wins.
+		if (c.x > -6233 && c.x < -6000 && c.z > 2000)
+			w.requestScene(kSceneChambre);
 		else if (c.x < -8500)
 			w.requestScene(kSceneTerrasse);
-		else if (c.x > -6233 && c.x < -6000 && c.z > 2000)
-			w.requestScene(kSceneChambre);
+		else if (c.z < -12500)
+			w.requestScene(kScenePont);
 		w.clearClick();
 
 		const int32 e = w.elapsed();

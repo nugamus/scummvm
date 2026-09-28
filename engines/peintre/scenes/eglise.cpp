@@ -65,10 +65,11 @@ public:
 		default:
 			break;
 		}
-		if (w.camera().x > -2000)
-			w.requestScene(kSceneChamp);
-		else if (w.camera().z > 0x5fb4)
+		// Both tests run in turn; the second (jardin) wins.
+		if (w.camera().z > 0x5fb4)
 			w.requestScene(kSceneJardin);
+		else if (w.camera().x > -2000)
+			w.requestScene(kSceneChamp);
 		w.clearClick();
 
 		// 0x4243cb: half the elapsed ticks; back to 1 only on reaching the length exactly.
