@@ -24,8 +24,10 @@
 #include "common/ptr.h"
 #include "common/system.h"
 
+#include "graphics/cursorman.h"
 #include "graphics/font.h"
 #include "graphics/fonts/ttf.h"
+#include "graphics/wincursor.h"
 
 #include "peintre/peintre.h"
 
@@ -77,6 +79,28 @@ static bool loadBitmapResource(Common::PEResources &exe, const char *name, Graph
 	return true;
 }
 
+// Windows' I-beam, shown over the edit (E-0445); white, as the original's inverts the
+// dark field.
+static const char *const kIBeam[] = {
+	"XXX.XXX", "...X...", "...X...", "...X...", "...X...", "...X...", "...X...", "...X...",
+	"...X...", "...X...", "...X...", "...X...", "...X...", "...X...", "...X...", "XXX.XXX"
+};
+
+static void setCursor(bool ibeam) {
+	if (!ibeam) {
+		Graphics::Cursor *arrow = Graphics::makeDefaultWinCursor();
+		CursorMan.replaceCursor(arrow);
+		delete arrow;
+		return;
+	}
+	uint16 pixels[16 * 7];
+	for (int y = 0; y < 16; y++)
+		for (int x = 0; x < 7; x++)
+			pixels[y * 7 + x] = kIBeam[y][x] == 'X' ? 0xFFFF : 0;
+	const Graphics::PixelFormat format(2, 5, 6, 5, 0, 11, 5, 0, 0);
+	CursorMan.replaceCursor(pixels, 7, 16, 3, 8, 0, &format);
+}
+
 static void fill(Graphics::Surface &dst, const Common::Rect &r, uint16 colour) {
 	Common::Rect c(r);
 	c.clip(Common::Rect(dst.w, dst.h));
@@ -106,7 +130,34 @@ bool PeintreEngine::runPlayerScreen(uint &player, bool &known) {
 	const Common::Rect kOk(407, 396, 407 + 36, 396 + 23), kQuit(468, 396, 468 + 72, 396 + 27);
 	auto playerRect = [](uint i) { return Common::Rect(90, 217 + 34 * i, 90 + 162, 217 + 34 * i + 27); };
 
-	Common::String field;
+	// The field is a Windows EDIT (E-0445): centred text, opening as "player's name", all
+	// selected; the selection runs from `anchor` to the caret.
+	Common::String field = "player's name";
+	uint anchor = 0, caret = field.size();
+	bool selecting = false;   // a press in the field, dragging the selection
+	uint32 caretMoved = _system->getMillis();
+	auto textWidth = [&](const Common::String &t) { return font ? font->getStringWidth(t) : 0; };
+	auto textLeft = [&]() { return kField.left + (kField.width() - textWidth(field)) / 2; };
+	auto prefix = [&](uint n) { return Common::String(field.c_str(), n); };
+	auto charAt = [&](int x) {
+		uint best = 0;
+		for (uint i = 1; i <= field.size(); i++)
+			if (ABS(x - textLeft() - textWidth(prefix(i))) < ABS(x - textLeft() - textWidth(prefix(best))))
+				best = i;
+		return best;
+	};
+	auto replaceSelection = [&](const Common::String &with) {
+		const uint lo = MIN(anchor, caret), hi = MAX(anchor, caret);
+		if (field.size() - (hi - lo) + with.size() > 20)
+			return;
+		field = prefix(lo) + with + (field.c_str() + hi);
+		anchor = caret = lo + with.size();
+	};
+	struct HideCursor {
+		~HideCursor() { CursorMan.showMouse(false); }
+	} hideCursor;
+	int shownCursor = -1;
+
 	bool replacing = false;   // five players and a new name: pick the slot to replace
 	uint selected = 0;
 	int pressed = -1;         // control id being pressed: 0 OK, 1 Quit, 2 + i player i
@@ -118,7 +169,11 @@ bool PeintreEngine::runPlayerScreen(uint &player, bool &known) {
 		const bool down = buttonDown();
 		int action = -1;
 		if (down && !wasDown) {
-			if (kOk.contains(m))
+			if (!replacing && kField.contains(m)) {
+				anchor = caret = charAt(m.x);
+				selecting = true;
+				caretMoved = _system->getMillis();
+			} else if (kOk.contains(m))
 				pressed = 0;
 			else if (kQuit.contains(m))
 				pressed = 1;
@@ -133,6 +188,12 @@ bool PeintreEngine::runPlayerScreen(uint &player, bool &known) {
 				action = pressed;
 			pressed = -1;
 		}
+		if (selecting && down && caret != charAt(m.x)) {
+			caret = charAt(m.x);
+			caretMoved = _system->getMillis();
+		}
+		if (!down)
+			selecting = false;
 		wasDown = down;
 		if (keyFired(Common::KEYCODE_RETURN) || keyFired(Common::KEYCODE_KP_ENTER))
 			action = 0;
@@ -141,12 +202,24 @@ bool PeintreEngine::runPlayerScreen(uint &player, bool &known) {
 		if (!replacing) {
 			for (uint k = 0; k < typed().size(); k++) {
 				const char c = typed()[k];
-				if (c == '\b') {
-					if (!field.empty())
-						field.deleteLastChar();
-				} else if ((byte)c >= 32 && field.size() < 20) {
-					field += c;
-				}
+				caretMoved = _system->getMillis();
+				// Backspace and Delete take the selection, else the character beside the caret
+				if (c == '\b' && anchor == caret && caret > 0)
+					anchor = caret - 1;
+				else if (c == kTypedDelete && anchor == caret && caret < field.size())
+					anchor = caret + 1;
+				if (c == '\b' || c == kTypedDelete)
+					replaceSelection("");
+				else if (c == kTypedLeft)
+					anchor = caret = anchor != caret ? MIN(anchor, caret) : caret - (caret > 0);
+				else if (c == kTypedRight)
+					anchor = caret = anchor != caret ? MAX(anchor, caret) : caret + (caret < field.size());
+				else if (c == kTypedHome)
+					anchor = caret = 0;
+				else if (c == kTypedEnd)
+					anchor = caret = field.size();
+				else if ((byte)c >= 32)
+					replaceSelection(Common::String(c));
 			}
 		}
 
@@ -155,8 +228,11 @@ bool PeintreEngine::runPlayerScreen(uint &player, bool &known) {
 		if (action >= 2) {
 			if (replacing)
 				selected = action - 2;
-			else
+			else {
 				field = _players[action - 2].name;
+				anchor = 0;
+				caret = field.size();
+			}
 		}
 		if (action == 0 && !field.empty()) {
 			if (replacing) {
@@ -190,9 +266,25 @@ bool PeintreEngine::runPlayerScreen(uint &player, bool &known) {
 		_screen.copyRectToSurface(replacing ? background2 : background, 0, 0, Common::Rect(640, 480));
 		if (!replacing) {
 			fill(_screen, kField, kFieldBack);
+			const int x = textLeft(), top = kField.top + 3, bottom = top + (font ? font->getFontHeight() : 16);
+			const uint lo = MIN(anchor, caret), hi = MAX(anchor, caret);
+			// The selection in the system highlight colour: Windows' classic navy
+			if (lo != hi)
+				fill(_screen, Common::Rect(x + textWidth(prefix(lo)), top, x + textWidth(prefix(hi)), bottom), rgb(0, 0, 128));
 			if (font)
-				font->drawString(&_screen, field, kField.left + 2, kField.top + 3, kField.width() - 4, kWhite);
+				font->drawString(&_screen, field, x, top, kField.width(), kWhite);
+			// The caret blinks at Windows' 530 ms, shown at once after a move
+			if (lo == hi && (_system->getMillis() - caretMoved) % 1060 < 530) {
+				const int cx = x + textWidth(prefix(caret));
+				fill(_screen, Common::Rect(cx, top, cx + 1, bottom), kWhite);
+			}
 		}
+		const int want = !replacing && kField.contains(m) ? 1 : 0;
+		if (want != shownCursor) {
+			setCursor(want);
+			shownCursor = want;
+		}
+		CursorMan.showMouse(true);
 		for (uint i = 0; i < _players.size(); i++) {
 			const Common::Rect r = playerRect(i);
 			fill(_screen, r, kFieldBack);

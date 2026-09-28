@@ -288,7 +288,17 @@ void PeintreEngine::pollEvents() {
 				_keysDown.push_back(event.kbd.keycode);
 			if (event.kbd.keycode == Common::KEYCODE_BACKSPACE)
 				_typed += '\b';
-			else if (event.kbd.ascii >= 32 && event.kbd.ascii < 256)
+			else if (event.kbd.keycode == Common::KEYCODE_LEFT)
+				_typed += (char)kTypedLeft;
+			else if (event.kbd.keycode == Common::KEYCODE_RIGHT)
+				_typed += (char)kTypedRight;
+			else if (event.kbd.keycode == Common::KEYCODE_HOME)
+				_typed += (char)kTypedHome;
+			else if (event.kbd.keycode == Common::KEYCODE_END)
+				_typed += (char)kTypedEnd;
+			else if (event.kbd.keycode == Common::KEYCODE_DELETE)
+				_typed += (char)kTypedDelete;
+			else if ((event.kbd.ascii >= 32 && event.kbd.ascii < 127) || (event.kbd.ascii >= 160 && event.kbd.ascii < 256))
 				_typed += (char)event.kbd.ascii;
 			break;
 		case Common::EVENT_CUSTOM_ENGINE_ACTION_START:
