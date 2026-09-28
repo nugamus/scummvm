@@ -56,10 +56,11 @@ Display *Display::create() {
 		Graphics::kRendererTypeOpenGL |
 #endif
 		Graphics::kRendererTypeTinyGL);
-	if (type == Graphics::kRendererTypeOpenGL)
+	// OpenGL at the window's size only with the high_res option (enhancement).
+	if (type == Graphics::kRendererTypeOpenGL && ConfMan.getBool("high_res"))
 		if (Display *d = createOpenGLDisplay(ConfMan.getBool("widescreen"), ConfMan.getBool("filter_textures")))
 			return d;
-	// Any other choice is the original's software renderer.
+	// Otherwise the original's software renderer.
 	return new SoftwareDisplay();
 }
 

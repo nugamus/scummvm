@@ -165,6 +165,7 @@ World::World(PeintreEngine *vm) : _vm(vm) {
 	_focal = fov == 67 ? 0.0f : (float)(320.0 / tan(fov * M_PI / 360.0));
 	// Turn speed (enhancement): 100% is the original's steps.
 	_turn = ConfMan.getInt("turn_speed") / 100.0f;
+	_systemCursor = ConfMan.getBool("high_fps");
 }
 
 World::~World() {
@@ -1126,10 +1127,13 @@ void World::updateHotspots() {
 }
 
 void World::updateCursor() {
-	// The cursor through ScummVM's cursor manager, so it follows the mouse at the display's
-	// rate (the original draws it into each 66 ms frame, top-left at the mouse).
-	if (_hourglass) {
+	// The original draws the cursor into each 66 ms frame, top-left at the tick's mouse.
+	// With the high_fps option it goes through ScummVM's cursor manager instead, following
+	// the mouse at the display's rate.
+	if (_hourglass || !_systemCursor) {
 		CursorMan.showMouse(false);
+		if (!_hourglass)
+			drawImage(_cursors[_cursor], _mousePos.x, _mousePos.y, true);
 		return;
 	}
 	const int scale = _vm->display()->pixelScale();

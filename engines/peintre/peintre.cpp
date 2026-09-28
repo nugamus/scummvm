@@ -329,6 +329,8 @@ void PeintreEngine::waitTick(uint32 ms) {
 
 Common::Error PeintreEngine::run() {
 	// Enhancements (launcher options, all off by default: the original).
+	ConfMan.registerDefault("high_fps", false);
+	ConfMan.registerDefault("high_res", false);
 	ConfMan.registerDefault("widescreen", false);
 	ConfMan.registerDefault("filter_textures", false);
 	ConfMan.registerDefault("fov", 67);
@@ -489,9 +491,11 @@ void PeintreEngine::runWorld(int scene, int prevScene, int zone, int zoneCode) {
 	} else if (!world.load(scene, prevScene, false)) {
 		return;
 	}
-	// movement.md "The tick": 66 ms. The game runs in those steps; the frames in between
-	// are drawn from the last two (enhancement), at the display's rate.
+	// movement.md "The tick": 66 ms. The game runs in those steps and the original draws
+	// one frame per tick; the high_fps option draws at the display's rate, blending the
+	// last two ticks.
 	const uint32 kTickMs = 66;
+	const bool highFps = ConfMan.getBool("high_fps");
 	uint32 last = _system->getMillis(), pending = kTickMs;
 	uint32 frames = 0, fpsStart = last, renderMs = 0;
 	while (!shouldQuit()) {
@@ -501,15 +505,21 @@ void PeintreEngine::runWorld(int scene, int prevScene, int zone, int zoneCode) {
 		pending += MIN<uint32>(now - last, 250);
 		last = now;
 		WorldExit exit = kExitNone;
+		bool ticked = false;
 		while (pending >= kTickMs && exit == kExitNone && !shouldQuit()) {
 			pending -= kTickMs;
 			exit = world.tick();
 			world.endTick();
 			endTick();
+			ticked = true;
 		}
 		if (exit == kExitNone) {
+			if (!highFps && !ticked) {
+				_system->delayMillis(1);
+				continue;
+			}
 			const uint32 r0 = _system->getMillis();
-			world.render((float)pending / kTickMs);
+			world.render(highFps ? (float)pending / kTickMs : 1.0f);
 			renderMs += _system->getMillis() - r0;
 			// Vsync paces the frames; without it, a frame drawn in under 2 ms rests a little.
 			if (_system->getMillis() - r0 < 2)

@@ -39,10 +39,32 @@
 
 static const ADExtraGuiOptionsMap optionsList[] = {
 	{
+		GAMEOPTION_HIGH_FPS,
+		{
+			_s("High frame rate"),
+			_s("Draw the 3D scenes at the display's rate, moving smoothly between the game's steps (the original draws 15 frames per second)"),
+			"high_fps",
+			false,
+			0,
+			0
+		}
+	},
+	{
+		GAMEOPTION_HIGH_RES,
+		{
+			_s("High resolution"),
+			_s("Draw the 3D at the window's resolution with OpenGL (the original draws 640x480, scaled up to the window)"),
+			"high_res",
+			false,
+			0,
+			0
+		}
+	},
+	{
 		GAMEOPTION_WIDESCREEN,
 		{
 			_s("Widescreen"),
-			_s("Show more of the 3D scenes to the sides on a wide display (OpenGL only)"),
+			_s("Show more of the 3D scenes to the sides on a wide display (with high resolution)"),
 			"widescreen",
 			false,
 			0,
@@ -53,7 +75,7 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 		GAMEOPTION_FILTER_TEXTURES,
 		{
 			_s("Improved texture filtering"),
-			_s("Smooth and sharpen near, distant and slanted textures (mipmaps and anisotropic filtering; OpenGL only)"),
+			_s("Smooth and sharpen near, distant and slanted textures (mipmaps and anisotropic filtering; with high resolution)"),
 			"filter_textures",
 			false,
 			0,

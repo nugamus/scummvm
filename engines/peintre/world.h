@@ -294,6 +294,7 @@ private:
 	bool _hourglass = false;
 	int _shownCursor = -1, _shownScale = 0;
 	bool _shownCentred = false;
+	bool _systemCursor = false; ///< the high_fps option: the cursor manager's cursor
 	Common::Array<Graphics::HotspotInfo> _hotspotList;
 	bool _hotspotsChanged = false;
 
