@@ -397,7 +397,14 @@ Common::Error PeintreEngine::run() {
 	}
 
 	if (ConfMan.hasKey("dev_scene")) {
-		// Dev harness: straight into a 3D scene (from dev_prev_scene, default 0).
+		// Dev harness: straight into a 3D scene (from dev_prev_scene, default 0), as a
+		// player with view size dev_view_size (default 0).
+		if (_players.empty()) {
+			PlayerRecord p;
+			p.viewSize = ConfMan.hasKey("dev_view_size") ? ConfMan.getInt("dev_view_size") : 0;
+			_players.push_back(p);
+			_player = 0;
+		}
 		runWorld(ConfMan.getInt("dev_scene"), ConfMan.hasKey("dev_prev_scene") ? ConfMan.getInt("dev_prev_scene") : 0);
 		return Common::kNoError;
 	}

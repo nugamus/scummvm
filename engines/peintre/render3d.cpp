@@ -99,8 +99,9 @@ void Renderer3D::draw(Graphics::Surface *dst, const Common::Rect &viewport, cons
 	if (out)
 		out->clear();
 	_viewport = viewport;
-	// f = 480 * w / 640 (integer division) on both axes (render.md "Projection").
-	_focal = _fixedFocal > 0 ? _fixedFocal : (float)(480 * viewport.width() / 640);
+	// f = 480 * w / 640 (integer division) on both axes (render.md "Projection"); a view
+	// wider than 640 (widescreen) keeps the vertical field of view, as the OpenGL display.
+	_focal = _fixedFocal > 0 ? _fixedFocal : (float)(480 * MIN<int>(viewport.width(), 640) / 640);
 	// Black background, nothing picked (render.md "Visibility").
 	const uint area = viewport.width() * viewport.height();
 	_pickTris.clear();

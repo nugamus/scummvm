@@ -149,15 +149,34 @@ public:
 		g_system->updateScreen();
 	}
 
-	void begin3D(float focal, float nearZ, float farZ) override {
+	void begin3D(const Common::Rect &view, float focal, float nearZ, float farZ) override {
 		updateSize();
 		clearWindow();
 		setViewport();
+		const bool full = view.left <= left() && view.width() >= _width && view.height() >= 480;
+		if (!full) {
+			// scene.md "Camera and view": the frame around a smaller view is 0x114A.
+			glClearColor(16 / 255.0f, 40 / 255.0f, 82 / 255.0f, 1);
+			glEnable(GL_SCISSOR_TEST);
+			glScissor(_viewport.left, _windowHeight - _viewport.bottom, _viewport.width(), _viewport.height());
+			glClear(GL_COLOR_BUFFER_BIT);
+			glDisable(GL_SCISSOR_TEST);
+			glClearColor(0, 0, 0, 1);
+			const float sx = (float)_viewport.width() / _width, sy = (float)_viewport.height() / 480;
+			const int x0 = _viewport.left + (int)((view.left - left()) * sx);
+			const int y1 = _viewport.top + (int)(view.bottom * sy);
+			const int vw = (int)(view.width() * sx), vh = (int)(view.height() * sy);
+			glViewport(x0, _windowHeight - y1, vw, vh);
+			glEnable(GL_SCISSOR_TEST); // the view itself starts black
+			glScissor(x0, _windowHeight - y1, vw, vh);
+			glClear(GL_COLOR_BUFFER_BIT);
+			glDisable(GL_SCISSOR_TEST);
+		}
 		// Camera space is x right, y down, z forward; GL's eye space has y up and z
-		// backward. The frame is width() x 480 around the centre, focal f on both axes.
+		// backward. The frame is the view's size around its centre, focal f on both axes.
 		glMatrixMode(GL_PROJECTION);
 		glLoadIdentity();
-		const float kx = nearZ * _width / 2 / focal, ky = nearZ * 240 / focal;
+		const float kx = nearZ * (full ? _width : view.width()) / 2 / focal, ky = nearZ * (full ? 480 : view.height()) / 2 / focal;
 		glFrustum(-kx, kx, -ky, ky, nearZ, farZ);
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
