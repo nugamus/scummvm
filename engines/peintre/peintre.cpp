@@ -55,6 +55,8 @@ PeintreEngine::PeintreEngine(OSystem *syst, const ADGameDescription *gameDesc)
 }
 
 PeintreEngine::~PeintreEngine() {
+	for (auto &s : _sessions)
+		delete s._value.script;
 	delete _movies;
 	delete _sound;
 	delete _display;

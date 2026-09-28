@@ -214,9 +214,26 @@ bool World::sceneComplete(int scene) {
 	return true;
 }
 
+const SceneSession *World::lastVisit() const {
+	const SceneSession &s = _vm->session(_bundle);
+	return s.seen ? &s : nullptr;
+}
+
 void World::unload() {
 	_vm->display()->forgetTextures();
-	_script.reset();
+	if (!_bundle.empty()) {
+		// Keep what the original keeps in its static tables for the next visit.
+		SceneSession &ss = _vm->session(_bundle);
+		ss.cursorTypes.clear();
+		for (const SceneObject &o : objects)
+			ss.cursorTypes.push_back(o.cursorType);
+		ss.playing.clear();
+		for (const AnimRecord &a : anims)
+			ss.playing.push_back(a.playing);
+		ss.seen = true;
+		_bundle.clear();
+	}
+	_script = nullptr;
 	stopAllSounds();
 	for (Texture3D *t : _textures)
 		delete t;
@@ -478,7 +495,11 @@ bool World::load(int scene, int prevScene, bool keepCamera) {
 	_exit = kExitNone;
 	_cut = true;
 
-	_script.reset(ConfMan.getBool("dev_noscript") ? nullptr : createSceneScript(scene, bundle));
+	_bundle = bundle;
+	SceneSession &ss = _vm->session(bundle);
+	if (!ss.script && !ConfMan.getBool("dev_noscript"))
+		ss.script = createSceneScript(scene, bundle);
+	_script = ss.script;
 	if (_script)
 		_script->init(*this);
 	for (uint i = 0; i < _scene3D.nodes.size(); i++)

@@ -24,6 +24,8 @@
 
 #include "common/algorithm.h"
 #include "common/array.h"
+#include "common/hash-str.h"
+#include "common/hashmap.h"
 #include "common/keyboard.h"
 #include "common/rect.h"
 #include "common/scummsys.h"
@@ -45,6 +47,20 @@ class Display;
 class MoviePlayer;
 class Sound;
 class World;
+class SceneScript;
+
+/**
+ * A scene's globals for the rest of the run. In the original a scene's code, object table
+ * and animation records are static data: its variables, the objects' cursor types and the
+ * tracks' playing flags keep their values from one visit to the next (only what the init
+ * sets is reset; LoadAnims resets the frames). Not saved, as in the original.
+ */
+struct SceneSession {
+	SceneScript *script = nullptr;
+	Common::Array<byte> cursorTypes;
+	Common::Array<bool> playing;
+	bool seen = false;
+};
 
 /** Keymapper actions beyond the original's keys (metaengine.cpp initKeymaps). */
 enum {
@@ -142,6 +158,7 @@ public:
 	Common::Array<PlayerRecord> &players() { return _players; }
 	uint currentPlayer() const { return _player; }
 	GameState &state() { return _state; }
+	SceneSession &session(const Common::String &bundle) { return _sessions[bundle]; }
 	void loadPlayers();
 	void savePlayers();
 	/** The integrity check: drops players without a resume file (save.md). */
@@ -205,6 +222,7 @@ private:
 	Common::Array<PlayerRecord> _players;
 	uint _player = 0;
 	GameState _state;
+	Common::HashMap<Common::String, SceneSession> _sessions; ///< by bundle name
 };
 
 } // End of namespace Peintre
