@@ -27,13 +27,6 @@
 
 namespace X3D {
 
-static Common::String readName(Common::SeekableReadStream &s) {
-	char buf[33];
-	s.read(buf, 32);
-	buf[32] = 0;
-	return Common::String(buf);
-}
-
 // Whether count elements of at least bytes each fit in the rest of the stream
 static bool fits(Common::SeekableReadStream &s, uint32 count, uint32 bytes) {
 	return !s.eos() && count <= (s.size() - s.pos()) / bytes;
@@ -41,7 +34,7 @@ static bool fits(Common::SeekableReadStream &s, uint32 count, uint32 bytes) {
 
 static bool readTrack(Common::SeekableReadStream &s, A3DTrack &t, uint valueFloats) {
 	const uint32 count = s.readUint32LE();
-	s.readUint32LE(); // flags, 0 in the corpus
+	s.readUint32LE(); // flags, 0 in every game file
 	if (!fits(s, count, (1 + 5 + valueFloats) * 4))
 		return false;
 	t.frames.resize(count);
@@ -57,7 +50,7 @@ static bool readTrack(Common::SeekableReadStream &s, A3DTrack &t, uint valueFloa
 }
 
 bool A3DFile::load(Common::SeekableReadStream &s) {
-	const Common::String signature = readName(s);
+	const Common::String signature = s.readString(0, 32);
 	if (signature != "(c) 1998 4X Tech. 0.95 (A)") {
 		warning("A3D: unsupported signature '%s'", signature.c_str());
 		return false;
@@ -69,9 +62,9 @@ bool A3DFile::load(Common::SeekableReadStream &s) {
 	animations.resize(n);
 	for (uint i = 0; i < animations.size() && !s.eos(); i++) {
 		A3DAnimation &a = animations[i];
-		a.name = readName(s);
+		a.name = s.readString(0, 32);
 		if (s.readUint32LE()) {
-			const Common::String parent = readName(s);
+			const Common::String parent = s.readString(0, 32);
 			for (int j = i - 1; j >= 0 && a.parent < 0; j--)
 				if (animations[j].name == parent)
 					a.parent = j;
@@ -100,7 +93,7 @@ bool A3DFile::load(Common::SeekableReadStream &s) {
 	return !s.err() && s.pos() == s.size();
 }
 
-// Keys i and j around frame f, and the parameter between them (animation.md, Key lookup)
+// Keys i and j around frame f, and the parameter between them
 static bool lookup(const A3DTrack &t, float f, uint &i, uint &j, float &s) {
 	const uint n = t.frames.size();
 	if (!n)
@@ -119,7 +112,7 @@ static bool lookup(const A3DTrack &t, float f, uint &i, uint &j, float &s) {
 	return true;
 }
 
-// TCB tangents of key i (animation.md, Translation spline)
+// TCB (Kochanek-Bartels) tangents of key i
 static void tangents(const A3DTrack &t, uint i, float in[3], float out[3]) {
 	const uint n = t.frames.size();
 	const uint p = i > 0 ? i - 1 : 0, q = MIN(i + 1, n - 1);
@@ -185,7 +178,7 @@ void A3DFile::sample(uint index, float f, O3DObject &o) const {
 		float q[4];
 		if (1 + d <= 1e-5f) {
 			const float r[4] = { qi[3], -qi[2], qi[1], -qi[0] };
-			const float wi = sinf((1 - s) * M_PI / 2), wr = sinf(s * M_PI / 2);
+			const float wi = sinf((1 - s) * (float)M_PI / 2), wr = sinf(s * (float)M_PI / 2);
 			for (int k = 0; k < 4; k++)
 				q[k] = wi * qi[k] + wr * r[k];
 		} else if (1 - d <= 1e-5f) {

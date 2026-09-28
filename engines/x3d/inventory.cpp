@@ -33,9 +33,17 @@
 
 namespace X3D {
 
-// PorteF.fra: the bar, its arrows and the item strip (ui.md table), at the bar's y
-static const int kBarTop = 420, kParked = 480;
-static const int kStripLeft = 57, kStripRight = 592, kSlots = 7;
+// PorteF.fra: the bar, its arrows and the item strip, at the bar's y
+static const int kBarTop = 420;
+static const int kParked = 480;
+static const int kStripLeft = 57;
+static const int kStripRight = 592;
+static const int kSlots = 7;
+
+void Inventory::clear() {
+	_items.clear();
+	_offset = 0;
+}
 
 void Inventory::syncState(Common::Serializer &s) {
 	uint32 n = _items.size();
@@ -53,8 +61,11 @@ void Inventory::syncState(Common::Serializer &s) {
 void Inventory::attach(Interaction *interaction) {
 	_interaction = interaction;
 	_y = 480;
-	_step = _ticks = 0;
-	_nextTick = _now = 0; // logic time restarts with each scene
+	_step = 0;
+	_ticks = 0;
+	// Logic time restarts with each scene
+	_nextTick = 0;
+	_now = 0;
 }
 
 Inventory::Inventory() {
@@ -126,7 +137,8 @@ bool Inventory::contains(const Common::Point &p) const {
 Common::Rect Inventory::slotRect(uint i) const {
 	// An item's slot clipped to the strip (57..592): only the visible part shows and takes clicks
 	const int x = 86 + 70 * ((int)i + _offset);
-	const int left = MAX(x, kStripLeft), right = MIN(x + 51, kStripRight);
+	const int left = MAX(x, kStripLeft);
+	const int right = MIN(x + 51, kStripRight);
 	return left < right ? Common::Rect(left, _y + 5, right, _y + 56) : Common::Rect();
 }
 
@@ -183,7 +195,8 @@ void Inventory::draw(Renderer &r, int xOffset) {
 			continue;
 		if (Graphics::Surface *s = image(_items[i])) {
 			const int x = 86 + 70 * ((int)i + _offset);
-			const int left = slot.left - x, right = MIN(slot.right - x, (int)s->w);
+			const int left = slot.left - x;
+			const int right = MIN(slot.right - x, (int)s->w);
 			if (left >= right)
 				continue;
 			const Graphics::Surface part = s->getSubArea(Common::Rect(left, 0, right, s->h));

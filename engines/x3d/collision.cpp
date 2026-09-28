@@ -34,7 +34,8 @@ void Collision::build(const Scene &scene) {
 		const Common::Array<O3DObject> &objects = m->file.objects;
 
 		// Depth first: an object, then its children in file order
-		Common::Array<int> order, stack;
+		Common::Array<int> order;
+		Common::Array<int> stack;
 		for (int i = objects.size() - 1; i >= 0; i--)
 			if (objects[i].parent < 0)
 				stack.push_back(i);
@@ -95,7 +96,7 @@ void Collision::fill(Object &obj) const {
 	// Refreshes overwrite the faces in place, keeping their storage
 	uint used = 0;
 
-	// Welded objects use the vertices of their top object (animation.md)
+	// Welded objects use the vertices of their top object
 	int owner = obj.object;
 	while (owner >= 0 && objects[owner].vertices.empty())
 		owner = objects[owner].parent;
@@ -106,7 +107,8 @@ void Collision::fill(Object &obj) const {
 	const Common::Array<float> &vertices = m->worldVertices[owner];
 	const float *w = objects[owner].world;
 
-	Vector3d lo(1e30f, 1e30f, 1e30f), hi(-1e30f, -1e30f, -1e30f);
+	Vector3d lo(1e30f, 1e30f, 1e30f);
+	Vector3d hi(-1e30f, -1e30f, -1e30f);
 	for (const O3DFace &f : o.faces) {
 		if (used == obj.faces.size())
 			obj.faces.push_back(Face());
@@ -125,7 +127,7 @@ void Collision::fill(Object &obj) const {
 		if (face.vertices.size() < 3)
 			continue;
 		if (owner != (int)obj.object) {
-			// A welded object's normal comes from its world vertices (movement.md, E-0543):
+			// A welded object's normal comes from its world vertices:
 			// its own matrix, not the top's, turns them
 			const Common::Array<Vector3d> &v = face.vertices;
 			face.normal = Vector3d::crossProduct(v[2] - v[1], v[0] - v[1]);
@@ -149,7 +151,8 @@ bool Collision::inside(const Face &face, const Vector3d &p) {
 	const Common::Array<Vector3d> &v = face.vertices;
 	for (uint i = 1; i + 1 < v.size(); i++) {
 		const Vector3d *tri[3] = { &v[0], &v[i], &v[i + 1] };
-		int positive = 0, negative = 0;
+		int positive = 0;
+		int negative = 0;
 		for (int k = 0; k < 3; k++) {
 			const Vector3d edge = *tri[(k + 1) % 3] - *tri[k];
 			const float s = Vector3d::dotProduct(Vector3d::crossProduct(edge, p - *tri[k]), face.normal);
@@ -167,7 +170,8 @@ Vector3d Collision::nearestOnBoundary(const Face &face, const Vector3d &p) {
 	Vector3d best;
 	float bestDistance = 1e30f;
 	for (uint i = 0; i < v.size(); i++) {
-		const Vector3d &a = v[i], &b = v[(i + 1) % v.size()];
+		const Vector3d &a = v[i];
+		const Vector3d &b = v[(i + 1) % v.size()];
 		const Vector3d ab = b - a;
 		const float length = Vector3d::dotProduct(ab, ab);
 		const float t = length > 0 ? CLIP(Vector3d::dotProduct(p - a, ab) / length, 0.0f, 1.0f) : 0.0f;
@@ -191,7 +195,8 @@ Vector3d Collision::resolveSphere(Vector3d c, float r) const {
 			if (d <= 0 || d >= r)
 				continue;
 
-			Vector3d q = c - f.normal * d, m = f.normal;
+			Vector3d q = c - f.normal * d;
+			Vector3d m = f.normal;
 			if (!inside(f, q)) {
 				q = nearestOnBoundary(f, c);
 				const float distance = (c - q).getMagnitude();

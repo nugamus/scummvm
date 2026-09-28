@@ -33,6 +33,13 @@
 
 namespace X3D {
 
+// The players screen: its list is the only cSU# view; view 2 is its OK button, dimmed
+// (UserOKN) while the typed name is empty and lit (UserOKM) otherwise
+static const char *const kPlayersListTag = "cSU#";
+static const int kPlayersOkView = 2;
+static const char *const kPlayersOkDimmed = "UserOKN";
+static const char *const kPlayersOkLit = "UserOKM";
+
 static Graphics::Surface *bitmap(const Common::String &name) {
 	if (name.empty() || name == "0")
 		return nullptr;
@@ -44,7 +51,7 @@ static Graphics::Surface *bitmap(const Common::String &name) {
 }
 
 // The original draws edits and lists with GDI Arial 12 pt at 96 dpi, 16 px characters
-// (ui.md, Text): Liberation Sans has Arial's metrics; the GUI font without FreeType
+// Liberation Sans has Arial's metrics; the GUI font without FreeType
 const Graphics::Font *Frame::textFont() const {
 #ifdef USE_FREETYPE2
 	if (!_font)
@@ -89,7 +96,7 @@ bool Frame::load(const Common::String &name) {
 		v.parent = f.readSint32LE();
 		f.skip(8);
 
-		// Class bodies (fra.ksy)
+		// Class bodies
 		if (v.tag == "TIB#" || v.tag == "POL#") {
 			v.bitmapDx = f.readSint32LE();
 			v.bitmapDy = f.readSint32LE();
@@ -101,7 +108,7 @@ bool Frame::load(const Common::String &name) {
 			if (v.bitmap && !v.h)
 				v.h = v.bitmap->h + v.bitmapDy;
 		} else if (v.tag == "RCS#" || v.tag == "AOL#" || v.tag == "VAS#" || v.tag == "cSU#") {
-			// The scroll bar: arrows-and-track bitmap, thumb (fra.ksy scroll, E-0600)
+			// The scroll bar: arrows-and-track bitmap, thumb
 			v.scrollBar = bitmap(f.readString(0, 32));
 			f.skip(8);
 			v.scrollThumb = bitmap(f.readString(0, 32));
@@ -131,7 +138,7 @@ bool Frame::load(const Common::String &name) {
 				v.command = f.readString(0, 32);
 				break;
 			case MKTAG('@', 'H', 'I', 'L'): // LIH@
-			case MKTAG('@', 'H', 'I', 'G'): { // GIH@: a caption at absolute (dx, dy) (E-0603)
+			case MKTAG('@', 'H', 'I', 'G'): { // GIH@: a caption at absolute (dx, dy)
 				Graphics::Surface *s = bitmap(f.readString(0, 32));
 				const int dx = f.readSint32LE(), dy = f.readSint32LE();
 				if (tag == MKTAG('@', 'H', 'I', 'L')) {
@@ -191,7 +198,7 @@ int Frame::editView() const {
 }
 
 void Frame::setCaret(int pos) {
-	// Every caret move shows the caret and restarts its blink (E-0610)
+	// Every caret move shows the caret and restarts its blink
 	const int e = editView();
 	_caret = _selEnd = _anchor = CLIP<int>(pos, 0, e >= 0 ? _views[e].text.size() : 0);
 	_caretTime = g_system->getMillis();
@@ -247,15 +254,15 @@ int Frame::charAt(int x) const {
 }
 
 void Frame::textChanged() {
-	// Players list (cSU#, E-0610): OK dims and stops reacting on an empty name; otherwise
+	// Players list (cSU#): OK dims and stops reacting on an empty name; otherwise
 	// the player of that exact name is selected and scrolled to
 	const int l = listView();
 	const int e = editView();
-	if (l < 0 || e < 0 || _views[l].tag != "cSU#")
+	if (l < 0 || e < 0 || _views[l].tag != kPlayersListTag)
 		return;
 	const Common::String &t = _views[e].text;
-	setBitmap(2, t.empty() ? "UserOKN" : "UserOKM");
-	setEnabled(2, !t.empty());
+	setBitmap(kPlayersOkView, t.empty() ? kPlayersOkDimmed : kPlayersOkLit);
+	setEnabled(kPlayersOkView, !t.empty());
 	_selected = -1;
 	for (uint i = 0; i < _names.size() && !t.empty(); i++) {
 		if (_names[i] == t) {
@@ -399,7 +406,7 @@ void Frame::setList(const Common::Array<Common::String> &rows, int selected, con
 
 void Frame::selectRow(int row) {
 	_selected = row;
-	// Players list: the row's name goes to the edit (E-0610)
+	// Players list: the row's name goes to the edit
 	if (row >= 0 && row < (int)_names.size())
 		setText(_names[row]);
 }
@@ -426,7 +433,7 @@ int Frame::listRowAt(const Common::Point &p) const {
 }
 
 bool Frame::pressScroll(const Common::Point &p) {
-	// The bar column: 33 px arrows at both ends, the thumb drags, the track pages (E-0600)
+	// The bar column: 33 px arrows at both ends, the thumb drags, the track pages
 	const int l = listView();
 	if (l < 0 || !_views[l].scrollBar || scrollMax() <= 0)
 		return false;
@@ -467,7 +474,7 @@ void Frame::draw(Renderer &r, int xOffset, int hovered) {
 			r.drawImage(*v.knob, xOffset + v.x + v.margin + v.value - 4, v.y, false);
 		if (v.edit) {
 			// White on (32, 32, 80) from the left, the selection inverted, a blinking
-			// inverted caret (ui.md, Players screen)
+			// inverted caret
 			const Graphics::Font *font = textFont();
 			Graphics::Surface s;
 			s.create(v.w, v.h, Graphics::PixelFormat::createFormatRGBA32());
@@ -493,7 +500,6 @@ void Frame::draw(Renderer &r, int xOffset, int hovered) {
 		}
 		if (v.list) {
 			// Rows centred in (0, 32 row, w - 38, 32) on an opaque (32, 32, 80) box
-			// (save.md, Lists)
 			const Graphics::Font *font = textFont();
 			Graphics::Surface s;
 			s.create(v.w - 38, v.h, Graphics::PixelFormat::createFormatRGBA32());
@@ -505,9 +511,9 @@ void Frame::draw(Renderer &r, int xOffset, int hovered) {
 			}
 			r.drawImage(s, xOffset + v.x, v.y, false);
 			s.free();
-			// The players list draws its bar from max 0 on, the thumb only above (E-0600)
+			// The players list draws its bar from max 0 on, the thumb only above
 			const int max = scrollRange();
-			if (v.scrollBar && (max > 0 || (max == 0 && v.tag == "cSU#"))) {
+			if (v.scrollBar && (max > 0 || (max == 0 && v.tag == kPlayersListTag))) {
 				const int bx = xOffset + v.x + v.w - v.scrollBar->w;
 				r.drawImage(*v.scrollBar, bx, v.y, false);
 				if (v.scrollThumb && max > 0) {

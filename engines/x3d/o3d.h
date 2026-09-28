@@ -31,15 +31,15 @@ class SeekableReadStream;
 
 namespace X3D {
 
-// .O3D geometry (docs/formats/o3d.ksy)
+// .O3D geometry: materials, then objects with vertices, normals and faces
 
 struct O3DMaterial {
 	Common::String name;
-	uint32 renderClass = 2; // 0 unlit, 2 RGB lit (lighting.md)
+	uint32 renderClass = 2; // 0 unlit, 2 RGB lit
 	byte colors[4][3] = {};
 	bool wrap = true;       // tiling: false clamps texture coordinates
-	uint32 transparency = 0; // percent (+0x4c, E-0480)
-	uint32 mode = 0;         // draw mode (+0x50): 1 and 3 colour-keyed, 2 additive (E-0481)
+	uint32 transparency = 0; // percent
+	uint32 mode = 0;         // draw mode: 1 and 3 colour-keyed, 2 additive
 	Common::String textureMap; // empty when the material has no map
 };
 
@@ -52,12 +52,12 @@ struct O3DFace {
 
 struct O3DObject {
 	Common::String name;
-	int cameraType = 0; // 1 $XYZ$, 2 $Z$, 3 $XZ$ in the file's name (E-0045), set by the scene
+	int cameraType = 0; // 1 $XYZ$, 2 $Z$, 3 $XZ$ in the file's name, set by the scene
 	int parent = -1; // index into O3DFile::objects
 	Common::Array<float> vertices; // x, y, z per vertex, object-local
 	Common::Array<float> normals;  // x, y, z per vertex, object-local
 	Common::Array<O3DFace> faces;
-	// Live transform: loaded from the file, rewritten by animations (animation.md)
+	// Live transform: loaded from the file, rewritten by animations
 	float pivot[3] = {}, localPosition[3] = {}, localScale[3] = {};
 	float matrix[16] = {}; // row-vector form, translation in elements 12..14
 
@@ -66,7 +66,7 @@ struct O3DObject {
 	bool welded = false;
 	uint32 weldFirst = 0, ownCount = 0;
 
-	// Object-local to world, row-vector form (engines/x3d/docs/spec/scene.md, Geometry)
+	// Object-local to world, row-vector form
 	float world[16] = {};
 };
 
@@ -76,6 +76,13 @@ struct O3DFile {
 
 	bool load(Common::SeekableReadStream &s);
 	void updateWorld(); // rebuilds every object's world matrix from its live transform
+	// The vertex array the object's faces index: its own, or the nearest ancestor's that
+	// has vertices; -1 when none has
+	int vertexOwner(int object) const {
+		while (object >= 0 && objects[object].vertices.empty())
+			object = objects[object].parent;
+		return object;
+	}
 };
 
 } // End of namespace X3D

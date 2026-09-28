@@ -29,7 +29,11 @@ namespace X3D {
 
 using Math::Vector3d;
 
-// engines/x3d/docs/spec/movement.md, Camera state
+void Player::setSphere(float radius, float offset) {
+	_radius = radius;
+	sphereOffset = offset;
+}
+
 void Player::syncState(Common::Serializer &s) {
 	for (int k = 0; k < 3; k++)
 		s.syncAsFloatLE(eye.getData()[k]);
@@ -114,7 +118,7 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 		return false;
 	}
 
-	// Numpad 0 (press) crouches; the key-down ends the step (movement.md, Keys and Crouch)
+	// Numpad 0 (press) crouches; the key-down ends the step
 	const float crouchHeight = 0.5f * _scale + 3;
 	const bool crouchPress = keys.crouch && !_crouchWas;
 	_crouchWas = keys.crouch;
@@ -187,17 +191,18 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 				step /= 2;
 			velocity.set(direction * d.x() * step - strafe * sinf(yaw) * step, direction * d.y() * step - strafe * cosf(yaw) * step, 0);
 		}
-		// Shift (press) jumps: the walk at x0.5 when running, x0.25 otherwise
+		// Shift (press) jumps, keeping a quarter of the step: half the walk when running,
+		// a quarter of it otherwise
 		if (jumpAllowed && !crouched && keys.shift && !_shiftWas) {
 			_jumping = true;
 			_jumpTime = 0;
 			_jumpZ = eye.z();
-			_jumpVelocity = velocity * 0.25f; // the walk step: x0.5 of a run, x0.25 of a walk
+			_jumpVelocity = velocity * 0.25f;
 		}
 	}
 	_shiftWas = keys.shift;
 
-	// Per logic step, not per second: the original's rate per frame (Q-0022)
+	// Per logic step, not per second: the original's rate per frame
 	if (canTurn) {
 		if (keys.right)
 			yaw += _turn;
@@ -217,7 +222,7 @@ bool Player::tick(float dt, const Keys &keys, const Collision &collision) {
 		Vector3d next = slide(eye, velocity, collision);
 		// Held at an opening narrower than the sphere: slide once more with the original's
 		// longest step (its 8 fps floor, at most r/2 so no flat face is crossed), and take it
-		// when that gets at least a step further (movement.md, Narrow openings)
+		// when that gets at least a step further
 		const Vector3d dir = velocity * (1.0f / velocity.getMagnitude());
 		const float progress = Vector3d::dotProduct(next - eye, dir);
 		if (progress < 0.1f * velocity.getMagnitude()) {
@@ -241,7 +246,7 @@ void Player::probeGround(const Collision &collision) {
 }
 
 bool Player::standsOn(Scene &scene, const Common::String &name) const {
-	// The object the name finds, not any object of that name (u01.md, E-0083)
+	// The object the name finds, not any object of that name
 	Scene::Model *m;
 	uint o;
 	return groundModel && scene.findObject(name, m, o) && m == groundModel && o == groundIndex;

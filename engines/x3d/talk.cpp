@@ -35,7 +35,7 @@ Talk::Talk(Scene &scene, Sound &sound, const Common::String &unitDir)
 
 void Talk::addTalker(const Common::String &character, const Common::String &face, const Common::String &clipDir) {
 	static const char *const clips[] = { nullptr, "Yeux", "Ch", "Ch_yeux", "B", "E", "F", "O", "A" };
-	// Loaded in the original's order (E-0125): later nodes override earlier ones (E-0606),
+	// Loaded in the original's order: later nodes override earlier ones,
 	// so A, left enabled at rest by a closed shape, never hides the other mouths
 	static const int order[] = { 8, 4, 2, 3, 5, 6, 7, 1 };
 	Talker t;
@@ -79,7 +79,7 @@ bool Talk::say(const Common::String &character, const Common::String &name) {
 	_start = _lastChange = _nextRandom = _now;
 	_times.clear();
 	_shapes.clear();
-	// Lip table: a .BIN #INDEX# chunk of {u32 time ms, u16 shape, u16 filler} (lip.ksy)
+	// Lip table: a .BIN #INDEX# chunk of {u32 time ms, u16 shape, u16 filler}
 	if (Common::SeekableReadStream *s = openBinChunk(Common::Path(_unitDir + "Sound/" + base + ".bin"), "#INDEX#")) {
 		const uint32 count = s->readUint32LE();
 		for (uint32 i = 0; i < count && !s->err(); i++) {

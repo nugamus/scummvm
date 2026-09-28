@@ -44,11 +44,11 @@ namespace X3D {
 // Chunk `name` (e.g. "#SCENE#") of a .BIN chunk container, or nullptr
 Common::SeekableReadStream *openBinChunk(const Common::Path &file, const char *name);
 
-// engines/x3d/docs/spec/scene.md, Camera and projection
+// The view the scene is drawn from
 struct Camera {
 	float position[3] = {};
 	float yaw = 0;           // a, radians
-	float pitch = M_PI / 2;  // e, radians from straight down
+	float pitch = (float)M_PI / 2; // e, radians from straight down
 	float fov = 90;          // horizontal, degrees
 	float roll = 0;          // degrees, about the view direction
 };
@@ -69,7 +69,7 @@ public:
 	void beginStep(); // at a step's start: the frames the render interpolates from
 	void advance(float dt);
 	// Samples the running nodes between the last two advances (0 < alpha < 1) for
-	// rendering above the step rate (animation.md, Engine model); true if any moved
+	// rendering above the step rate; true if any moved
 	bool interpolate(float alpha);
 	void poseAll();
 
@@ -83,7 +83,7 @@ public:
 	// (U07's tipping plank)
 	bool addObjectNode(const Common::String &object, const Common::String &path, float fps);
 	// A new node, last in the list, playing the loaded track named after the object on it
-	// (XSceneAnim_AddNode: U04's chest lid *U04_26, E-0230, E-0056)
+	// (XSceneAnim_AddNode: U04's chest lid *U04_26)
 	bool addTrackNode(const Common::String &object);
 	O3DObject *object(const Common::String &name); // newest file first
 	void draw(const Camera &cam, int width, int height);
@@ -92,7 +92,7 @@ public:
 	bool maxDetail = false; // enhancement: never switch to a distant level of detail
 	float scale = 1; // #SCENE# unit length (eye height and collision sphere derive from it)
 
-	// A lower-detail stand-in for a base object (engines/x3d/docs/spec/scene.md, Levels of detail)
+	// A lower-detail stand-in for a base object, drawn beyond its distance
 	struct Lod {
 		const Model *model;
 		uint object;
@@ -132,7 +132,7 @@ public:
 	// of its file when it has no parent)
 	Common::StringArray siblings(const Common::String &name) const;
 
-	// Animation nodes by object name (animation.md, E-0056/E-0057; interaction.md)
+	// Animation nodes by object name
 	void startAnimation(const Common::String &objectName);
 	void setAnimationState(const Common::String &objectName, float frame, bool paused, float fps, bool loop);
 	// Plays a whole .A3D once on the node's object in its clip slot, holding the last pose
@@ -142,13 +142,13 @@ public:
 	void backToBase(const Common::String &objectName); // slot 0 active, running, frame 1
 	bool clipPlaying(const Common::String &objectName);
 
-	// Mouth clips for talk (sound.md, Talkers): a node that plays the sub-animation named
+	// Mouth clips for talk: a node that plays the sub-animation named
 	// like the face object from a whole-body .A3D, created disabled and paused. -1 if the
 	// file or the object is missing.
 	// owner: prefer the face object below the object of that name (two talkers may share
 	// a face name, U05's $$$DUMMY.*visage)
 	int addFaceClip(const Common::String &faceObject, const Common::String &path, const Common::String &owner = "");
-	// The global position of the face object addFaceClip binds to (sound.md, Say)
+	// The global position of the face object addFaceClip binds to
 	Math::Vector3d facePosition(const Common::String &faceObject, const Common::String &owner) const;
 	void setNode(int node, bool enabled, bool running);
 	void setNodeFrame(int node, float frame);
@@ -168,7 +168,7 @@ public:
 	void renameNode(const Common::String &from, const Common::String &to);
 	void setPickable(const Common::String &namePrefix, bool pickable);
 
-	// Scripted control of an animation node (u01.md "Run node to f")
+	// Scripted control of an animation node
 	bool hasNode(const Common::String &name) { return findNode(name) != nullptr; }
 	void runNodeTo(const Common::String &name, float target, bool backward);
 	void pauseNode(const Common::String &name);
@@ -181,11 +181,11 @@ public:
 	float nodeLastFrame(const Common::String &name);
 	bool nodeRunning(const Common::String &name);
 	// Replaces the node's animation with a whole .A3D in its clip slot, paused, driving the
-	// node object's parent (U01's siding clip, u01.md)
+	// node object's parent (U01's siding clip)
 	void loadClip(const Common::String &name, const Common::String &path, float fps, float frame);
 	// A clip made the node's active slot, paused at its first frame, not looping; with a
 	// sub-animation name, only that animation plays, on the object of the same name
-	// (u02.md). The node* controls above then act on it; endClip goes back to slot 0.
+	// (U02). The node* controls above then act on it; endClip goes back to slot 0.
 	void setClip(const Common::String &name, const Common::String &path, const Common::String &subAnimation = "",
 	             int slot = 1, bool activate = true);
 	void activateSlot(const Common::String &name, int slot); // 0: the node's own animation
@@ -197,7 +197,7 @@ public:
 
 	byte ambient[3] = { 255, 255, 255 };
 
-	// Saved state (save.md): ambient, hidden and unpickable objects, animation nodes
+	// Saved state: ambient, hidden and unpickable objects, animation nodes
 	void syncState(Common::Serializer &s);
 
 	const Common::String &dir() const { return _dir; } // asset directory, e.g. "U01/"
@@ -208,7 +208,7 @@ public:
 	const Common::Array<Model *> &models() const { return _models; }
 
 	// The object under output pixel (x, y) and the camera-space depth of the hit
-	// (engines/x3d/docs/spec/interaction.md, Picking). Returns false when nothing is hit.
+	// Returns false when nothing is hit.
 	bool pick(const Camera &cam, int width, int height, float x, float y,
 	          const Model *&model, uint &object, float &depth);
 
@@ -223,7 +223,7 @@ public:
 	void drawHighlight(const Common::Array<Highlight> &objects);
 
 private:
-	// An animation being played (animation.md, Per-frame playback)
+	// An animation being played
 	struct Playback {
 		const A3DFile *file = nullptr;
 		uint animation = 0;
@@ -236,6 +236,9 @@ private:
 		Common::String path;         // a clip's .A3D, for saves
 
 		void advance(float dt);
+		// The frame range played: the override, else the animation's
+		float lo() const { return first >= 0 ? first : (float)file->animations[animation].firstFrame; }
+		float hi() const { return last >= 0 ? last : (float)file->animations[animation].lastFrame; }
 	};
 
 	// An object's playback, plus a scripted clip that replaces it while active (slot 1)
@@ -245,7 +248,7 @@ private:
 		uint object = 0;
 		Playback base, clip;
 		bool clipActive = false;
-		// Numbered clip slots (animation.md "Sub-slots"): clip is slot `slot`; the others
+		// Numbered clip slots: clip is slot `slot`; the others
 		// wait in slots[] until made active
 		int slot = 1;
 		Playback slots[16];
@@ -279,7 +282,6 @@ private:
 	const Common::Array<float> *drawnVertices(const Model &m, uint object);
 
 	// Translucent and additive faces, drawn after everything else, farthest first
-	// (scene.md, Drawing order and blending)
 	struct Deferred {
 		float xyz[3 * 64], uv[2 * 64];
 		byte rgb[3 * 64], spec[3 * 64];
@@ -297,7 +299,7 @@ private:
 	const Common::Array<byte> &lighting(const Model &m, uint owner) const;
 	void loadLights(const Common::String &path);
 
-	// A .L3D omni light (lighting.md; spot lights have no corpus sample)
+	// A .L3D omni light (no game file has spot lights)
 	struct Light {
 		float position[3];
 		byte color[3];
@@ -317,18 +319,20 @@ private:
 	Common::Array<Model *> _models;
 	Common::Array<Model *> _lodModels; // only drawn through their base objects
 	Common::Array<A3DFile *> _animationFiles;
-	// Materials by exact name: the first loaded wins for every later file (E-0484)
+	// Materials by exact name: the first loaded wins for every later file
 	Common::HashMap<Common::String, O3DMaterial> _materials;
 	Common::HashMap<Common::String, const A3DFile *, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _clipFiles;
 	Common::Array<AnimNode> _nodes;
 
 	// The view of the frame being drawn, for culling: eye, axes, half-extents per unit depth
 	float _eye[3], _right[3], _up[3], _forward[3], _halfWidth, _halfHeight;
+	// sqrt(1 + half-extent squared): how far a sphere of radius 1 reaches past a side plane
+	float _slackWidth, _slackHeight;
 	// Camera-facing ($Z$) objects: world offset -> world, rotating it as if the camera
 	// had yaw pi/2 (row vectors, 3x3)
 	float _facing[9];
 	// The object's camera-type-2 faces turned toward the camera about its origin, in a copy
-	// of the owner's world vertices (E-0270)
+	// of the owner's world vertices
 	void faceCamera(const Model &m, uint object, Common::Array<float> &vertices) const;
 	// Scratch arrays reused by drawObject, faceCamera and pick
 	Common::Array<float> _facingVertices, _pickCamera, _pickScreen;

@@ -39,7 +39,7 @@ namespace X3D {
 class Interaction;
 class Renderer;
 
-// The Space inventory bar, frame PorteF (engines/x3d/docs/spec/ui.md, Inventory bar)
+// The Space inventory bar, frame PorteF
 // The layout of PorteF.fra is built in; it could be loaded with the frame system once the
 // menus need one
 class Inventory {
@@ -49,8 +49,8 @@ public:
 
 	// The bar lives for the whole game; each scene's hotspots and cursor attach to it
 	void attach(Interaction *interaction);
-	void clear() { _items.clear(); _offset = 0; } // a new game
-	void syncState(Common::Serializer &s); // save.md PORTEF
+	void clear(); // a new game
+	void syncState(Common::Serializer &s); // the items
 
 	void toggle();              // Space
 	void show() { slide(true); }
@@ -75,8 +75,11 @@ private:
 	Interaction *_interaction = nullptr;
 	Common::StringArray _items;
 	int _offset = 0;             // scroll, in slots (<= 0)
-	int _y = 480, _step = 0, _ticks = 0;
-	uint32 _nextTick = 0, _now = 0;
+	int _y = 480;
+	int _step = 0;
+	int _ticks = 0;
+	uint32 _nextTick = 0;
+	uint32 _now = 0;
 	Graphics::Surface *_background = nullptr;
 	Common::StringArray _imageNames;
 	Common::Array<Graphics::Surface *> _images;

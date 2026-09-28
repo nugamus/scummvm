@@ -31,15 +31,15 @@ namespace X3D {
 class Scene;
 class Sound;
 
-// Characters' voices with lip sync (engines/x3d/docs/spec/sound.md, Character talk)
+// Characters' voices with lip sync
 class Talk {
 public:
 	Talk(Scene &scene, Sound &sound, const Common::String &unitDir);
 
-	// A speaking character and its face object, e.g. U01_01 / $$$DUMMY.*01SParle
+	// A speaking character and its face object, e.g. U01_01 / $$$DUMMY.*01SParle; the face
+	// is looked up below the character's object first.
 	// clipDir: the mouth clips' folder, Anim/<character>/ when empty
 	void addTalker(const Common::String &character, const Common::String &face, const Common::String &clipDir = "");
-	// (the face is looked up below the character's object first)
 
 	// Plays Sound/<name> as the character; false when the character is not a talker
 	bool say(const Common::String &character, const Common::String &name);
@@ -51,7 +51,8 @@ public:
 
 private:
 	struct Talker {
-		Common::String character, face;
+		Common::String character;
+		Common::String face;
 		int slots[9]; // mouth clip nodes: 1 Yeux, 2 Ch, 3 Ch_yeux, 4 B, 5 E, 6 F, 7 O, 8 A
 	};
 
@@ -64,10 +65,14 @@ private:
 	Common::Array<Talker> _talkers;
 	Common::RandomSource _random;
 
-	int _current = -1, _selected = 0;
+	int _current = -1;
+	int _selected = 0;
 	Common::Array<uint32> _times;
 	Common::Array<uint16> _shapes;
-	uint32 _start = 0, _lastChange = 0, _nextRandom = 0, _now = 0;
+	uint32 _start = 0;
+	uint32 _lastChange = 0;
+	uint32 _nextRandom = 0;
+	uint32 _now = 0;
 };
 
 } // End of namespace X3D

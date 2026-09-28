@@ -32,32 +32,41 @@
 
 namespace X3D {
 
-// The sound manager (engines/x3d/docs/spec/sound.md): groups with volumes, sounds with their
-// own volume, and the scene's two positional emitters
+// The sound manager: groups with volumes, sounds with their own volume, and the scene's
+// positional emitters
 class Sound {
 public:
-	enum Group { kAmbient = 1, kVoice = 2, kEffects = 3 };
-	// The phone emitter is U01's third one (u01.md, ClicTel)
-	// kUnitEmitter1/2 are extra ones units set up (U03's cafe and clown on groups 5, 6)
-	enum Emitter { kVoiceEmitter, kEffectsEmitter, kPhoneEmitter, kUnitEmitter1, kUnitEmitter2, kEmitterCount };
+	enum Group {
+		kAmbient = 1,
+		kVoice = 2,
+		kEffects = 3
+	};
+	enum Emitter {
+		kVoiceEmitter,
+		kEffectsEmitter,
+		kPhoneEmitter, // U01's third emitter, for the telephone
+		kUnitEmitter1, // extra emitters units set up (U03's cafe and clown on groups 5, 6)
+		kUnitEmitter2,
+		kEmitterCount
+	};
 	void setEmitter(Emitter e, int group, float range); // group and absolute range
 
 	explicit Sound(Audio::Mixer *mixer);
 	~Sound();
 
-	// Starts a WAV file; v is 0..100
-	void play(const Common::Path &path, int group, int v, bool loop);
+	// Starts a WAV file; v is 0..100. False when the file is missing or not a WAV.
+	bool play(const Common::Path &path, int group, int v, bool loop);
 	void stopGroup(int group);
 	void stopAll();
 	bool isGroupPlaying(int group);
 	void setGroupVolume(int group, int g); // 0..100, applied at once
-	int groupVolume(int group) const { assert(validGroup(group)); return _groupVolume[group]; }
+	int groupVolume(int group) const;
 
 	// Emitters: ranges from the scene scale, then play at a position; false when the same
 	// file is still playing on it
 	void setScale(float scale);
 	bool emit(Emitter e, const Common::Path &path, const Math::Vector3d &position, bool loop);
-	void detach(Emitter e); // op 101: the emitter no longer owns its sound
+	void detach(Emitter e); // action step 101: the emitter no longer owns its sound
 	void updateVolumes(const Math::Vector3d &eye);
 	void setEmitterPosition(Emitter e, const Math::Vector3d &position) { _emitters[e].position = position; }
 	void stopEmitter(Emitter e);
@@ -65,11 +74,12 @@ public:
 private:
 	struct Playing {
 		Audio::SoundHandle handle;
-		int group, v;
+		int group;
+		int v;
 	};
 
 	void apply(Playing &p);
-	static bool validGroup(int group) { return group >= 0 && group < ARRAYSIZE(_groupVolume); }
+	static bool validGroup(int group) { return group >= 0 && (uint)group < ARRAYSIZE(_groupVolume); }
 	void prune();
 
 	Audio::Mixer *_mixer;
@@ -83,7 +93,8 @@ private:
 		Common::String lastName;
 		Audio::SoundHandle handle;
 		bool owns = false;
-	} _emitters[kEmitterCount];
+	};
+	EmitterState _emitters[kEmitterCount];
 };
 
 } // End of namespace X3D
