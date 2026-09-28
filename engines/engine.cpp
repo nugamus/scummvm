@@ -801,6 +801,34 @@ void Engine::drawHotspots() {
 
 	int markerType = ConfMan.getInt("hotspot_marker");
 
+	// The renderer maps game pixels to the overlay by stretching; the backend shows the
+	// game frame by its stretch mode (by default fitted with its aspect kept, with bars).
+	// Place each marker where the game pixel shows, in the renderer's terms.
+	if (gameWidth > 0 && gameHeight > 0 && overlayWidth > 0 && overlayHeight > 0) {
+		Common::String mode;
+		for (const OSystem::GraphicsMode *m = g_system->getSupportedStretchModes(); m && m->name; m++)
+			if (m->id == g_system->getStretchMode())
+				mode = m->name;
+		const float gw = gameWidth, gh = gameHeight, ow = overlayWidth, oh = overlayHeight;
+		float sx = ow / gw, sy = oh / gh;
+		if (mode == "fit_force_aspect") {
+			const float dw = MIN(ow, oh * 4 / 3);
+			sx = dw / gw;
+			sy = dw * 3 / 4 / gh;
+		} else if (mode != "stretch" && !mode.empty()) {
+			float k = MIN(sx, sy);
+			if ((mode == "pixel-perfect" || mode == "even-pixels") && k >= 1)
+				k = floorf(k);
+			else if (mode == "center" && k >= 1)
+				k = 1;
+			sx = sy = k;
+		}
+		const float ox = (ow - gw * sx) / 2, oy = (oh - gh * sy) / 2;
+		for (Graphics::HotspotInfo &h : hotspots)
+			h.position = Common::Point((int)((ox + h.position.x * sx) * gw / ow + 0.5f),
+			                           (int)((oy + h.position.y * sy) * gh / oh + 0.5f));
+	}
+
 	Graphics::HotspotRenderer renderer;
 	renderer.render(&overlayBuffer, hotspots, gameWidth, gameHeight,
 		overlayWidth, overlayHeight, overlayFormat,
