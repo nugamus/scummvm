@@ -284,7 +284,7 @@ private:
 		byte rgb[3 * 64], spec[3 * 64];
 		uint count;
 		bool hasUV, lit, anySpecular, clamp, keyed, additive;
-		uint32 tex;
+		uint32 tex, mask; // mask: the map's key cut-out in white, for the specular pass
 		byte alpha;
 		int key;
 		uint order;
@@ -309,6 +309,7 @@ private:
 	byte _litAmbient[3] = { 255, 255, 255 };
 	bool inView(const float *sphere) const;
 	uint32 texture(const Common::String &mapName);
+	uint32 keyMask(const Common::String &mapName); // 0 when the map has no key texels
 
 	Common::String _dir;  // asset directory, e.g. "U01/"
 	Common::String _dataDir;
@@ -341,7 +342,7 @@ private:
 	Common::Array<bool> _groupOpaque;
 	Common::Array<float> _lines;
 	Renderer *_renderer;
-	Common::HashMap<Common::String, uint32, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _textures;
+	Common::HashMap<Common::String, uint32, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _textures, _masks;
 };
 
 } // End of namespace X3D

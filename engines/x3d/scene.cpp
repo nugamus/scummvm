@@ -62,6 +62,9 @@ Scene::~Scene() {
 	for (auto &t : _textures)
 		if (t._value)
 			_renderer->deleteTexture(t._value);
+	for (auto &t : _masks)
+		if (t._value)
+			_renderer->deleteTexture(t._value);
 }
 
 bool Scene::load(const Common::String &scriptName) {
@@ -1239,15 +1242,37 @@ uint32 Scene::texture(const Common::String &mapName) {
 	Graphics::Surface *surface = nullptr;
 	if (f.open(Common::Path(_dir + "Maps/" + name + ".dmf")))
 		surface = loadDMF(f);
+	uint32 mask = 0;
 	if (surface) {
 		id = _renderer->createTexture(*surface);
+		// The key's cut-out in white: the specular pass adds light only where the map is
+		// drawn, as the original's single pass does (the key drops the texel and its light)
+		bool keyed = false;
+		for (int y = 0; y < surface->h && !keyed; y++)
+			for (int x = 0; x < surface->w && !keyed; x++)
+				keyed = (surface->getPixel(x, y) & surface->format.aMax() << surface->format.aShift) == 0;
+		if (keyed) {
+			for (int y = 0; y < surface->h; y++)
+				for (int x = 0; x < surface->w; x++) {
+					uint8 a, r, g, b;
+					surface->format.colorToARGB(surface->getPixel(x, y), a, r, g, b);
+					surface->setPixel(x, y, surface->format.ARGBToColor(a, 255, 255, 255));
+				}
+			mask = _renderer->createTexture(*surface);
+		}
 		surface->free();
 		delete surface;
 	} else {
 		warning("Unable to load map %s", mapName.c_str());
 	}
 	_textures[mapName] = id;
+	_masks[mapName] = mask;
 	return id;
+}
+
+uint32 Scene::keyMask(const Common::String &mapName) {
+	texture(mapName);
+	return _masks.getValOrDefault(mapName, 0);
 }
 
 void Scene::draw(const Camera &cam, int width, int height) {
@@ -1431,6 +1456,7 @@ void Scene::drawObject(const Model &m, uint object) {
 		f.clamp = !mat.wrap;
 		// The colour key cuts texels only in draw modes 1..3 (E-0481)
 		f.keyed = mat.mode >= 1 && mat.mode <= 3;
+		f.mask = f.keyed && f.tex ? keyMask(mat.textureMap) : 0;
 		f.additive = mat.mode == 2;
 		f.alpha = mat.transparency ? (byte)(255 - 2.55f * MIN<uint32>(mat.transparency, 100)) : 255;
 
@@ -1484,9 +1510,11 @@ void Scene::drawFace(const Deferred &f) {
 
 	// Light beyond 255 is added on top: pixel = texture * D / 255 + S
 	if (f.anySpecular) {
-		_renderer->setBlend(Renderer::kAdditive, false);
-		_renderer->setTexture(0);
-		_renderer->drawFan(f.xyz, nullptr, f.spec, f.count);
+		// Through the key's cut-out, so the light stops where the map's texels do
+		const bool masked = f.mask && f.hasUV;
+		_renderer->setBlend(Renderer::kAdditive, masked);
+		_renderer->setTexture(masked ? f.mask : 0);
+		_renderer->drawFan(f.xyz, masked ? f.uv : nullptr, f.spec, f.count);
 		_renderer->setBlend(f.alpha == 255 && !f.additive ? Renderer::kOpaque : f.additive ? Renderer::kAdditive : Renderer::kAlpha, f.keyed);
 	}
 }

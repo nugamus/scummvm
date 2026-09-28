@@ -186,10 +186,11 @@ public:
 		} else {
 			glDisable(GL_POLYGON_OFFSET_FILL);
 		}
-		// Keyed texels have alpha 0; blended faces carry their vertex alpha
+		// Keyed texels have alpha 0; blended faces carry their vertex alpha. Opaque and
+		// additive passes cut where the texture pass does, so light stops at its edge
 		if (keyed) {
 			glEnable(GL_ALPHA_TEST);
-			glAlphaFunc(GL_GREATER, blend == kOpaque ? 0.5f : 0.0f);
+			glAlphaFunc(GL_GREATER, blend == kOpaque || blend == kAdditive ? 0.5f : 0.0f);
 		} else {
 			glDisable(GL_ALPHA_TEST);
 		}
