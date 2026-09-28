@@ -73,10 +73,8 @@ public:
 		setAnims(w, kAnims, ARRAYSIZE(kAnims));
 		for (const char *t : { "MIRROIR1", "MIRROIR2", "MIRROIR3" })
 			w.loadTexture(t, t);
-		// Q-0403: the first texture name kept in 0x650fe0; taken from the node here.
-		const int m = node(w, kMirroir);
-		if (m >= 0 && !w.scene3D().nodes[m].faceGroups.empty())
-			_mirror = w.scene3D().nodes[m].faceGroups[0].textureName;
+		// The current mirror texture's name (0x650fe0), set by the init (E-0374).
+		_mirror = "MIRROIRG"; // the .3DC's own name for it (mirroirg)
 		w.setAmbience("cafe_int");
 
 		if (w.var(kClock)) {
