@@ -136,6 +136,8 @@ public:
 	uint32 logicMs() const { return _logicMs; } // logic time in the scene (ms)
 	// Suspend: no cursor, camera keys or clicks (u01.md)
 	void suspend(bool suspended);
+	/** This step's camera belongs to a ride (the train, the boat): mouse look waits (enhancement). */
+	void rideView() { _rideView = true; }
 	bool suspended() const { return _suspended; }
 	// The unit's start runs for a load: the saved state is already in place (save.md)
 	bool restoring() const { return _restoring; }
@@ -280,6 +282,7 @@ private:
 	bool _posedBetween = false; // the last render posed the scene between two steps
 	int _frameDepth = 0; // frames nested in blocking sequences: no saving or loading there
 	bool _walk = false; // runFor with walking input
+	bool _rideView = false;
 	Gauge _gauge;
 	int _menuView = -1;  // the view index of the last frame click
 	Common::String _playerName;

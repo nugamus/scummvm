@@ -416,6 +416,7 @@ void X3DEngine::logicStep(bool input) {
 	_scene->beginStep();
 	_previous = _player;
 	if (input && !_suspended) {
+		_rideView = false; // set again by the unit while a ride drives the camera
 		const bool handled = _unit && _unit->input(stepMs / 1000.0f);
 		if (!handled && _player.tick(stepMs / 1000.0f, _keys, *_collision))
 			_sound->emit(Sound::kEffectsEmitter, "SAUT.WAV", _player.eye, false);
@@ -471,7 +472,7 @@ void X3DEngine::frame(bool input) {
 			// last step turns too, so the drawn view follows at once. Motion queued
 			// before the capture, or from its warp, does not turn.
 			looked |= e.relMouse.x || e.relMouse.y;
-			if ((input || _walk) && _player.canTurn && _system->getMillis() - _captureStart >= 100 &&
+			if ((input || _walk) && _player.canTurn && !_rideView && _system->getMillis() - _captureStart >= 100 &&
 			    (e.relMouse.x || e.relMouse.y)) {
 				const float dYaw = e.relMouse.x * _lookScale;
 				const float pitch = _player.pitch - (_invertY ? -1 : 1) * e.relMouse.y * _lookScale;

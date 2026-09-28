@@ -641,6 +641,7 @@ void U04::row(bool forward) {
 	const bool left = interaction->exhausted(35) || interaction->exhausted(36);
 	if (!right && !left)
 		return;
+	_vm->rideView();
 	// The clip is reloaded only if slot 1 holds another (it is saved with the node)
 	const Common::String path = right && left ? "Anim/BARKE_TRAJECTOIRE1.A3D" : "Anim/BARKE_TOURNEROND.A3D";
 	if (!scene->clipPath(kBoat).equalsIgnoreCase(path)) {
