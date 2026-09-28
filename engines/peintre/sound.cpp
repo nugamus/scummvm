@@ -100,6 +100,11 @@ bool Sound::isStreamPlaying() const {
 	return _mixer->isSoundHandleActive(_stream);
 }
 
+void Sound::pauseStream(bool pause) {
+	if (_mixer->isSoundHandleActive(_stream))
+		_mixer->pauseHandle(_stream, pause);
+}
+
 void Sound::setVolume(int32 attenuation) {
 	// percent = attenuation / 50 + 100 (ui.md "Option menu").
 	const int percent = CLIP<int>(attenuation / 50 + 100, 0, 100);

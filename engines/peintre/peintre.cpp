@@ -580,7 +580,11 @@ void PeintreEngine::runWorld(int scene, int prevScene, int zone, int zoneCode) {
 			break;
 		}
 		case kExitOptions: {
+			// 0x42edef pauses the stream (the static sounds go on behind the menu); 0x42f515
+			// resumes it.
+			_sound->pauseStream(true);
 			const int code = runOptionMenu(true);
+			_sound->pauseStream(false);
 			if (code == -2)
 				return;
 			world.afterOptions();
