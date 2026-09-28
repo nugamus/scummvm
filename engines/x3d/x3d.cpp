@@ -80,6 +80,9 @@ Common::Error X3DEngine::run() {
 	// has already added to SearchMan
 	// The original frames every mode as 4:3 (E-0040); widescreen keeps its height and view
 	// and shows more to the sides. 2D images stay 640x480, centred.
+	ConfMan.registerDefault("high_fps", false);
+	ConfMan.registerDefault("high_res", false);
+	_highFps = ConfMan.getBool("high_fps");
 	ConfMan.registerDefault("widescreen", false);
 	ConfMan.registerDefault("max_detail", false);
 	ConfMan.registerDefault("filter_textures", false);
@@ -565,13 +568,18 @@ void X3DEngine::frame(bool input) {
 	// A long gap (a stall, a debugger) is not replayed as game time
 	_pending += MIN<uint32>(now - _last, 250);
 	_last = now;
+	bool stepped = false;
 	while (_pending >= stepMs && !shouldQuit()) {
 		_pending -= stepMs;
 		logicStep(input || _walk);
+		stepped = true;
 	}
 
+	// The original draws one frame per step; the high_fps option draws at the display's
+	// rate, interpolating between the last two steps.
 	Camera camera;
-	const float alpha = (float)_pending / stepMs;
+	const float alpha = _highFps ? (float)_pending / stepMs : 1.0f;
+	const bool drawNow = _highFps || stepped;
 	for (int k = 0; k < 3; k++)
 		camera.position[k] = _previous.eye.getData()[k] + (_player.eye.getData()[k] - _previous.eye.getData()[k]) * alpha;
 	// Angles the short way round: a step from 6.28 to 0.01 (U04's boat) is not a full turn
@@ -650,26 +658,28 @@ void X3DEngine::frame(bool input) {
 		_interaction->hover(_hotspot, now);
 
 	_camera = camera;
-	// At alpha 0 too: the camera is then at the step's start, and so must the objects be
-	if (_scene->interpolate(alpha)) {
+	if (drawNow) {
+		// At alpha 0 too: the camera is then at the step's start, and so must the objects be
+		if (_scene->interpolate(alpha)) {
+			if (_unit)
+				_unit->afterAnimate();
+			_scene->poseAll();
+			_posedBetween = true;
+		}
+		_scene->draw(camera, _renderer->width(), _renderer->height());
+		if (_showHotspots && _freePlay)
+			_scene->drawHighlight(_highlight);
+		_inventory->draw(*_renderer, x2d);
 		if (_unit)
-			_unit->afterAnimate();
-		_scene->poseAll();
-		_posedBetween = true;
+			_unit->draw();
+		if (_gauge.ms && _gauge.visible)
+			drawGauge(_renderer, MIN(1.0f, (_logicMs - _gauge.start) / (float)_gauge.ms));
+		drawHotspots();
+		_renderer->present();
+		_frames++;
 	}
-	_scene->draw(camera, _renderer->width(), _renderer->height());
-	if (_showHotspots && _freePlay)
-		_scene->drawHighlight(_highlight);
-	_inventory->draw(*_renderer, x2d);
-	if (_unit)
-		_unit->draw();
-	if (_gauge.ms && _gauge.visible)
-		drawGauge(_renderer, MIN(1.0f, (_logicMs - _gauge.start) / (float)_gauge.ms));
-	drawHotspots();
-	_renderer->present();
 	_system->delayMillis(1);
 
-	_frames++;
 	if (now - _fpsStart >= 5000) {
 		debugC(2, kDebugGraphics, "%u frames per second", _frames * 1000 / (now - _fpsStart));
 		_frames = 0;

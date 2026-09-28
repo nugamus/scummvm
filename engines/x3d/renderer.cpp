@@ -40,7 +40,9 @@ Renderer *Renderer::create(int width, int height, bool &native) {
 #endif
 		Graphics::kRendererTypeTinyGL);
 
-	native = type == Graphics::kRendererTypeOpenGL;
+	// OpenGL draws at the window's size: only with the high_res option. Otherwise the
+	// original's 640x480 (or wider) frame, which ScummVM scales to the window.
+	native = type == Graphics::kRendererTypeOpenGL && ConfMan.getBool("high_res");
 	if (native)
 		if (Renderer *r = createOpenGLRenderer(width, height))
 			return r;
