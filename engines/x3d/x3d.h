@@ -137,6 +137,8 @@ public:
 	uint32 logicMs() const { return _logicMs; } // logic time in the scene (ms)
 	// Suspend: no cursor, camera keys or clicks (u01.md)
 	void suspend(bool suspended);
+	void startSkip();
+	void endSkip();
 	/** This step's camera belongs to a ride (the train, the boat): mouse look waits (enhancement). */
 	void rideView() { _rideView = true; }
 	bool suspended() const { return _suspended; }
@@ -285,6 +287,7 @@ private:
 	int _frameDepth = 0; // frames nested in blocking sequences: no saving or loading there
 	bool _walk = false; // runFor with walking input
 	bool _rideView = false;
+	bool _skipping = false, _skipMutedSfx = false; // a scripted sequence being skipped
 	Gauge _gauge;
 	int _menuView = -1;  // the view index of the last frame click
 	Common::String _playerName;

@@ -988,17 +988,38 @@ int Scene::addFaceClip(const Common::String &faceObject, const Common::String &p
 		delete file;
 		return -1;
 	}
-	for (uint a = 0; a < file->animations.size(); a++) {
-		if (!file->animations[a].name.equalsIgnoreCase(faceObject))
-			continue;
-		_animationFiles.push_back(file);
-		addNode(file, a, model, object, 15);
-		_nodes.back().enabled = false;
-		_nodes.back().base.running = false;
-		return _nodes.size() - 1;
+	// The sub-animation named like the face (E-0125). Else, as a fix (the original leaves
+	// the slot empty), the one at the face's place: the same child of the parent's
+	// namesake (U02_04's B.A3D still calls his face $$$DUMMY.Dummy01)
+	int found = -1;
+	for (uint a = 0; a < file->animations.size() && found < 0; a++)
+		if (file->animations[a].name.equalsIgnoreCase(faceObject))
+			found = a;
+	const Common::Array<O3DObject> &objects = model->file.objects;
+	if (found < 0 && objects[object].parent >= 0) {
+		const int parent = objects[object].parent;
+		uint index = 0;
+		for (uint o = 0; o < object; o++)
+			index += objects[o].parent == parent;
+		for (uint a = 0; a < file->animations.size() && found < 0; a++) {
+			if (!file->animations[a].name.equalsIgnoreCase(objects[parent].name))
+				continue;
+			for (uint c = a + 1; c < file->animations.size(); c++)
+				if (file->animations[c].parent == (int)a && index-- == 0) {
+					found = c;
+					break;
+				}
+		}
 	}
-	delete file;
-	return -1;
+	if (found < 0) {
+		delete file;
+		return -1;
+	}
+	_animationFiles.push_back(file);
+	addNode(file, found, model, object, 15);
+	_nodes.back().enabled = false;
+	_nodes.back().base.running = false;
+	return _nodes.size() - 1;
 }
 
 void Scene::setNode(int node, bool enabled, bool running) {

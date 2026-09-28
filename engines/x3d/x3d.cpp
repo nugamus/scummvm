@@ -524,7 +524,11 @@ void X3DEngine::frame(bool input) {
 		case Common::KEYCODE_LCTRL:
 		case Common::KEYCODE_RCTRL: _keys.ctrl = down; break;
 		case Common::KEYCODE_RETURN:
-		case Common::KEYCODE_KP_ENTER: _enterHeld = down; break;
+		case Common::KEYCODE_KP_ENTER:
+			_enterHeld = down;
+			if (down && (!input || _suspended))
+				startSkip();
+			break;
 		case Common::KEYCODE_SPACE:
 			_keys.space = down;
 			if (down && input && !_suspended)
@@ -537,6 +541,8 @@ void X3DEngine::frame(bool input) {
 		case Common::KEYCODE_F5: // the same in play (ui.md, Escape)
 			if (down && input && !_suspended && !_escapeBlocked)
 				_escapeNow = true;
+			else if (down && (!input || _suspended) && e.kbd.keycode == Common::KEYCODE_ESCAPE)
+				startSkip();
 			break;
 		default: break;
 		}
@@ -566,8 +572,17 @@ void X3DEngine::frame(bool input) {
 		if (!_keys.crouch)
 			_devCrouch = 0;
 	}
-	// A long gap (a stall, a debugger) is not replayed as game time
-	_pending += MIN<uint32>(now - _last, 250);
+	// Skipping a scripted sequence: one step per frame, as fast as it runs, undrawn and
+	// silent, until free play or the next scene (enhancement)
+	if (_skipping && ((input && !_suspended) || !_nextScene.empty()))
+		endSkip();
+	if (_skipping) {
+		_sound->stopGroup(Sound::kVoice);
+		_pending = stepMs;
+	} else {
+		// A long gap (a stall, a debugger) is not replayed as game time
+		_pending += MIN<uint32>(now - _last, 250);
+	}
 	_last = now;
 	bool stepped = false;
 	while (_pending >= stepMs && !shouldQuit()) {
@@ -580,7 +595,7 @@ void X3DEngine::frame(bool input) {
 	// rate, interpolating between the last two steps.
 	Camera camera;
 	const float alpha = _highFps ? (float)_pending / stepMs : 1.0f;
-	const bool drawNow = _highFps || stepped;
+	const bool drawNow = !_skipping && (_highFps || stepped);
 	for (int k = 0; k < 3; k++)
 		camera.position[k] = _previous.eye.getData()[k] + (_player.eye.getData()[k] - _previous.eye.getData()[k]) * alpha;
 	// Angles the short way round: a step from 6.28 to 0.01 (U04's boat) is not a full turn
@@ -680,7 +695,8 @@ void X3DEngine::frame(bool input) {
 		_renderer->present();
 		_frames++;
 	}
-	_system->delayMillis(1);
+	if (!_skipping)
+		_system->delayMillis(1);
 
 	if (now - _fpsStart >= 5000) {
 		debugC(2, kDebugGraphics, "%u frames per second", _frames * 1000 / (now - _fpsStart));
@@ -827,6 +843,8 @@ Common::String X3DEngine::runMenu(const Common::String &name, MenuList *list, co
 }
 
 Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout) {
+	if (_skipping) // a menu is where a skipped sequence ends
+		endSkip();
 	if (list)
 		frame.setList(list->rows, list->selected, list->names);
 	const int x2d = (_renderer->width() - 640) / 2;
@@ -1320,6 +1338,26 @@ void X3DEngine::captureMouse(bool capture) {
 	}
 }
 
+void X3DEngine::startSkip() {
+	// Any scripted sequence can be skipped (user, 2026-09-28): voices stop, effects are
+	// muted until it is over
+	if (_skipping)
+		return;
+	debugC(1, kDebugScript, "skipping the sequence");
+	_skipping = true;
+	_sound->stopGroup(Sound::kVoice);
+	_skipMutedSfx = !_mixer->isSoundTypeMuted(Audio::Mixer::kSFXSoundType);
+	_mixer->muteSoundType(Audio::Mixer::kSFXSoundType, true);
+}
+
+void X3DEngine::endSkip() {
+	_skipping = false;
+	if (_skipMutedSfx)
+		_mixer->muteSoundType(Audio::Mixer::kSFXSoundType, false);
+	_skipMutedSfx = false;
+	_last = _system->getMillis();
+}
+
 void X3DEngine::suspend(bool suspended) {
 	_suspended = suspended;
 	CursorMan.showMouse(!suspended);
@@ -1411,7 +1449,7 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 	debugC(1, kDebugGraphics, "video %s", name.c_str());
 	_video = &video; // paused with the engine
 	captureMouse(false);
-	bool skip = false;
+	bool skip = _skipping;
 	while (!shouldQuit() && !skip && !video.endOfVideo()) {
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
