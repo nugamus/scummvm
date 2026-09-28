@@ -20,19 +20,22 @@
  */
 
 #include "x3d/collision.h"
-#include "x3d/monet/gallery3d.h"
 #include "x3d/interaction.h"
 #include "x3d/scene.h"
 #include "x3d/sound.h"
-#include "x3d/monet/u00.h"
 #include "x3d/x3d.h"
+#include "x3d/monet/gallery3d.h"
+#include "x3d/monet/u00.h"
 
 namespace X3D {
 
-// ui.md Gallery, 3D view: the scene and the viewpoint of each painting (E-0502)
+// The gallery's 3D view: the scene and the viewpoint of each painting
 static const struct {
-	const char *painting, *scene;
-	float x, y, z, yaw, pitch;
+	const char *painting;
+	const char *scene;
+	float x, y, z;
+	float yaw;
+	float pitch;
 } kViews[] = {
 	{ "U11_01", "U01D.X3D", 308.53f, -508.20f, 29.55f, 1.56f, kHalfPi },
 	{ "U11_02", "U02D.X3D", 652.36f, 153.88f, 78.93f, -6.24f, kHalfPi },
@@ -121,19 +124,15 @@ void Gallery3D::start(bool newGame, bool video) {
 		scene->runNodeTo("*U02_05", -1, false);
 	}
 	for (const auto &v : kViews)
-		if (_painting == v.painting) {
-			const float eye[3] = { v.x, v.y, v.z };
-			_vm->setView(eye, v.yaw, v.pitch);
-		}
-	if (u == 3 || u == 33) {
-		remove("*U03_13");
+		if (_painting == v.painting)
+			setView(Math::Vector3d(v.x, v.y, v.z), v.yaw, v.pitch);
+	if (u == 3 || u == 33)
 		remove("*Ecran10");
-	}
 	_vm->interaction()->actionsEnabled = false; // no hover cursor, no clicks
 }
 
 bool Gallery3D::escape() {
-	// Back to the painting's Tableau, through the gallery (ui.md 3D view)
+	// Back to the painting's Tableau, through the gallery
 	_vm->sound()->stopGroup(Sound::kAmbient);
 	_vm->returnToPainting(_painting);
 	return true;

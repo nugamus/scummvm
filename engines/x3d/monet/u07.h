@@ -30,12 +30,10 @@
 
 namespace X3D {
 
-class X3DEngine;
-
-// U07, the cellars under the orangery and the end of the game (games/monet/docs/u07.md)
+// U07, the cellars under the orangery and the end of the game
 class U07 : public Unit {
 public:
-	explicit U07(X3DEngine *vm) : _vm(vm), _random("x3d_u07") {}
+	explicit U07(X3DEngine *vm) : Unit(vm), _random("x3d_u07") {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
@@ -45,7 +43,6 @@ public:
 	void syncState(Common::Serializer &s) override; // PLANCHE
 
 private:
-	void effect(const char *name, const Math::Vector3d &position);
 	float heightAboveGround(const Math::Vector3d &p);
 	void switchAndDescent();
 	void tipPlank();
@@ -53,10 +50,10 @@ private:
 	void explosion();
 	void end();
 
-	X3DEngine *_vm;
 	Common::RandomSource _random;
 	bool _plankTipped = false;
-	bool _upWas = false, _downWas = false; // one rung per key press
+	bool _upWas = false; // one rung per key press
+	bool _downWas = false;
 };
 
 } // End of namespace X3D

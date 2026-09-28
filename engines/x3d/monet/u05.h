@@ -24,18 +24,14 @@
 
 #include "common/random.h"
 
-#include "math/vector3d.h"
-
 #include "x3d/unit.h"
 
 namespace X3D {
 
-class X3DEngine;
-
-// U05, the Saint-Lazare waiting room, the dog and Mazout (games/monet/docs/u05.md)
+// U05, the Saint-Lazare waiting room, the dog and Mazout
 class U05 : public Unit {
 public:
-	explicit U05(X3DEngine *vm) : _vm(vm), _random("x3d_u05") {}
+	explicit U05(X3DEngine *vm) : Unit(vm), _random("x3d_u05") {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
@@ -44,12 +40,7 @@ public:
 	void syncState(Common::Serializer &s) override; // the clock (not in the original)
 
 private:
-	void run(uint32 id);
-	void effect(const char *name, const Math::Vector3d &position);
-	void voice(const char *name);
 	void noCollisionFamily(const Common::String &object);
-	float facing(const Math::Vector3d &target, const Math::Vector3d &from) const;
-	Math::Vector3d at(const char *object) const;
 	bool near(const char *object, float distance) const;
 
 	bool barkAndSit();
@@ -64,7 +55,6 @@ private:
 	void maskGrille();
 	void lampFalls();
 
-	X3DEngine *_vm;
 	Common::RandomSource _random;
 	uint32 _timer = 0;   // the dog's wait, then the station master's chatter (logic ms)
 	bool _leaving = false;

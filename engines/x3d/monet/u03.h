@@ -24,17 +24,14 @@
 
 #include "math/vector3d.h"
 
-#include "x3d/scene.h"
 #include "x3d/unit.h"
 
 namespace X3D {
 
-class X3DEngine;
-
-// U03, the street, the clown and the policeman (games/monet/docs/u03.md)
+// U03, the street, the clown and the policeman
 class U03 : public Unit {
 public:
-	explicit U03(X3DEngine *vm) : _vm(vm) {}
+	explicit U03(X3DEngine *vm) : Unit(vm) {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
@@ -42,11 +39,7 @@ public:
 	void afterAnimate() override; // the policeman's round
 
 private:
-	void run(uint32 id);
 	Math::Vector3d ground(float x, float y, float z); // G(x, y, z)
-	float facing(const Math::Vector3d &target, const Math::Vector3d &from) const;
-	Math::Vector3d at(const char *object) const;
-	void waitVoice(bool enterSkips = true);
 	void transition(int n);
 
 	void clownTrick();
@@ -55,9 +48,7 @@ private:
 	void aimAtTarget();
 	void cut();
 
-	X3DEngine *_vm;
 	bool _follow = true;
-	Scene::Model *_camera = nullptr, *_cine = nullptr; // the cutscene's models
 };
 
 } // End of namespace X3D

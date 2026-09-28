@@ -21,28 +21,28 @@
 
 #include "common/config-manager.h"
 #include "common/serializer.h"
-#include "common/system.h"
-#include "common/textconsole.h"
 
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
-#include "x3d/renderer.h"
 #include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
-#include "x3d/monet/u01.h"
 #include "x3d/x3d.h"
+#include "x3d/monet/u01.h"
 
 namespace X3D {
 
 using Math::Vector3d;
 
-U01::U01(X3DEngine *vm) : _vm(vm), _random("x3d_u01") {
-}
+static const uint32 kEscapeMs = 20000; // the escape timer after the phone call
 
-Vector3d U01::at(const char *object) {
-	return _vm->scene()->objectPosition(object);
+// Action ids
+enum {
+	kActionCall = 24 // M24: D1_10 at the phone
+};
+
+U01::U01(X3DEngine *vm) : Unit(vm), _random("x3d_u01") {
 }
 
 // The first object with the name, depth first under the named parent (the TETE look-ats)
@@ -63,7 +63,6 @@ Vector3d U01::objectUnder(const Common::String &parent, const Common::String &na
 }
 
 void U01::afterLoad() {
-	// u01.md, Load-time fixes (E-0080)
 	Scene *scene = _vm->scene();
 	scene->renameObject("Box31", "*U01_21");
 	scene->renameNode("Object07", "*U01_21");
@@ -78,13 +77,7 @@ void U01::afterLoad() {
 	scene->renameObject("*U01_08P", "*U01_08");
 }
 
-void U01::waitVoice() {
-	while (_vm->sound()->isGroupPlaying(Sound::kVoice) && !_vm->enterHeld() && !_vm->shouldQuit())
-		_vm->runFor(0);
-}
-
 void U01::start(bool newGame, bool video) {
-	// u01.md, Entry (E-0081)
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	Interaction *interaction = _vm->interaction();
@@ -98,7 +91,7 @@ void U01::start(bool newGame, bool video) {
 	_vm->talk()->addTalker("U01_02", "$$$DUMMY.*02SParle");
 
 	_switchThrown = scene->nodeFrame("*U01_21") >= 2;
-	// A restore on the train stands on it at once (E-0081)
+	// A restore on the train stands on it at once
 	Scene::Model *m;
 	uint o;
 	if (_onTrain && scene->findObject("*U01_20", m, o)) {
@@ -129,7 +122,7 @@ void U01::start(bool newGame, bool video) {
 	interaction->setCursorKind("*U01_02", 0);
 	interaction->setCursorKind("*U01_01", 0);
 	if (!_vm->inventory()->has("U02_01P"))
-		_vm->inventory()->add("U02_01P"); // a banknote (ui.md)
+		_vm->inventory()->add("U02_01P"); // a banknote
 	const float first[3] = { -258.44f, -508.20f, 29.546f };
 	_vm->setView(first, 1.31f, 1.5707960f);
 	_vm->runFor(1500);
@@ -137,10 +130,11 @@ void U01::start(bool newGame, bool video) {
 
 	_vm->talk()->say("U01_01", "d1_01");
 	_vm->lookAt(1000, objectUnder("*U01_01", "TETE"));
-	const float p1[3] = { -405.67f, -494.31f, 29.5f }, p2[3] = { -468.4f, -481.3f, 29.5f };
+	const float p1[3] = { -405.67f, -494.31f, 29.5f };
+	const float p2[3] = { -468.4f, -481.3f, 29.5f };
 	_vm->moveTo(2500, p1, 2.9f, X3DEngine::kKeep);
 	_vm->moveTo(800, p2, 1.76f, X3DEngine::kKeep);
-	waitVoice();
+	waitVoice(true);
 	_vm->runFor(1000);
 
 	Common::StringArray ignored;
@@ -170,27 +164,24 @@ void U01::openDoor() {
 	Scene *scene = _vm->scene();
 	scene->setNodeFps("*U01_07", 2.5f);
 	scene->runNodeTo("*U01_07", 12, false);
-	_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(scene->dir() + "Sound/OpenDoor.WAV"), at("*U01_07"), false);
+	effect("OpenDoor", at("*U01_07"));
 }
 
 void U01::closeDoor() {
 	Scene *scene = _vm->scene();
-	_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(scene->dir() + "Sound/CloseDoor.wav"), at("*U01_07"), false);
+	effect("CloseDoor", at("*U01_07"));
 	scene->setNodeFps("*U01_07", 4);
 	scene->runNodeTo("*U01_07", 0, true);
 }
 
 bool U01::handle(const Common::String &action) {
-	// u01.md, Click handlers (E-0084..E-0086)
 	Scene *scene = _vm->scene();
 	Interaction *interaction = _vm->interaction();
 	Sound *sound = _vm->sound();
-	const Common::String soundDir = scene->dir() + "Sound/";
 
 	if (action.equalsIgnoreCase("TakeCard")) {
 		scene->rewindClip("*U01_02");
-		while (scene->clipPlaying("*U01_02") && !_vm->shouldQuit())
-			_vm->runFor(0);
+		waitClip("*U01_02");
 		scene->backToBase("*U01_02");
 		_vm->player().canMove = _vm->player().canTurn = true;
 		interaction->setCursorKind("*U01_02", 3);
@@ -214,20 +205,18 @@ bool U01::handle(const Common::String &action) {
 		if (n % 2 == 0) {
 			// Hang up
 			scene->runNodeTo("*U01_11", -1, true);
-			while (scene->nodeRunning("*U01_11") && !_vm->shouldQuit())
-				_vm->runFor(0, true); // the input hook runs during the waits (E-0085)
+			waitNode("*U01_11", -1, true); // the input hook runs during the waits
 			sound->stopEmitter(Sound::kPhoneEmitter);
-			sound->emit(Sound::kEffectsEmitter, Common::Path(soundDir + "TelGrisi.WAV"), at("*U01_11"), false);
+			effect("TelGrisi", at("*U01_11"));
 		} else if (interaction->exhausted(16)) {
 			interaction->setCursorKind("*U01_11", 0);
 			interaction->setCondition(10, "FALSE");
 			call();
 			scene->runNodeTo("*U01_11", -1, false);
 		} else {
-			sound->emit(Sound::kEffectsEmitter, Common::Path(soundDir + "TelGrisi.WAV"), at("*U01_11"), false);
-			while (sound->isGroupPlaying(Sound::kEffects) && !_vm->shouldQuit())
-				_vm->runFor(0, true);
-			sound->emit(Sound::kPhoneEmitter, Common::Path(soundDir + "TelGrisi2.wav"), at("*U01_11"), true);
+			effect("TelGrisi", at("*U01_11"));
+			waitGroup(Sound::kEffects, true);
+			sound->emit(Sound::kPhoneEmitter, soundPath("TelGrisi2"), at("*U01_11"), true);
 			scene->runNodeTo("*U01_11", -1, false);
 		}
 		if (n == 1) {
@@ -242,12 +231,12 @@ bool U01::handle(const Common::String &action) {
 		const float frame = scene->nodeFrame(node);
 		if (frame >= 10) {
 			sound->stopGroup(Sound::kEffects);
-			sound->emit(Sound::kEffectsEmitter, Common::Path(soundDir + "s1_05.WAV"), _vm->player().eye, false);
+			effect("s1_05", _vm->player().eye);
 			scene->runNodeTo(node, 0, true);
 		} else {
 			if (frame <= 1)
 				sound->stopGroup(Sound::kEffects);
-			sound->emit(Sound::kEffectsEmitter, Common::Path(soundDir + "s1_05.WAV"), _vm->player().eye, false);
+			effect("s1_05", _vm->player().eye);
 			scene->runNodeTo(node, 10, false);
 		}
 	} else if (action.equalsIgnoreCase("MonterSurToit")) {
@@ -261,35 +250,36 @@ bool U01::handle(const Common::String &action) {
 }
 
 void U01::afterClick(const Common::String &hotspot) {
-	// A click on the booth *U01_09 from below once the ladder is up climbs again (E-0250)
+	// A click on the booth *U01_09 from below once the ladder is up climbs again
 	if (_vm->interaction()->exhausted(20) && hotspot.equalsIgnoreCase("*U01_09") && _vm->player().eye.z() < 100)
 		climb();
 }
 
 void U01::call() {
-	// The phone call (u01.md, ClicTel)
+	// The phone call (ClicTel)
 	Interaction *interaction = _vm->interaction();
 	_vm->suspend(true);
 	_vm->scene()->runNodeTo("*U01_11", -1, false);
-	if (!interaction->exhausted(24)) {
+	if (!interaction->exhausted(kActionCall)) {
 		Common::StringArray ignored;
-		interaction->runAction(24, ignored); // D1_10 at the phone
+		interaction->runAction(kActionCall, ignored);
 		interaction->setCondition(19, "TRUE");
-		const float p1[3] = { 433.788f, -91.1468f, 24.7812f }, p2[3] = { 421.145f, -69.187f, 24.78f };
+		const float p1[3] = { 433.788f, -91.1468f, 24.7812f };
+		const float p2[3] = { 421.145f, -69.187f, 24.78f };
 		_vm->moveTo(1500, p1, 2.84318f, 1.0708f);
-		waitVoice();
+		waitVoice(true);
 		_vm->moveTo(1000, p2, 0.6431f, X3DEngine::kKeep);
-		// CloseDoor at the eye first (E-0085)
-		_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(_vm->scene()->dir() + "Sound/CloseDoor.wav"), _vm->player().eye, false);
+		// CloseDoor at the eye first
+		effect("CloseDoor", _vm->player().eye);
 		closeDoor();
-		_vm->startGauge(20000); // the escape timer, visible
+		_vm->startGauge(kEscapeMs); // visible
 		interaction->setCursorKind("*U01_08", 4);
 	}
 	_vm->suspend(false);
 }
 
 void U01::climb() {
-	// MonterSurToit (u01.md, E-0086)
+	// MonterSurToit
 	Player &player = _vm->player();
 	_vm->suspend(true);
 	_vm->stopGauge();
@@ -305,7 +295,8 @@ void U01::climb() {
 		_vm->moveTo(500, p, X3DEngine::kKeep, X3DEngine::kKeep);
 		_vm->runFor(200);
 	}
-	const float p2[3] = { 469.932f, -40.2943f, 110.637f }, p3[3] = { 485.775f, -44.9f, 139 };
+	const float p2[3] = { 469.932f, -40.2943f, 110.637f };
+	const float p3[3] = { 485.775f, -44.9f, 139 };
 	_vm->moveTo(1500, p2, 7.2731f, X3DEngine::kKeep);
 	_vm->moveTo(1200, p3, X3DEngine::kKeep, X3DEngine::kKeep);
 	player.sphereOffset = 20;
@@ -313,14 +304,16 @@ void U01::climb() {
 }
 
 void U01::throwSwitch() {
-	// DoInterrupteur (u01.md, E-0086): two cuts to the points and back
+	// DoInterrupteur: two cuts to the points and back
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	scene->setNodeLoop("*U01_21", false);
-	_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(scene->dir() + "Sound/s1_13.WAV"), player.eye, false);
-	const float eye[3] = { player.eye.x(), player.eye.y(), player.eye.z() };
-	const float yaw = player.yaw, pitch = player.pitch;
-	const float a[3] = { 667, 723.8f, 94 }, b[3] = { 753.22f, 662.18f, 93.55f };
+	effect("s1_13", player.eye);
+	const Vector3d eye = player.eye;
+	const float yaw = player.yaw;
+	const float pitch = player.pitch;
+	const float a[3] = { 667, 723.8f, 94 };
+	const float b[3] = { 753.22f, 662.18f, 93.55f };
 	if (_switchThrown) {
 		scene->runNodeTo("*U01_21", 0, true);
 		_switchThrown = false;
@@ -337,17 +330,17 @@ void U01::throwSwitch() {
 		_vm->setView(a, 6.02f, 0.79f);
 		_vm->runFor(1200);
 	}
-	_vm->setView(eye, yaw, pitch);
+	setView(eye, yaw, pitch);
 	_vm->runFor(0);
 }
 
 bool U01::input(float dt) {
-	// The input hook: riding the train (u01.md, E-0083)
+	// The input hook: riding the train
 	Player &player = _vm->player();
 	Collision &collision = *_vm->collision();
 	Scene &scene = *_vm->scene();
 	const Keys &keys = _vm->keys();
-	// Collision is only written in train mode (E-0615)
+	// Collision is only written in train mode
 	_onTrain = player.standsOn(scene, "*U01_20");
 	if (_onTrain) {
 		player.collide = false;
@@ -362,7 +355,7 @@ bool U01::input(float dt) {
 	// The generic camera input runs in every case: on the train the keys act twice
 	if (player.tick(dt, keys, collision))
 		_vm->sound()->emit(Sound::kEffectsEmitter, "SAUT.WAV", player.eye, false);
-	// The ground is read again after the generic input (E-0615)
+	// The ground is read again after the generic input
 	if (!keys.up && player.standsOn(scene, "*U01_20"))
 		_vm->sound()->stopGroup(Sound::kEffects);
 	return true;
@@ -374,7 +367,8 @@ void U01::ride(float dt) {
 	scene->stepNode("*U01_20", dt);
 
 	// The camera rides behind the train, looking along it
-	Vector3d p = at("*U01_20"), q = at("*U01_23");
+	Vector3d p = at("*U01_20");
+	Vector3d q = at("*U01_23");
 	if (!_vm->sound()->isGroupPlaying(Sound::kEffects))
 		_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(scene->dir() + "Sound/s1_12.WAV"), player.eye, true);
 	else
@@ -389,7 +383,7 @@ void U01::ride(float dt) {
 	player.pitch = kHalfPi;
 	_vm->rideView();
 
-	// The siding: with the points thrown the train leaves on U01_20A.A3D (E-0083, E-0087)
+	// The siding: with the points thrown the train leaves on U01_20A.A3D
 	const float frame = scene->nodeFrame("*U01_20");
 	if (_train2Loaded) {
 		if (frame >= scene->nodeLastFrame("*U01_20"))
@@ -401,7 +395,7 @@ void U01::ride(float dt) {
 }
 
 void U01::leave() {
-	// Leaving U01 for U02 (E-0087)
+	// Leaving U01 for U02
 	Sound *sound = _vm->sound();
 	_vm->suspend(true);
 	_vm->fadeToBlack(2000);
@@ -421,22 +415,19 @@ void U01::afterFrame() {
 }
 
 void U01::caught() {
-	// The escape timer ran out (u01.md, E-0082)
+	// The escape timer ran out
 	Scene *scene = _vm->scene();
 	Sound *sound = _vm->sound();
-	const Common::String soundDir = scene->dir() + "Sound/";
 	_vm->suspend(true);
-	sound->emit(Sound::kEffectsEmitter, Common::Path(soundDir + "S1_10.WAV"), _vm->player().eye, false);
-	while (sound->isGroupPlaying(Sound::kEffects) && !_vm->shouldQuit())
-		_vm->runFor(0);
+	effect("S1_10", _vm->player().eye);
+	waitGroup(Sound::kEffects);
 	scene->hideObject("*Ernest", false);
 	_vm->collision()->setEnabled("*Ernest", true, true);
 	_vm->lookAt(100, at("*U01_07"));
 	scene->setNodeFrame("*U01_07", 2);
 	openDoor();
-	sound->emit(Sound::kVoiceEmitter, Common::Path(soundDir + "s1_11.WAV"), _vm->player().eye, false);
-	while (scene->nodeRunning("*U01_07") && !_vm->shouldQuit())
-		_vm->runFor(0);
+	voiceAt("s1_11", _vm->player().eye);
+	waitNode("*U01_07");
 	const float p[3] = { 486.059f, -107.99f, 24 };
 	_vm->moveTo(1000, p, 0.0831f, 1.95f);
 	_vm->moveTo(2000, nullptr, 0.1631f, 2.19f, 35);
@@ -456,9 +447,9 @@ void U01::syncState(Common::Serializer &s) {
 	s.syncAsByte(oldGauge, 0, 3);
 	s.syncAsUint32LE(oldElapsed, 0, 3);
 	if (s.isLoading() && oldGauge) {
-		_vm->startGauge(20000);
+		_vm->startGauge(kEscapeMs);
 		X3DEngine::Gauge g = _vm->gauge();
-		g.start = _vm->logicMs() - MIN<uint32>(oldElapsed, 20000);
+		g.start = _vm->logicMs() - MIN<uint32>(oldElapsed, kEscapeMs);
 		_vm->setGauge(g);
 	}
 }

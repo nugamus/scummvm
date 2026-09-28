@@ -31,10 +31,10 @@
 
 namespace X3D {
 
-// U04, Monet's garden at Giverny (games/monet/docs/u04.md)
+// U04, Monet's garden at Giverny
 class U04 : public Unit {
 public:
-	explicit U04(X3DEngine *vm) : _vm(vm), _random("x3d_u04") {}
+	explicit U04(X3DEngine *vm) : Unit(vm), _random("x3d_u04") {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
@@ -46,13 +46,8 @@ public:
 private:
 	void say(const char *line); // Monet
 	void hide(const char *object);
-	void voiceAt(const char *name, const Math::Vector3d &position);
-	void effect(const char *name, const Math::Vector3d &position);
-	Math::Vector3d at(const char *object) const;
 	Math::Vector3d head() const; // Monet's TETE
 	void monetClip(const char *file, bool loop, int slot = 1);
-	void waitVoice(bool enterStops = false);
-	void waitMonet(bool walk = false);
 	void paintingActions(bool on);
 	void studioEmitter();
 	void beeEmitter();
@@ -78,9 +73,9 @@ private:
 	void hintsAfterGag();
 	void hintsAfterHammer();
 
-	X3DEngine *_vm;
 	Common::RandomSource _random;
-	bool _onBoat = false, _painted = false;
+	bool _onBoat = false;
+	bool _painted = false;
 	X3DEngine::Gauge _savedGauge;
 };
 

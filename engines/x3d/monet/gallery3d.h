@@ -26,12 +26,10 @@
 
 namespace X3D {
 
-class X3DEngine;
-
-// The painting's 3D scene from the gallery: unit class 50 (ui.md Gallery, 3D view)
+// The painting's 3D scene from the gallery: unit class 50
 class Gallery3D : public Unit {
 public:
-	Gallery3D(X3DEngine *vm, const Common::String &painting) : _vm(vm), _painting(painting) {}
+	Gallery3D(X3DEngine *vm, const Common::String &painting) : Unit(vm), _painting(painting) {}
 
 	// The U0nD.X3D scene of a painting, or "" when it has none
 	static Common::String sceneFor(const Common::String &painting);
@@ -45,7 +43,6 @@ public:
 private:
 	int unit() const; // 1..6, 33
 
-	X3DEngine *_vm;
 	Common::String _painting;
 };
 

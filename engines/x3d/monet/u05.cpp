@@ -19,63 +19,51 @@
  *
  */
 
-#include "common/debug.h"
-
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
 #include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
-#include "x3d/monet/u05.h"
 #include "x3d/x3d.h"
+#include "x3d/monet/u05.h"
 
 namespace X3D {
 
 using Math::Vector3d;
 
 static const float kKeep = X3DEngine::kKeep;
-static const uint32 kGaugeMs = 15000;
+static const uint32 kGaugeMs = 15000;   // Mazout's gauge
+static const uint32 kSitMs = 4000;      // the dog turns before it sits
+static const uint32 kChatterMs = 20000; // between the station master's lines
+static const float kNearChef = 220;     // the station master's talking distance
+
+// Action ids
+enum {
+	kActionDogSits = 4,       // M04, exhausted by code
+	kActionDogIdles = 5,      // M05, exhausted by code
+	kActionNotice = 6,        // M06: the station master notices the dog
+	kActionGrate = 11,        // M11 MaskGrille
+	kActionAmbush = 12,       // M12, exhausted by code: Mazout's ambush
+	kActionMazoutSpeaks = 13, // M13: Mazout's line, the gauge
+	kActionLamp = 14,         // M14, exhausted by LampeTombe
+	kActionCall = 23,         // M23: the station master calls the player
+	kActionParcel = 24        // M24 AfficheCariolle: the parcel given
+};
 
 static const char *const kDog = "*U05_05";
 static const char *const kMazout = "*U04_04";
 static const char *const kChef = "*U05_02";
 
 void U05::afterLoad() {
-	// u05.md, Start 1: before the hotspots, which name *Fil
+	// Before the hotspots, which name *Fil
 	Scene *scene = _vm->scene();
 	scene->renameObject("fil", "*Fil");
 	scene->renameNode("fil", "*Fil");
 }
 
-Vector3d U05::at(const char *object) const {
-	return _vm->scene()->objectPosition(object);
-}
-
 bool U05::near(const char *object, float distance) const {
 	return (_vm->player().eye - at(object)).getMagnitude() <= distance;
-}
-
-// The yaw that looks from `from` toward `target` (X3d_Convert_To_Polar, E-0040)
-float U05::facing(const Vector3d &target, const Vector3d &from) const {
-	const Vector3d d = target - from;
-	return atan2f(-d.y(), d.x());
-}
-
-void U05::run(uint32 id) {
-	// Its steps, then its count, without testing the condition (FUN_0041e4b0)
-	Common::StringArray actions;
-	_vm->interaction()->runAction(id, actions);
-	for (const Common::String &a : actions)
-		_vm->addUnitAction(a);
-}
-
-void U05::effect(const char *name, const Vector3d &position) {
-	_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(_vm->scene()->dir() + "Sound/" + name + (Common::String(name).contains(".") ? "" : ".wav")), position, false);
-}
-
-void U05::voice(const char *name) {
-	_vm->sound()->emit(Sound::kVoiceEmitter, Common::Path(_vm->scene()->dir() + "Sound/" + name + ".wav"), _vm->player().eye, false);
 }
 
 // The object, its children and its siblings leave collision (Object_SetNoCollisionTree)
@@ -87,7 +75,6 @@ void U05::noCollisionFamily(const Common::String &object) {
 }
 
 void U05::start(bool newGame, bool video) {
-	// u05.md, Start (E-0361)
 	Scene *scene = _vm->scene();
 	Interaction *interaction = _vm->interaction();
 	Collision *collision = _vm->collision();
@@ -105,7 +92,7 @@ void U05::start(bool newGame, bool video) {
 	_vm->talk()->addTalker("U04_04", "$$$DUMMY.*visage");
 	if (interaction->exhausted(9))
 		collision->setEnabled("ColPorte2", false);
-	if (interaction->exhausted(11))
+	if (interaction->exhausted(kActionGrate))
 		collision->setEnabled("ColPorte1", false);
 
 	if (newGame) {
@@ -119,7 +106,7 @@ void U05::start(bool newGame, bool video) {
 		scene->runNodeTo(kMazout, -1, false);
 		const float p[3] = { -47.6f, 77.27f, 45.89f };
 		_vm->setView(p, -6.31f, kHalfPi);
-		_vm->saveGameState(_vm->getAutosaveSlot(), "Automatic save", true);
+		_vm->autosave();
 	}
 	_vm->sound()->play(Common::Path(scene->dir() + "Sound/s4_01a.wav"), Sound::kAmbient, 85, true);
 }
@@ -149,9 +136,9 @@ bool U05::waitLoop() {
 }
 
 bool U05::chefNotices() {
-	if (_vm->sound()->isGroupPlaying(Sound::kVoice) || !near(kChef, 220))
+	if (_vm->sound()->isGroupPlaying(Sound::kVoice) || !near(kChef, kNearChef))
 		return false;
-	run(6);
+	run(kActionNotice);
 	_vm->interaction()->setCondition(7, "TRUE");
 	_vm->interaction()->setCondition(9, "TRUE");
 	return true;
@@ -163,14 +150,13 @@ bool U05::mazoutConfronts() {
 	if (player.eye.x() >= 1425)
 		return false;
 	_vm->suspend(true);
-	const float p[3] = { 1306.35f, -945.6f, player.eye.z() };
-	_vm->moveTo(4000, p, facing(at(kMazout), Vector3d(p[0], p[1], p[2])), kHalfPi);
+	const Vector3d p(1306.35f, -945.6f, player.eye.z());
+	moveTo(4000, p, facing(at(kMazout), p), kHalfPi);
 	scene->setClip(kMazout, "Anim/U04_04/Action01.A3D"); // MazoutA01
 	scene->setNodeFps(kMazout, 15);
 	scene->runNodeTo(kMazout, -1, false);
-	run(13);
-	while (_vm->sound()->isGroupPlaying(Sound::kVoice) && !_vm->enterHeld() && !_vm->shouldQuit())
-		_vm->runFor(0);
+	run(kActionMazoutSpeaks);
+	waitVoice(true);
 	_vm->sound()->stopEmitter(Sound::kVoiceEmitter);
 	_vm->startGauge(kGaugeMs); // saved with the game (JAUGE)
 	_timer = 0;
@@ -179,7 +165,7 @@ bool U05::mazoutConfronts() {
 }
 
 void U05::gaugeExpired() {
-	// Mazout catches the player: only he stays visible (E-0362)
+	// Mazout catches the player: only he stays visible
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	_vm->stopGauge();
@@ -193,9 +179,8 @@ void U05::gaugeExpired() {
 	const float p[3] = { 1310, -986, player.eye.z() };
 	_vm->setView(p, player.yaw, player.pitch);
 	_vm->lookAt(0, at(kMazout) + Vector3d(0, 0, 30));
-	effect("s4_04.wav", player.eye);
-	while (scene->clipPlaying(kMazout) && !_vm->shouldQuit())
-		_vm->runFor(0);
+	effect("s4_04", player.eye);
+	waitClip(kMazout);
 	_vm->fadeToBlack(2000);
 	_vm->suspend(false);
 	_vm->gameOver();
@@ -204,9 +189,9 @@ void U05::gaugeExpired() {
 void U05::leave() {
 	Player &player = _vm->player();
 	_vm->suspend(true);
-	const float p[3] = { 1096, 1173, player.eye.z() };
+	const Vector3d p(1096, 1173, player.eye.z());
 	const Vector3d cart(1266, 1302, at("*U05_13").z());
-	_vm->moveTo(7000, p, facing(cart, Vector3d(p[0], p[1], p[2])), kHalfPi);
+	moveTo(7000, p, facing(cart, p), kHalfPi);
 	_leaving = true;
 	_vm->fadeToBlack(2000);
 	_vm->suspend(false);
@@ -214,64 +199,63 @@ void U05::leave() {
 }
 
 void U05::afterFrame() {
-	// u05.md, Every frame (E-0362). The original runs these checks just before
-	// rendering, the engine just after: one frame later.
+	// The original runs these checks just before rendering, the engine just after: one
+	// frame later.
 	Interaction *interaction = _vm->interaction();
 	Player &player = _vm->player();
 	Sound *sound = _vm->sound();
 	const uint32 now = _vm->logicMs();
 
-	if (interaction->exhausted(1) && !interaction->exhausted(6)) {
+	if (interaction->exhausted(1) && !interaction->exhausted(kActionNotice)) {
 		if (!_timer)
 			_timer = now;
-		if (!interaction->exhausted(4)) {
-			if (now - _timer > 4000 && barkAndSit())
-				interaction->exhaust(4);
-		} else if (!interaction->exhausted(5)) {
+		if (!interaction->exhausted(kActionDogSits)) {
+			if (now - _timer > kSitMs && barkAndSit())
+				interaction->exhaust(kActionDogSits);
+		} else if (!interaction->exhausted(kActionDogIdles)) {
 			if (waitLoop())
-				interaction->exhaust(5);
+				interaction->exhaust(kActionDogIdles);
 		} else if (chefNotices()) {
-			run(6); // a second time in the same frame: Say restarts the line (E-0362)
+			run(kActionNotice); // a second time in the same frame: Say restarts the line
 			if (!_vm->inventory()->has("U04_44P"))
 				_vm->inventory()->add("U04_44P");
 		}
 	}
-	if (interaction->exhausted(11) && !interaction->exhausted(12) && mazoutConfronts())
-		interaction->exhaust(12);
-	if (interaction->exhausted(13) && !interaction->exhausted(14) && _vm->gaugeExpired()) {
+	if (interaction->exhausted(kActionGrate) && !interaction->exhausted(kActionAmbush) && mazoutConfronts())
+		interaction->exhaust(kActionAmbush);
+	if (interaction->exhausted(kActionMazoutSpeaks) && !interaction->exhausted(kActionLamp) && _vm->gaugeExpired()) {
 		gaugeExpired();
 		return;
 	}
-	if (interaction->exhausted(19) && !interaction->exhausted(23) && near(kChef, 220))
-		run(23);
-	if (interaction->exhausted(24) && !interaction->exhausted(25)) {
+	if (interaction->exhausted(19) && !interaction->exhausted(kActionCall) && near(kChef, kNearChef))
+		run(kActionCall);
+	if (interaction->exhausted(kActionParcel) && !interaction->exhausted(25)) {
 		if (!_timer)
 			_timer = now;
-		if (!sound->isGroupPlaying(Sound::kVoice) && now - _timer >= 20000 && near(kChef, 220)) {
+		if (!sound->isGroupPlaying(Sound::kVoice) && now - _timer >= kChatterMs && near(kChef, kNearChef)) {
 			_timer = now;
 			run(_random.getRandomNumber(1) == 1 ? 26 : 27);
 		}
 	}
-	if (interaction->exhausted(24) && !_leaving && player.eye.y() > 928)
+	if (interaction->exhausted(kActionParcel) && !_leaving && player.eye.y() > 928)
 		leave();
-	// The barks (M10) never start: nothing runs or exhausts M10 (E-0365)
+	// The barks (M10) never start: nothing runs or exhausts M10
 }
 
 void U05::testSpeakChef() {
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	_vm->suspend(true);
-	const float p[3] = { 1493, -532, player.eye.z() };
-	_vm->moveTo(10000, p, facing(at(kChef), Vector3d(p[0], p[1], p[2])), 1.45f);
-	while (_vm->sound()->isGroupPlaying(Sound::kVoice) && !_vm->shouldQuit())
-		_vm->runFor(0);
+	const Vector3d p(1493, -532, player.eye.z());
+	moveTo(10000, p, facing(at(kChef), p), 1.45f);
+	waitVoice(false);
 	_vm->suspend(false);
 	scene->runNodeTo(kDog, -1, false); // ChienTourne turns
 	scene->hideObject(kDog, false);
 }
 
 void U05::dogToDoor() {
-	// ChienVersPorte (E-0363)
+	// ChienVersPorte
 	Scene *scene = _vm->scene();
 	Interaction *interaction = _vm->interaction();
 	_vm->suspend(true);
@@ -281,7 +265,7 @@ void U05::dogToDoor() {
 	scene->setClip(kDog, "Anim/U05_05/ACTION03.A3D"); // Action3
 	scene->setNodeFps(kDog, 15);
 	scene->runNodeTo(kDog, -1, false);
-	voice("U05_06A");
+	voiceAt("U05_06A", _vm->player().eye);
 	bool opened = false;
 	while (scene->clipPlaying(kDog) && !_vm->shouldQuit()) {
 		_vm->lookAt(0, at(kDog));
@@ -294,7 +278,7 @@ void U05::dogToDoor() {
 		} else if (opened && frame > 102 && !scene->nodeRunning("*U05_01")) {
 			scene->setNodeFps("*U05_01", 15);
 			scene->runNodeTo("*U05_01", -1, true);
-			voice("U05_06B");
+			voiceAt("U05_06B", _vm->player().eye);
 			break;
 		}
 	}
@@ -308,13 +292,14 @@ void U05::dogToDoor() {
 }
 
 void U05::maskGrille() {
-	// MaskGrille: under the grate and up again (E-0364)
+	// MaskGrille: under the grate and up again
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	_vm->suspend(true);
 	scene->hideObject("*U05_07");
 	const float z = player.eye.z();
-	const float down[3] = { 1489.92f, -1189.56f, 0.65f }, up[3] = { 1489.92f, -1134.35f, z };
+	const float down[3] = { 1489.92f, -1189.56f, 0.65f };
+	const float up[3] = { 1489.92f, -1134.35f, z };
 	_vm->moveTo(4000, down, kKeep, kKeep);
 	_vm->moveTo(1500, up, -1.55f, kKeep);
 	scene->hideObject(kChef);
@@ -324,7 +309,7 @@ void U05::maskGrille() {
 }
 
 void U05::lampFalls() {
-	// LampeTombe (E-0364)
+	// LampeTombe
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	_vm->suspend(true);
@@ -336,19 +321,18 @@ void U05::lampFalls() {
 	scene->setNodeLoop("*Fil", false);
 	scene->setNodeFps("*Fil", 15);
 	scene->runNodeTo("*Fil", -1, false);
-	effect("s4_0809.wav", player.eye);
-	const float p[3] = { 1306.35f, -945.6f, player.eye.z() };
-	_vm->moveTo(1000, p, facing(at(kMazout), Vector3d(p[0], p[1], p[2])), kHalfPi);
-	while (_vm->sound()->isGroupPlaying(Sound::kVoice) && !_vm->shouldQuit())
-		_vm->runFor(0);
+	effect("s4_0809", player.eye);
+	const Vector3d p(1306.35f, -945.6f, player.eye.z());
+	moveTo(1000, p, facing(at(kMazout), p), kHalfPi);
+	waitVoice(false);
 	scene->hideObject("*U05_09", false);
 	_vm->collision()->setEnabled("*U05_09", true);
-	_vm->interaction()->exhaust(14);
+	_vm->interaction()->exhaust(kActionLamp);
 	_vm->suspend(false);
 }
 
 void U05::syncState(Common::Serializer &s) {
-	// The original saves no chunk for this unit (save.md), so its clock restarted on every
+	// The original saves no chunk for this unit, so its clock restarted on every
 	// load; kept here as the time since it started (save version 5)
 	uint32 since = _timer ? _vm->logicMs() - _timer : 0;
 	s.syncAsUint32LE(since, 5);
@@ -357,7 +341,6 @@ void U05::syncState(Common::Serializer &s) {
 }
 
 bool U05::handle(const Common::String &action) {
-	// u05.md, Click handlers (E-0363, E-0364)
 	Scene *scene = _vm->scene();
 	Interaction *interaction = _vm->interaction();
 	if (action.equalsIgnoreCase("TestSpeakChef")) {
@@ -391,12 +374,11 @@ bool U05::handle(const Common::String &action) {
 		scene->setNodeFps("*U05_10", 15);
 		scene->runNodeTo("*U05_10", -1, true);
 	} else if (action.equalsIgnoreCase("DoTableauA") || action.equalsIgnoreCase("DoTableauB")) {
-		_vm->showPainting(action.hasSuffix("A") ? "U14_02" : "U14_05"); // ui.md, Other frames
+		_vm->showPainting(action.hasSuffix("A") ? "U14_02" : "U14_05");
 	} else {
 		return false;
 	}
 	return true;
 }
-
 
 } // End of namespace X3D
