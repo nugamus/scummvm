@@ -279,6 +279,9 @@ void U04::openDoor() {
 	_vm->moveTo(2500, p, 6.56f, kKeep);
 	if (interaction->runs(2) == 1)
 		scene->setClip(kMonet, "Anim/U04_03/ouvre01.A3D"); // OpenDoor
+	else
+		scene->activateSlot(kMonet, 1); // still active in the original; saves made before
+		                                // the closed door stopped handing back need it
 	scene->setNodeFps(kMonet, 15);
 	scene->setNodeLoop(kMonet, false);
 	scene->setNodeFrame(kMonet, 1);
