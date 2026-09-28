@@ -668,6 +668,7 @@ void X3DEngine::frame(bool input) {
 			_posedBetween = true;
 		}
 		_scene->draw(camera, _renderer->width(), _renderer->height());
+		refreshHotspots();
 		if (_showHotspots && _freePlay)
 			_scene->drawHighlight(_highlight);
 		_inventory->draw(*_renderer, x2d);
@@ -963,7 +964,9 @@ bool X3DEngine::picks(const Common::Point &s, int target) {
 	const Scene::Model *model;
 	uint o;
 	float depth;
-	if (!_scene->pick(_camera, _renderer->width(), _renderer->height(), s.x, s.y, model, o, depth))
+	// As a click: nothing beyond 4 scene units of depth counts
+	if (!_scene->pick(_camera, _renderer->width(), _renderer->height(), s.x, s.y, model, o, depth) ||
+	    depth > 4 * _scene->scale)
 		return false;
 	Common::StringArray names;
 	for (int k = o; k >= 0; k = model->file.objects[k].parent)
@@ -1011,8 +1014,6 @@ void X3DEngine::drawHotspots() {
 	// every frame. ScummVM's overlay (a full-window upload) is redrawn when they changed.
 	if (!_showHotspots)
 		return;
-	if (hotspotDirty() || _hotspotForceRedraw)
-		findHotspots();
 	const Common::Array<Graphics::HotspotInfo> last = _hotspots;
 	placeMarkers();
 	bool same = !_hotspotForceRedraw && last.size() == _hotspots.size();
@@ -1024,6 +1025,27 @@ void X3DEngine::drawHotspots() {
 	Engine::drawHotspots();
 	if (_hotspots.empty() && _system->isOverlayVisible())
 		_system->hideOverlay(); // the base class keeps its last markers when there are none
+}
+
+void X3DEngine::refreshHotspots() {
+	// Markers and outlines are found again when the view moved (every 100 ms at most), a few
+	// times a second for animations, and at once when a hotspot becomes clickable or stops
+	// being so (taken, used up, a scene's script) or free play starts or ends: no outline
+	// stays on what a click no longer reaches.
+	if (!_showHotspots)
+		return;
+	Common::Array<bool> now;
+	if (_freePlay && _scene) {
+		const uint n = _interaction->hotspotNames().size();
+		now.resize(n + 1);
+		for (uint i = 0; i < n; i++)
+			now[i] = _interaction->clickable(i);
+		now[n] = true;
+	}
+	if (now != _clickableNow || hotspotDirty() || _hotspotForceRedraw) {
+		_clickableNow = now;
+		findHotspots();
+	}
 }
 
 void X3DEngine::placeMarkers() {
@@ -1095,8 +1117,8 @@ void X3DEngine::findHotspots() {
 				}
 			if (!hit) {
 				Math::Vector3d p;
-				// ponytail: 8 picks per hotspot; a sliver of an object may not get its marker
-				if (!aimAt(m, o, h, s, hit, 8, &p) || !hit)
+				// ponytail: 24 picks per hotspot; a sliver of an object may not get its marker
+				if (!aimAt(m, o, h, s, hit, 24, &p) || !hit)
 					continue;
 				const Common::String &label = _interaction->hotspotName(h);
 				marker.hotspot = h;

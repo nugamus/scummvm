@@ -111,6 +111,7 @@ public:
 	void getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) override;
 	bool hotspotDirty() const override;
 	void findHotspots(); // the markers and the objects to outline
+	void refreshHotspots(); // findHotspots when due or when what is clickable changed
 	void placeMarkers(); // their positions in the drawn view
 	// The object's first surface point on screen that a pick takes to hotspot target (hit),
 	// else its first on screen; false when none is. tries: surface points picked at most
@@ -265,6 +266,7 @@ private:
 	float _fovExtra = 0; // the fov option's degrees beyond the original's 90
 	Camera _hotspotCamera; // the view of the last hotspot overlay
 	uint32 _hotspotTime = 0;
+	Common::Array<bool> _clickableNow; // per hotspot, at the last findHotspots (and free play last)
 	// A marker: a point of the hotspot's object a click reaches, as an offset from its
 	// origin. The object itself, not its name: names repeat (U02 has two *U02_02).
 	struct Marker {

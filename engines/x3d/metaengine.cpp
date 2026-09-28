@@ -28,6 +28,7 @@
 
 #include "engines/dialogs.h"
 
+#include "graphics/hotspot_renderer.h"
 #include "graphics/surface.h"
 
 #include "gui/ThemeEval.h"
@@ -234,6 +235,15 @@ GUI::OptionsContainerWidget *X3DMetaEngine::buildEngineOptionsWidget(GUI::GuiObj
 
 const ADExtraGuiOptionsMap *X3DMetaEngine::getAdvancedExtraGuiOptions() const {
 	return optionsList;
+}
+
+void X3DMetaEngine::registerDefaultSettings(const Common::String &target) const {
+	AdvancedMetaEngine<ADGameDescription>::registerDefaultSettings(target);
+	// ScummVM's hotspot overlay marks objects with squares in this game unless the player
+	// chose another marker (the game's options, or the global ones).
+	if (!target.empty() && ConfMan.hasGameDomain(target) && !ConfMan.hasKey("hotspot_marker", target) &&
+	    !ConfMan.hasKey("hotspot_marker", Common::ConfigManager::kApplicationDomain))
+		ConfMan.setInt("hotspot_marker", Graphics::kMarkerSquare, target);
 }
 
 const char *X3DMetaEngine::getName() const {
