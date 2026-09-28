@@ -208,6 +208,115 @@ public:
 		glDisable(GL_BLEND);
 	}
 
+	void drawOutline(const Common::Array<Tri3D> &tris, const Common::Array<bool> &nodes) override {
+		// The flagged nodes' triangles again, tinted and blended over the frame (keyed ones
+		// only where their texels show), then their outline: the edges of one front-facing
+		// triangle of a node (the only ones drawn), pulled 0.5% toward the eye so the
+		// surfaces they lie on do not hide them, depth-tested like the scene.
+		auto flagged = [&](const Tri3D &t) { return t.node >= 0 && (uint)t.node < nodes.size() && nodes[t.node]; };
+		glDepthMask(GL_FALSE);
+		glDepthFunc(GL_LEQUAL);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glEnableClientState(GL_VERTEX_ARRAY);
+		glEnableClientState(GL_COLOR_ARRAY);
+		struct Edge {
+			float a[3], b[3];
+			int node;
+		};
+		Common::Array<Edge> edges;
+		for (uint i = 0; i < tris.size(); i++) {
+			const Tri3D &t = tris[i];
+			if (!flagged(t))
+				continue;
+			const bool keyed = t.type == -6 && t.tex;
+			if (keyed) {
+				// The key's alpha, the tint's colour.
+				glEnable(GL_TEXTURE_2D);
+				glBindTexture(GL_TEXTURE_2D, texture(t.tex, true));
+				glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+				glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE);
+				glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_PRIMARY_COLOR);
+				glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);
+				glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA, GL_TEXTURE);
+				glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_ALPHA, GL_PRIMARY_COLOR);
+				glEnable(GL_ALPHA_TEST);
+				glAlphaFunc(GL_GREATER, 0.1f);
+				glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+			} else {
+				glDisable(GL_TEXTURE_2D);
+				glDisable(GL_ALPHA_TEST);
+				glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+			}
+			float xyz[9], uv[6];
+			byte rgba[12];
+			for (int k = 0; k < 3; k++) {
+				xyz[k * 3] = t.x[k];
+				xyz[k * 3 + 1] = t.y[k];
+				xyz[k * 3 + 2] = t.z[k];
+				uv[k * 2] = t.u[k] / 256.0f;
+				uv[k * 2 + 1] = t.v[k] / 256.0f;
+				rgba[k * 4] = 255;
+				rgba[k * 4 + 1] = 210;
+				rgba[k * 4 + 2] = 60;
+				rgba[k * 4 + 3] = 72;
+			}
+			glVertexPointer(3, GL_FLOAT, 0, xyz);
+			glColorPointer(4, GL_UNSIGNED_BYTE, 0, rgba);
+			if (keyed)
+				glTexCoordPointer(2, GL_FLOAT, 0, uv);
+			glDrawArrays(GL_TRIANGLES, 0, 3);
+			if (keyed)
+				glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+			for (int k = 0; k < 3; k++) {
+				Edge e;
+				const int j = (k + 1) % 3;
+				const float p[3] = { t.x[k], t.y[k], t.z[k] }, q[3] = { t.x[j], t.y[j], t.z[j] };
+				const bool swap = memcmp(q, p, sizeof(p)) < 0;
+				memcpy(e.a, swap ? q : p, sizeof(e.a));
+				memcpy(e.b, swap ? p : q, sizeof(e.b));
+				e.node = t.node;
+				edges.push_back(e);
+			}
+		}
+		glDisable(GL_ALPHA_TEST);
+		glDisable(GL_TEXTURE_2D);
+		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+		Common::sort(edges.begin(), edges.end(), [](const Edge &x, const Edge &y) {
+			if (x.node != y.node)
+				return x.node < y.node;
+			return memcmp(x.a, y.a, sizeof(x.a) + sizeof(x.b)) < 0;
+		});
+		_xyz.resize(0);
+		for (uint i = 0; i < edges.size();) {
+			uint j = i + 1;
+			while (j < edges.size() && edges[j].node == edges[i].node && !memcmp(edges[j].a, edges[i].a, sizeof(Edge::a) + sizeof(Edge::b)))
+				j++;
+			if (j - i == 1)
+				for (const float *p : { edges[i].a, edges[i].b })
+					for (int k = 0; k < 3; k++)
+						_xyz.push_back(p[k] * 0.995f);
+			i = j;
+		}
+		if (!_xyz.empty()) {
+			const uint n = _xyz.size() / 3;
+			_rgba.resize(n * 4);
+			for (uint k = 0; k < n; k++) {
+				_rgba[k * 4] = 255;
+				_rgba[k * 4 + 1] = 170;
+				_rgba[k * 4 + 2] = 0;
+				_rgba[k * 4 + 3] = 255;
+			}
+			glLineWidth(2.0f * pixelScale());
+			glVertexPointer(3, GL_FLOAT, 0, _xyz.data());
+			glColorPointer(4, GL_UNSIGNED_BYTE, 0, _rgba.data());
+			glDrawArrays(GL_LINES, 0, n);
+			glLineWidth(1.0f);
+		}
+		glDisable(GL_BLEND);
+		glDepthMask(GL_TRUE);
+	}
+
 	void drawImage(const Graphics::Surface &image, int x, int y, bool keyed) override {
 		const ImageKey key = { image.getPixels(), keyed };
 		GLuint id;

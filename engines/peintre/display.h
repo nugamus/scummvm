@@ -65,6 +65,8 @@ public:
 	 */
 	virtual void begin3D(const Common::Rect &view, float focal, float nearZ, float farZ) {}
 	virtual void drawTriangles(const Common::Array<Tri3D> &tris) {}
+	/** The hotspot overlay: the triangles of the flagged nodes tinted, their outline drawn. */
+	virtual void drawOutline(const Common::Array<Tri3D> &tris, const Common::Array<bool> &nodes) {}
 	/** A 2D image at logical (x, y); keyed: the TGA key colour is transparent. */
 	virtual void drawImage(const Graphics::Surface &image, int x, int y, bool keyed) {}
 	virtual void end3D() {}

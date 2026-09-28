@@ -110,10 +110,12 @@ void Renderer3D::draw(Graphics::Surface *dst, const Common::Rect &viewport, cons
 		_zbuf.resize(area);
 		_pickZ.resize(area);
 		_pickNode.resize(area);
+		_drawNode.resize(area);
 		for (uint i = 0; i < area; i++) {
 			_zbuf[i] = 0.0f;
 			_pickZ[i] = 0.0f;
 			_pickNode[i] = -1;
+			_drawNode[i] = -1;
 		}
 		if (dst)
 			for (int y = viewport.top; y < viewport.bottom; y++)
@@ -275,6 +277,7 @@ void Renderer3D::clipAndDraw(Vtx *v, const Fill &fill) {
 		t.type = fill.type;
 		t.tex = fill.tex;
 		t.colour = fill.colour;
+		t.node = fill.node;
 		_out->push_back(t);
 		return;
 	}
@@ -389,6 +392,7 @@ void Renderer3D::drawTriangle(const Vtx *v, const Fill &fill) {
 			}
 			_zbuf[at] = z;
 			row[x] = colour;
+			_drawNode[at] = fill.node;
 		}
 	}
 }
@@ -498,6 +502,20 @@ bool Renderer3D::nodeScreenPoint(int node, Common::Point &p) const {
 		if (tryAt(vs[i].x, vs[i].y, vs[i].z))
 			return true;
 	return false;
+}
+
+bool Renderer3D::project(int node, const float local[3], float &sx, float &sy) const {
+	if (node < 0 || (uint)(9 * node + 8) >= _rot.size())
+		return false;
+	const float *r = &_rot[9 * node], *p = &_pos[3 * node];
+	const float x = r[0] * local[0] + r[1] * local[1] + r[2] * local[2] + p[0];
+	const float y = r[3] * local[0] + r[4] * local[1] + r[5] * local[2] + p[1];
+	const float z = r[6] * local[0] + r[7] * local[1] + r[8] * local[2] + p[2];
+	if (z < _near)
+		return false;
+	sx = _focal * x / z + (float)(_viewport.width() / 2 + _viewport.left);
+	sy = _focal * y / z + (float)(_viewport.height() / 2 + _viewport.top);
+	return true;
 }
 
 bool Renderer3D::nodeViewPosition(int node, int32 &x, int32 &y, int32 &z) const {

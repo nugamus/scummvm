@@ -107,6 +107,8 @@ public:
 	virtual void init(World &w) {}
 	/** The frame callback, run every tick after drawing. */
 	virtual void frame(World &w) {}
+	/** Whether the scene lets the player reach an object from here (distance limits). */
+	virtual bool reachable(World &w, int object) { return true; }
 };
 
 /** What the 3D loop asks the engine to do next. */
@@ -260,6 +262,17 @@ private:
 	void drawBar(int barY);
 	void updateCursor();
 	void updateHotspots();
+	/** Whether a click on the object now does what its hover cursor promises (the overlay). */
+	bool objectClickable(int object);
+	/**
+	 * A point of the node where a click picks it this tick, in the coordinates of `frame`
+	 * (the node itself, or its parent whose corners a flag 0x10 node uses).
+	 */
+	bool findAnchor(int node, int &frame, float local[3]) const;
+	/** Where the anchors show in the drawn view (every frame), for the overlay. */
+	void placeHotspots();
+	/** The outline of the clickable objects over the software frame. */
+	void outlineSoftware(Graphics::Surface &dst, const Common::Rect &view);
 	void look();
 	Common::Rect viewRect() const;
 	/** The software renderer's picture: the player's view size, scaled to fill the view. */
@@ -312,6 +325,17 @@ private:
 	bool _shownCentred = false;
 	bool _systemCursor = false; ///< the high_fps option: the cursor manager's cursor
 	Common::Array<Graphics::HotspotInfo> _hotspotList;
+	// The overlay's marker for each object: a point of its node a click reaches, kept while
+	// it still does, so the marker stays on the object as the view turns.
+	struct Anchor {
+		int node = -1;
+		int frame = -1;   ///< the node whose coordinates `local` is in
+		float local[3] = { 0, 0, 0 };
+		bool valid = false;
+	};
+	Common::Array<Anchor> _anchors;   ///< per object
+	Common::Array<bool> _outlined;    ///< per node: a clickable object's, outlined
+	float _markerScale = 1.0f;        ///< the drawn view's pixels to the frame's (a small view size)
 	bool _hotspotsChanged = false;
 
 	// The last two ticks, for drawing in between.

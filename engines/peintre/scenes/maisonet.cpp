@@ -73,10 +73,14 @@ public:
 		w.setAmbience("ferme");
 	}
 
+	// porte04 only within 5000 (0x4a2544).
+	bool reachable(World &w, int object) override {
+		return object != kPorte04 || w.distance(node(w, object)) < 5000;
+	}
+
 	void frame(World &w) override {
 		int idx = w.objectIndex(w.pick());
-		// porte04 only within 5000 (0x4a2544).
-		if (idx == kPorte04 && w.distance(node(w, idx)) >= 5000)
+		if (idx >= 0 && !reachable(w, idx))
 			idx = -1;
 		switch (clickedObject(w, idx)) {
 		case kPlume:

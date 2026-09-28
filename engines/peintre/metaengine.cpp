@@ -32,6 +32,8 @@
 #include "backends/keymapper/standard-actions.h"
 
 #include "gui/ThemeEval.h"
+#include "graphics/hotspot_renderer.h"
+
 #include "gui/widget.h"
 
 #include "peintre/detection.h"
@@ -199,6 +201,15 @@ class PeintreMetaEngine : public AdvancedMetaEngine<ADGameDescription> {
 public:
 	const char *getName() const override {
 		return "peintre";
+	}
+
+	void registerDefaultSettings(const Common::String &target) const override {
+		AdvancedMetaEngine<ADGameDescription>::registerDefaultSettings(target);
+	// ScummVM's hotspot overlay marks objects with squares in this game unless the player
+	// chose another marker (the game's options, or the global ones).
+	if (!target.empty() && ConfMan.hasGameDomain(target) && !ConfMan.hasKey("hotspot_marker", target) &&
+	    !ConfMan.hasKey("hotspot_marker", Common::ConfigManager::kApplicationDomain))
+		ConfMan.setInt("hotspot_marker", Graphics::kMarkerSquare, target);
 	}
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override {

@@ -45,6 +45,8 @@ class DevScript : public SceneScript {
 public:
 	DevScript(SceneScript *s) : _s(s) {}
 
+	bool reachable(World &w, int object) override { return _s->reachable(w, object); }
+
 	void init(World &w) override {
 		static bool first = true;
 		if (first && ConfMan.hasKey("dev_vars")) {
