@@ -250,8 +250,8 @@ private:
 	void storeView(bool pitch);
 	void move();
 	void collide();
-	/** The fixed focal length for the fov option scaled to the view, 0 for the original's. */
-	float focal() const { return _focal > 0 ? _focal * MIN<int>(viewRect().width(), 640) / 640 : 0.0f; }
+	/** The fixed focal length for the fov option scaled to a picture `width` wide, 0 for the original's. */
+	float focal(int width = 640) const { return _focal > 0 ? _focal * MIN<int>(width, 640) / 640 : 0.0f; }
 	/** Whether the last move went through a wall from its front (the bug fix in tick()). */
 	bool crossedWall(const Vec3i &from) const;
 	void mouse();
@@ -262,6 +262,8 @@ private:
 	void updateHotspots();
 	void look();
 	Common::Rect viewRect() const;
+	/** The software renderer's picture: the player's view size, scaled to fill the view. */
+	Common::Rect renderRect() const;
 	bool loadCursors();
 	void drawImage(const Graphics::Surface &img, int x, int y, bool keyed);
 	void flightStep();
@@ -284,6 +286,7 @@ private:
 	Common::String _bundle;          ///< the loaded scene's bundle, its SceneSession key
 	Graphics::Surface _cursors[kNumCursors];
 	Graphics::Surface _bar;
+	Graphics::Surface _small; ///< the 3D at a smaller view size, before scaling
 
 	int _scene = -1, _prevScene = 0;
 	Camera _cam;
