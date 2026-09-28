@@ -60,6 +60,7 @@ struct Tri3D {
 	int type;                 ///< face-group type: 3, -6, -4 or 1
 	const Texture3D *tex;
 	uint16 colour;            ///< type 1: the flat RGB565 colour
+	int node;                 ///< the scene node it belongs to
 };
 
 /**
@@ -95,6 +96,17 @@ public:
 	int pickBuffered(int x, int y);
 	/** A point where the last draw can pick the node: its centre or else a vertex. */
 	bool nodeScreenPoint(int node, Common::Point &p) const;
+	/**
+	 * A point given in a node's own coordinates, projected with the last draw's view: false
+	 * behind the near plane.
+	 */
+	bool project(int node, const float local[3], float &sx, float &sy) const;
+	/** Whether the last draw showed the node (not in a hidden subtree). */
+	bool nodeVisible(int node) const { return node >= 0 && (uint)node < _visible.size() && _visible[node]; }
+	/** The node whose colour shows at (x, y) after the last draw into a surface, -1 for none. */
+	int nodeAt(int x, int y) const {
+		return _drawNode.empty() || !_viewport.contains(x, y) ? -1 : _drawNode[bufferIndex(x, y)];
+	}
 	/** A node's position in camera space after the last draw (its +0x4c). */
 	bool nodeViewPosition(int node, int32 &x, int32 &y, int32 &z) const;
 
@@ -128,6 +140,7 @@ private:
 	Common::Array<float> _zbuf;       ///< 1/z per pixel of the viewport
 	Common::Array<float> _pickZ;      ///< 1/z of every covered pixel, key pixels included
 	Common::Array<int16> _pickNode;
+	Common::Array<int16> _drawNode;   ///< the node whose colour each pixel shows
 	Common::Array<PickTri> _pickTris; ///< without a destination: the projected triangles
 	bool _pickBuilt = false;
 	Common::Array<float> _rot;        ///< per node: camera-space rotation (9)

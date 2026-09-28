@@ -92,6 +92,8 @@ class Musee : public SceneScript {
 public:
 	void init(World &w) override;
 	void frame(World &w) override;
+	// The museum's hover and clicks need the object within 1,200.
+	bool reachable(World &w, int object) override { return w.distance(node(w, object)) < 1200; }
 
 private:
 	bool anyUnsolved(World &w, int from, int to) {
@@ -320,8 +322,7 @@ void Musee::animate(World &w) {
 
 void Musee::frame(World &w) {
 	int idx = w.objectIndex(w.pick());
-	// The museum's hover and clicks need the object within 1,200.
-	if (idx >= 0 && w.distance(node(w, idx)) >= 1200)
+	if (idx >= 0 && !reachable(w, idx))
 		idx = -1;
 	const int clicked = clickedObject(w, idx);
 

@@ -67,10 +67,14 @@ public:
 			w.objects[kMirroirvg].cursorType = 0x3C;
 	}
 
+	// PLAK only within 3000 (0x4a2538).
+	bool reachable(World &w, int object) override {
+		return object != kPlak || w.distance(node(w, object)) < 3000;
+	}
+
 	void frame(World &w) override {
 		int idx = w.objectIndex(w.pick());
-		// PLAK only within 3000 (0x4a2538).
-		if (idx == kPlak && w.distance(node(w, idx)) >= 3000)
+		if (idx >= 0 && !reachable(w, idx))
 			idx = -1;
 		switch (clickedObject(w, idx)) {
 		case kArmoire:

@@ -1132,14 +1132,19 @@ void World::render(float alpha) {
 	const Common::Rect vr = viewRect();
 	_view.setFocal(focal());
 	_view.setClip(_renderer.nearZ(), _renderer.farZ());
+	_markerScale = 1.0f;
 	if (display->hardware()) {
 		_view.draw(nullptr, vr, _scene3D, view, poses, &_tris);
 		display->begin3D(vr, focal() > 0 ? focal() : 480.0f * MIN<int>(vr.width(), 640) / 640, _renderer.nearZ(), _renderer.farZ());
 		display->drawTriangles(_tris);
+		if (!_outlined.empty())
+			display->drawOutline(_tris, _outlined);
 	} else {
 		const Common::Rect rr = renderRect();
 		if (rr.width() >= 640) {
 			_view.draw(&_vm->screen(), vr, _scene3D, view, poses);
+			if (!_outlined.empty())
+				outlineSoftware(_vm->screen(), vr);
 		} else {
 			if (_small.w != rr.width()) {
 				_small.free();
@@ -1147,6 +1152,8 @@ void World::render(float alpha) {
 			}
 			_view.setFocal(focal(rr.width()));
 			_view.draw(&_small, rr, _scene3D, view, poses);
+			if (!_outlined.empty())
+				outlineSoftware(_small, rr);
 			// Nearest-neighbour up to the full frame
 			Graphics::Surface &screen = _vm->screen();
 			for (int y = 0; y < 480; y++) {
@@ -1156,7 +1163,9 @@ void World::render(float alpha) {
 					dst[x] = src[x * rr.width() / 640];
 			}
 		}
+		_markerScale = 640.0f / rr.width();
 	}
+	placeHotspots();
 
 	// The 2D over it: the bar (sliding between ticks too), the return icon, the hourglass.
 	drawBar(blend ? (int)(_barYPrev + (_barYCur - _barYPrev) * alpha + 0.5f) : _barY);
@@ -1176,19 +1185,125 @@ void World::render(float alpha) {
 	_vm->drawHotspots();
 }
 
-void World::updateHotspots() {
-	// ScummVM's hotspot overlay: each object of the scene's table that the game can pick
-	// now, marked at the first of its centre and its vertices that picks it.
-	if (!_vm->hotspotsShown())
-		return;
-	Common::Array<Graphics::HotspotInfo> list;
-	if (!_flying) {
-		for (const SceneObject &o : objects) {
-			Common::Point p;
-			if (o.node < 0 || !_renderer.nodeScreenPoint(o.node, p))
+bool World::objectClickable(int object) {
+	// The game's own sign that a click does something: the object's hover cursor (hand,
+	// zone, finger, access, deja vu), on a shown node the scene lets the player reach, while
+	// nothing is carried or held and no flight or redraw runs.
+	const SceneObject &o = objects[object];
+	if (o.node < 0 || _flying || _hourglass || _carrying || _cursor < (int)kNumObjects || !_script ||
+		!_renderer.nodeVisible(o.node))
+		return false;
+	switch (o.cursorType) {
+	case 2:
+	case 3:
+	case 4:
+	case 6:
+	case 0x3C:
+		break;
+	default:
+		return false;
+	}
+	return _script->reachable(*this, object);
+}
+
+bool World::findAnchor(int node, int &frame, float local[3]) const {
+	// The node's centre, then its triangles' centres, then its corners: the first that
+	// picks the node with this tick's view. A triangle's corners may belong to another node
+	// (flag 0x10: the parent's), whose coordinates the point is then kept in.
+	auto picks = [&](int f, const float p[3]) {
+		float sx, sy;
+		if (!_renderer.project(f, p, sx, sy) || _renderer.pick((int)sx, (int)sy) != node)
+			return false;
+		frame = f;
+		memcpy(local, p, 3 * sizeof(float));
+		return true;
+	};
+	const Node &nd = _scene3D.nodes[node];
+	if (!nd.vertices.empty()) {
+		float c[3] = { 0, 0, 0 };
+		for (const Vec3i &v : nd.vertices) {
+			c[0] += v.x;
+			c[1] += v.y;
+			c[2] += v.z;
+		}
+		for (float &k : c)
+			k /= nd.vertices.size();
+		if (picks(node, c))
+			return true;
+	}
+	// ponytail: at most 64 triangles per group tried; a sliver of an object may get none.
+	for (const FaceGroup &g : nd.faceGroups) {
+		const uint step = MAX<uint>(1, g.polys.size() / 64);
+		for (uint i = 0; i < g.polys.size(); i += step) {
+			const Poly &p = g.polys[i];
+			const int owner = p.vertexNode[0];
+			if (owner < 0 || (uint)owner >= _scene3D.nodes.size() || p.vertexNode[1] != owner || p.vertexNode[2] != owner)
 				continue;
-			const Graphics::HotspotType type = o.cursorType == 6 ? Graphics::kHotspotExit : Graphics::kHotspotObject;
-			list.push_back(Graphics::HotspotInfo(_vm->display()->toWindow(p), Common::U32String(o.name), type));
+			const Common::Array<Vec3i> &vs = _scene3D.nodes[owner].vertices;
+			float t[3] = { 0, 0, 0 };
+			bool ok = true;
+			for (int k = 0; k < 3 && ok; k++) {
+				ok = p.vertex[k] >= 0 && (uint)p.vertex[k] < vs.size();
+				if (ok) {
+					t[0] += vs[p.vertex[k]].x / 3.0f;
+					t[1] += vs[p.vertex[k]].y / 3.0f;
+					t[2] += vs[p.vertex[k]].z / 3.0f;
+				}
+			}
+			if (ok && picks(owner, t))
+				return true;
+		}
+	}
+	const uint step = MAX<uint>(1, nd.vertices.size() / 64);
+	for (uint i = 0; i < nd.vertices.size(); i += step) {
+		const float v[3] = { (float)nd.vertices[i].x, (float)nd.vertices[i].y, (float)nd.vertices[i].z };
+		if (picks(node, v))
+			return true;
+	}
+	return false;
+}
+
+void World::updateHotspots() {
+	// ScummVM's hotspot overlay, every tick: which objects a click reaches now (outlined),
+	// and a point on each for its marker, kept while a click there still picks the object.
+	_outlined.clear();
+	if (!_vm->hotspotsShown()) {
+		_anchors.clear();
+		return;
+	}
+	_outlined.resize(_scene3D.nodes.size());
+	_anchors.resize(objects.size());
+	for (uint i = 0; i < objects.size(); i++) {
+		Anchor &a = _anchors[i];
+		if (!objectClickable(i)) {
+			a.valid = false;
+			continue;
+		}
+		const int node = objects[i].node;
+		_outlined[node] = true;
+		float sx, sy;
+		if (a.valid && a.node == node && _renderer.project(a.frame, a.local, sx, sy) && _renderer.pick((int)sx, (int)sy) == node)
+			continue;
+		a.node = node;
+		a.valid = findAnchor(node, a.frame, a.local);
+	}
+}
+
+void World::placeHotspots() {
+	// The anchors through the drawn view (between ticks too), to window pixels.
+	Common::Array<Graphics::HotspotInfo> list;
+	if (_vm->hotspotsShown()) {
+		const Common::Rect vr = viewRect();
+		for (uint i = 0; i < _anchors.size() && i < objects.size(); i++) {
+			const Anchor &a = _anchors[i];
+			float sx, sy;
+			if (!a.valid || !_view.project(a.frame, a.local, sx, sy))
+				continue;
+			const Common::Point p((int)(sx * _markerScale), (int)(sy * _markerScale));
+			if (!vr.contains(p))
+				continue;
+			const Graphics::HotspotType type = objects[i].cursorType == 6 ? Graphics::kHotspotExit : Graphics::kHotspotObject;
+			list.push_back(Graphics::HotspotInfo(_vm->display()->toWindow(p), Common::U32String(objects[i].name), type));
 		}
 	}
 	bool same = list.size() == _hotspotList.size();
@@ -1197,6 +1312,34 @@ void World::updateHotspots() {
 	if (!same) {
 		_hotspotList = list;
 		_hotspotsChanged = true;
+		debugC(2, kDebugGraphics, "Hotspot overlay: %u markers", list.size());
+	}
+}
+
+void World::outlineSoftware(Graphics::Surface &dst, const Common::Rect &view) {
+	// The pixels a clickable object shows tinted, and those next to another node (or the
+	// view's edge) drawn as its outline (as the OpenGL display does per triangle edge).
+	auto outlined = [&](int n) { return n >= 0 && (uint)n < _outlined.size() && _outlined[n]; };
+	const uint16 edge = dst.format.RGBToColor(255, 170, 0);
+	for (int y = view.top; y < view.bottom; y++) {
+		uint16 *row = (uint16 *)dst.getBasePtr(0, y);
+		for (int x = view.left; x < view.right; x++) {
+			// The outline is two pixels wide: on both sides of the boundary.
+			const int n = _view.nodeAt(x, y);
+			const int nb[4] = { _view.nodeAt(x - 1, y), _view.nodeAt(x + 1, y), _view.nodeAt(x, y - 1), _view.nodeAt(x, y + 1) };
+			bool border = false;
+			for (int k = 0; k < 4 && !border; k++)
+				border = nb[k] != n && (outlined(n) || outlined(nb[k]));
+			if (border) {
+				row[x] = edge;
+				continue;
+			}
+			if (!outlined(n))
+				continue;
+			byte r, g, b;
+			dst.format.colorToRGB(row[x], r, g, b);
+			row[x] = dst.format.RGBToColor((r * 184 + 255 * 72) >> 8, (g * 184 + 210 * 72) >> 8, (b * 184 + 60 * 72) >> 8);
+		}
 	}
 }
 

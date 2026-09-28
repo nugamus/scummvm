@@ -68,10 +68,14 @@ public:
 			w.objects[kArbre11].cursorType = 0x3C;
 	}
 
+	// arbre11 only within 1500 (0x4a2534).
+	bool reachable(World &w, int object) override {
+		return object != kArbre11 || w.distance(node(w, object)) < 1500;
+	}
+
 	void frame(World &w) override {
 		int idx = w.objectIndex(w.pick());
-		// arbre11 only within 1500 (0x4a2534).
-		if (idx == kArbre11 && w.distance(node(w, idx)) >= 1500)
+		if (idx >= 0 && !reachable(w, idx))
 			idx = -1;
 		switch (clickedObject(w, idx)) {
 		case kArbre11:
