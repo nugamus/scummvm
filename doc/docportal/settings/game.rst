@@ -50,7 +50,7 @@ The Game tab also shows settings unique to the game engine for the selected game
 To find out which engine powers your game, have a look at the ScummVM Supported Games `wiki page
 <https://wiki.scummvm.org/index.php?title=Category:Supported_Games>`_ or :ref:`group <group>` games by Engine in the Launcher.
 
-Engines: ADL_ | AGI_ | AGOS_ | Bladerunner_ | Buried_ | CGE_ | CGE2_ | Chewy_ | Cine_ | Drascula_ | Dreamweb_ | Freescape_ | Griffon_ | GrimE_ | HDB_ | Hopkins_ | Hypno_ | Kyra_ | Lure_ | Macs2_ | MADE_ | MADS_ | mTropolis_ | Myst3_ | Nancy_ | Neverhood_ | SCI_ | SCUMM_ | Sherlock_ | Sky_ | Stark_ | Supernova_ | Sword2_ | Sword25_ | Toltecs_ | Trecision_ | Ultima_ | V-Cruise_ | Wintermute_ | Xeen_ | ZVision_
+Engines: ADL_ | AGI_ | AGOS_ | Bladerunner_ | Buried_ | CGE_ | CGE2_ | Chewy_ | Cine_ | Drascula_ | Dreamweb_ | Freescape_ | Griffon_ | GrimE_ | HDB_ | Hopkins_ | Hypno_ | Kyra_ | Lure_ | Macs2_ | MADE_ | MADS_ | mTropolis_ | Myst3_ | Nancy_ | Neverhood_ | SCI_ | SCUMM_ | Sherlock_ | Sky_ | Stark_ | Supernova_ | Sword2_ | Sword25_ | Toltecs_ | Trecision_ | Ultima_ | V-Cruise_ | Wintermute_ | X3D_ | Xeen_ | ZVision_
 
 
 
@@ -1782,6 +1782,97 @@ Faster animations
 	Increases the speed of most animations.
 
 	*vcruise_fast_animations*
+
+,,,,,,,,,,
+
+.. _X3D:
+
+X3D
+*****
+
+.. _x3d_high_fps:
+
+High frame rate
+	Draws frames between the game's steps at the display's rate, for smoother motion. The original draws one frame per step, 60 per second.
+
+	*high_fps*
+
+.. _x3d_high_res:
+
+High resolution
+	Draws the 3D at the window's resolution with OpenGL. The original draws 640x480, scaled up to the window.
+
+	*high_res*
+
+.. _x3d_widescreen:
+
+Widescreen
+	Shows more of the scene to the sides on a wide display.
+
+	*widescreen*
+
+.. _x3d_max_detail:
+
+Full detail at any distance
+	Always draws the most detailed version of each object, never the simpler distant ones.
+
+	*max_detail*
+
+.. _x3d_filter_textures:
+
+Improved texture filtering
+	Smooths and sharpens distant and slanted textures with mipmaps and anisotropic filtering. Needs high resolution.
+
+	*filter_textures*
+
+.. _x3d_run_toggle:
+
+Run toggle
+	The run key switches running on and off instead of running while held.
+
+	*run_toggle*
+
+.. _x3d_crouch_toggle:
+
+Crouch toggle
+	The crouch key switches crouching on and off instead of crouching while held.
+
+	*crouch_toggle*
+
+.. _x3d_modern_controls:
+
+Modern controls
+	Looks around with the mouse and clicks at the centre of the screen; WASD walk and strafe, and a right click opens the inventory.
+
+	*modern_controls*
+
+.. _x3d_invert_y:
+
+Invert mouse look
+	With modern controls, moving the mouse up looks down.
+
+	*invert_y*
+
+.. _x3d_mouse_sensitivity:
+
+Mouse look speed
+	How fast the mouse turns the view with modern controls, from 50% to 200%.
+
+	*mouse_sensitivity*
+
+.. _x3d_turn_speed:
+
+Turn speed
+	How fast the arrow keys turn the view and look up or down, from 50% to 150%. 100% is the original.
+
+	*turn_speed*
+
+.. _x3d_fov:
+
+Field of view
+	Horizontal field of view while walking around, from 90 to 110 degrees. 90 is the original; the scripted views keep theirs.
+
+	*fov*
 
 ,,,,,,,,,,
 
