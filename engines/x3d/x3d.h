@@ -24,6 +24,7 @@
 
 #include "common/array.h"
 #include "common/events.h"
+#include "common/hashmap.h"
 #include "common/rect.h"
 #include "common/scummsys.h"
 #include "common/str.h"
@@ -54,13 +55,14 @@ class Sound;
 class Talk;
 class Unit;
 
-// Keymapper actions (metaengine.cpp); each up to Crouch stands for the original's key,
-// the strafes (modern controls only) for none
+// Keymapper actions (metaengine.cpp): the original's keys, the strafes of the modern
+// controls, and the hotspot overlay
 enum Action {
 	kActionNone,
 	kActionForward, kActionBackward, kActionTurnLeft, kActionTurnRight, kActionLookUp,
 	kActionLookDown, kActionRun, kActionJump, kActionInventory, kActionMenu, kActionSkip, kActionCrouch,
-	kActionStrafeLeft, kActionStrafeRight, kActionToggleHotspots
+	kActionStrafeLeft, kActionStrafeRight, kActionToggleHotspots,
+	kActionSaveMenu, kActionVolumeUp, kActionVolumeDown
 };
 
 class X3DEngine : public Engine {
@@ -74,17 +76,17 @@ public:
 		       (f == kSupportsArbitraryResolutions && _nativeResolution);
 	}
 
-	// Saves (engines/x3d/docs/spec/save.md): the scene's state as the original stores it, in
-	// ScummVM's save files; a load switches to the saved scene and restores it there
+	// Saves: the scene's state as the original stores it, in ScummVM's save files; a load
+	// switches to the saved scene and restores it there
 	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
 	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
 	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave = false) override;
 	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
 	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
 	Common::Error loadGameState(int slot) override;
-	// A game over (u01.md caught, u02.md): the load screen, else the Option menu
+	// A game over: the load screen, else the Option menu
 	void gameOver();
-	// The scene gauge (u01.md): a bar that empties over ms while visible; expired() is
+	// The scene gauge: a bar that empties over ms while visible; expired() is
 	// true once, when it runs out, and stops it
 	struct Gauge {
 		uint32 ms = 0, start = 0;
@@ -100,8 +102,14 @@ public:
 	void setGauge(const Gauge &g) { _gauge = g; }
 	bool gaugeExpired();
 	void syncGauge(Common::Serializer &s);
-	void storeHeldItem(); // a held item back into the bar (E-0210)
-	void actionToKey(Common::Event &e);
+	void storeHeldItem(); // a held item back into the bar
+	// Every event as the engine takes it: mouse positions in the logical frame, a resized
+	// window resizes the frame, and the hotspot overlay toggle is handled (and dropped)
+	void processEvent(Common::Event &e);
+	// The game's text for a Message.txt line, or an English fallback for the few the engine uses
+	Common::String message(uint id) const;
+	// Autosaves into the autosave slot, named as the original names its automatic save
+	void autosave();
 	Unit *createUnit(const Common::String &sceneName); // the scene's unit code, or nullptr
 	// The last view redrawn at thumbnail size (save thumbnails in 3D mode), or nullptr
 	Graphics::Surface *thumbnail(int width, int height);
@@ -120,8 +128,7 @@ public:
 	bool toScreen(const Math::Vector3d &p, Common::Point &s) const; // the pick's projection
 	bool picks(const Common::Point &s, int target); // a click at s reaches hotspot target
 
-	// Script primitives for unit code (movement.md, "Scripted camera moves"; u01.md).
-	// They run frames until done, like the original's blocking loops: animation, sound
+	// Script primitives for unit code (scripted camera moves). They run frames until done, like the original's blocking loops: animation, sound
 	// and rendering go on, the player's camera input does not.
 	// 0: one frame. walk: the camera keys and the unit's input hook stay on (the original's
 	// "RunFor + generic input" waits), clicks and Escape do not.
@@ -135,14 +142,14 @@ public:
 	void setView(const float *position, float yaw, float pitch); // a cut, no interpolation
 	bool enterHeld() const { return _enterHeld; }
 	uint32 logicMs() const { return _logicMs; } // logic time in the scene (ms)
-	// Suspend: no cursor, camera keys or clicks (u01.md)
+	// Suspend: no cursor, camera keys or clicks
 	void suspend(bool suspended);
 	void startSkip();
 	void endSkip();
 	/** This step's camera belongs to a ride (the train, the boat): mouse look waits (enhancement). */
 	void rideView() { _rideView = true; }
 	bool suspended() const { return _suspended; }
-	// The unit's start runs for a load: the saved state is already in place (save.md)
+	// The unit's start runs for a load: the saved state is already in place
 	bool restoring() const { return _restoring; }
 	// A pending load keeps its scene: a sequence that goes on after it cannot replace it
 	void gotoScene(const Common::String &name) {
@@ -156,19 +163,19 @@ public:
 	// then only Enter ends it, stopping the voice, and sounds already playing go on.
 	// keepSounds: sounds already playing go on (U33's films)
 	void playVideo(const Common::String &name, const Common::String &wav = "", uint32 action = 0, bool keepSounds = false);
-	void fadeToBlack(uint32 ms); // the ambient light down to 0 over ms (u01.md, caught)
+	void fadeToBlack(uint32 ms); // the ambient light down to 0 over ms
 
-	// A frame's list view (save.md "Lists"): its rows, the selected one, and the names a
+	// A frame's list view: its rows, the selected one, and the names a
 	// row click copies into the edit (players list)
 	struct MenuList {
 		Common::StringArray rows, names;
 		int selected = -1;
 	};
-	// Shows a frame until a command is chosen (ui.md); returns the command, "escape", or
-	// "enter". The scene, if any, stays frozen underneath. text: the edit's first text, the
-	// caret at its end (ui.md, Players screen).
+	// Shows a frame until a command is chosen; returns the command, "escape", or "enter".
+	// The scene, if any, stays frozen underneath. text: the edit's first text, the caret at
+	// its end.
 	Common::String runMenu(const Common::String &name, MenuList *list = nullptr, const Common::String &text = "");
-	// The OptionSave and OptionLoad screens over ScummVM's save slots (save.md); load:
+	// The OptionSave and OptionLoad screens over ScummVM's save slots; load:
 	// true when a game was loaded
 	void saveMenu();
 	// A frame already loaded, until a command; timeout (ms) returns "timeout", a key on a
@@ -181,14 +188,14 @@ public:
 	bool paintingScreens(uint index, uint count);
 	void magnifier(const Common::String &painting);
 	void returnToPainting(const Common::String &painting); // Escape in the 3D view
-	int playerUnit() const; // the unit of the player's last save (ui.md Gallery)
+	int playerUnit() const; // the unit of the player's last save (for the gallery)
 	bool loadMenu();
-	// Players (ui.md SelectUser): true when the name is new, which is then added
+	// Players (SelectUser): true when the name is new, which is then added
 	bool selectPlayer(const Common::String &name);
 	Common::StringArray players(Common::String *current = nullptr) const; // current: the last selected
 	void readPlayers(Common::StringArray &names, Common::Array<int> &units, Common::String *current = nullptr) const;
 	void writePlayers(const Common::StringArray &names, const Common::Array<int> &units);
-	// The Option menu (ui.md): its chosen command (OptionNouvelleP, OptionEntrenement), or
+	// The Option menu: its chosen command (OptionNouvelleP, OptionEntrenement), or
 	// empty when quitting; afterOptionMenu goes where it leads
 	Common::String optionMenu();
 	void afterOptionMenu(const Common::String &command);
@@ -200,7 +207,7 @@ public:
 	void queueCommand(const Common::String &line) { _devCommands.insert_at(0, "0:" + line); } // runs on the next frame
 
 	static constexpr float kKeep = 100.0f;
-	bool u02Warned = false; // U02's gauge warning, said once per process (u02.md)
+	bool u02Warned = false; // U02's gauge warning, said once per process
 
 	// The running scene
 	Scene *scene() { return _scene; }
@@ -214,7 +221,7 @@ public:
 	const Keys &keys() const { return _keys; }
 
 	// Logic steps per second. The original ran one step per rendered frame; its frame rate
-	// is unknown (Q-0022), so this rate is provisional and sets the turn speed.
+	// is not known, so this rate is an estimate, and it sets the turn speed.
 	static const uint kStepsPerSecond = 60;
 
 protected:
@@ -225,6 +232,11 @@ private:
 	void playScene(const Common::String &sceneName);
 	// One pass of the main loop: events, the logic steps due, hover/click, rendering
 	void frame(bool input);
+	bool pollInput(bool input, const Common::Point &centre); // this frame's events; true when the captured mouse moved
+	void updatePointer(const Camera &camera, uint32 now, bool input); // cursor, hover and click
+	void drawFrame(const Camera &camera, float alpha);
+	void handleEscape(); // the Escape menu over the frozen scene
+	void runUnitCode(); // queued click actions and the unit's per-frame checks
 	void logicStep(bool input);
 	Camera viewCamera(float alpha) const; // the player's view, alpha of the way from the last step
 	void showBitmap(const Common::Path &path);
@@ -244,7 +256,7 @@ private:
 	bool _nativeResolution = false; // the renderer draws at the window's size
 	bool _inGameOver = false;       // no saves until the next scene or load
 	Video::VideoDecoder *_video = nullptr; // the video playing, if any
-	bool _practice = false; // Practice was chosen (u00.md): U00 without the players screen
+	bool _practice = false; // Practice was chosen: U00 without the players screen
 	Player _player, _previous;
 	Keys _keys;
 	bool _enterHeld = false, _suspended = false;
@@ -255,6 +267,7 @@ private:
 	Common::Array<int> _devClicks;
 	Common::StringArray _devCommands; // "ms:command", from dev_commands
 	bool _restoring = false;
+	Common::String _devSnap; // console "snap": the next frame's file
 	uint32 _devUp = 0, _devDown = 0, _devShift = 0, _devCrouch = 0; // console "press": held until these times (ms)
 	uint32 _sceneStart = 0, _devStart = 0;
 	bool _devParsed = false, _devMenuParsed = false;
@@ -292,6 +305,8 @@ private:
 	Gauge _gauge;
 	int _menuView = -1;  // the view index of the last frame click
 	Common::String _playerName;
+	mutable Common::HashMap<uint, Common::String> _messages; // Message.txt, loaded on first use
+	mutable bool _messagesLoaded = false;
 	Common::String _gallery3D; // the painting whose 3D scene the next scene is
 
 	// Modern controls (an option, not in the original): in free play the mouse is captured,

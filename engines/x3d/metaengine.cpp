@@ -251,7 +251,8 @@ const char *X3DMetaEngine::getName() const {
 }
 
 void X3DMetaEngine::getSavegameThumbnail(Graphics::Surface &thumb) {
-	// The 3D screen cannot be read back by ScummVM: the engine redraws its last view
+	// The 3D screen cannot be read back by ScummVM: the engine redraws its last view (the
+	// centred 4:3 part of a widescreen one)
 	if (X3D::X3DEngine *engine = static_cast<X3D::X3DEngine *>(g_engine)) {
 		if (Graphics::Surface *small = engine->thumbnail(160, 120)) {
 			thumb.copyFrom(*small);
@@ -262,29 +263,33 @@ void X3DMetaEngine::getSavegameThumbnail(Graphics::Surface &thumb) {
 }
 
 Common::KeymapArray X3DMetaEngine::initKeymaps(const char *target) const {
-	// The original's keys (movement.md, ui.md) as remappable actions, and the same actions
-	// on modern keys (the modern_controls option; the engine enables one of the two)
+	// The original's keys as remappable actions, and the same actions on modern keys (the
+	// modern_controls option; the engine enables one of the two keymaps). key2: another
+	// key of the original for the same action, in both keymaps.
 	using namespace Common;
 	Keymap *keymap = new Keymap(Keymap::kKeymapTypeGame, "x3d-default", _("Default keymappings"));
 	Keymap *modern = new Keymap(Keymap::kKeymapTypeGame, "x3d-modern", _("Modern keymappings"));
 	static const struct {
-		const char *id, *label, *key, *modernKey, *joy;
+		const char *id, *label, *key, *key2, *modernKey, *joy;
 		X3D::Action action;
 	} actions[] = {
-		{ "FORWARD", _s("Walk forward"), "UP", "w", "JOY_UP", X3D::kActionForward },
-		{ "BACKWARD", _s("Walk backward"), "DOWN", "s", "JOY_DOWN", X3D::kActionBackward },
-		{ "LEFT", _s("Turn left"), "LEFT", "LEFT", "JOY_LEFT", X3D::kActionTurnLeft },
-		{ "RIGHT", _s("Turn right"), "RIGHT", "RIGHT", "JOY_RIGHT", X3D::kActionTurnRight },
-		{ "STRAFELEFT", _s("Strafe left"), nullptr, "a", nullptr, X3D::kActionStrafeLeft },
-		{ "STRAFERIGHT", _s("Strafe right"), nullptr, "d", nullptr, X3D::kActionStrafeRight },
-		{ "LOOKUP", _s("Look up"), "PAGEUP", "PAGEUP", "JOY_LEFT_SHOULDER", X3D::kActionLookUp },
-		{ "LOOKDOWN", _s("Look down"), "PAGEDOWN", "PAGEDOWN", "JOY_RIGHT_SHOULDER", X3D::kActionLookDown },
-		{ "RUN", _s("Run"), "LCTRL", "LSHIFT", "JOY_B", X3D::kActionRun },
-		{ "JUMP", _s("Jump"), "LSHIFT", "SPACE", "JOY_Y", X3D::kActionJump },
-		{ "INVENTORY", _s("Inventory"), "SPACE", "MOUSE_RIGHT", "JOY_X", X3D::kActionInventory },
-		{ "MENU", _s("Menu"), "ESCAPE", "ESCAPE", "JOY_START", X3D::kActionMenu },
-		{ "SKIP", _s("Skip"), "RETURN", "RETURN", "JOY_BACK", X3D::kActionSkip },
-		{ "CROUCH", _s("Crouch"), "KP0", "LCTRL", "JOY_LEFT_STICK", X3D::kActionCrouch },
+		{ "FORWARD", _s("Walk forward"), "UP", nullptr, "w", "JOY_UP", X3D::kActionForward },
+		{ "BACKWARD", _s("Walk backward"), "DOWN", nullptr, "s", "JOY_DOWN", X3D::kActionBackward },
+		{ "LEFT", _s("Turn left"), "LEFT", nullptr, "LEFT", "JOY_LEFT", X3D::kActionTurnLeft },
+		{ "RIGHT", _s("Turn right"), "RIGHT", nullptr, "RIGHT", "JOY_RIGHT", X3D::kActionTurnRight },
+		{ "STRAFELEFT", _s("Strafe left"), nullptr, nullptr, "a", nullptr, X3D::kActionStrafeLeft },
+		{ "STRAFERIGHT", _s("Strafe right"), nullptr, nullptr, "d", nullptr, X3D::kActionStrafeRight },
+		{ "LOOKUP", _s("Look up"), "PAGEUP", nullptr, "PAGEUP", "JOY_LEFT_SHOULDER", X3D::kActionLookUp },
+		{ "LOOKDOWN", _s("Look down"), "PAGEDOWN", nullptr, "PAGEDOWN", "JOY_RIGHT_SHOULDER", X3D::kActionLookDown },
+		{ "RUN", _s("Run"), "LCTRL", "RCTRL", "LSHIFT", "JOY_B", X3D::kActionRun },
+		{ "JUMP", _s("Jump"), "LSHIFT", "RSHIFT", "SPACE", "JOY_Y", X3D::kActionJump },
+		{ "INVENTORY", _s("Inventory"), "SPACE", nullptr, "MOUSE_RIGHT", "JOY_X", X3D::kActionInventory },
+		{ "MENU", _s("Menu"), "ESCAPE", nullptr, "ESCAPE", "JOY_START", X3D::kActionMenu },
+		{ "SAVEMENU", _s("Save menu"), "F5", nullptr, "F5", nullptr, X3D::kActionSaveMenu },
+		{ "SKIP", _s("Skip"), "RETURN", "KP_ENTER", "RETURN", "JOY_BACK", X3D::kActionSkip },
+		{ "CROUCH", _s("Crouch"), "KP0", nullptr, "LCTRL", "JOY_LEFT_STICK", X3D::kActionCrouch },
+		{ "VOLUMEUP", _s("Volume up (in menus)"), "KP_PLUS", nullptr, "KP_PLUS", nullptr, X3D::kActionVolumeUp },
+		{ "VOLUMEDOWN", _s("Volume down (in menus)"), "KP_MINUS", nullptr, "KP_MINUS", nullptr, X3D::kActionVolumeDown },
 	};
 	KeymapArray keymaps;
 	keymaps.push_back(keymap);
@@ -297,6 +302,8 @@ Common::KeymapArray X3DMetaEngine::initKeymaps(const char *target) const {
 			Action *act = new Action(a.id, _(a.label));
 			act->setCustomEngineActionEvent(a.action);
 			act->addDefaultInputMapping(key);
+			if (a.key2)
+				act->addDefaultInputMapping(a.key2);
 			if (a.joy)
 				act->addDefaultInputMapping(a.joy);
 			k->addAction(act);

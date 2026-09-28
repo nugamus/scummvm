@@ -24,10 +24,12 @@
 #include "common/ptr.h"
 #include "common/savefile.h"
 #include "common/serializer.h"
+#include "common/util.h"
 #include "common/debug.h"
 #include "common/events.h"
 #include "common/file.h"
 #include "common/system.h"
+#include "common/tokenizer.h"
 #include "common/translation.h"
 
 #include "backends/keymapper/keymap.h"
@@ -42,6 +44,9 @@
 
 #include "graphics/cursorman.h"
 #include "graphics/hotspot_renderer.h"
+#include "graphics/surface.h"
+
+#include "image/png.h"
 
 #include "gui/message.h"
 
@@ -78,8 +83,8 @@ X3DEngine::~X3DEngine() {
 Common::Error X3DEngine::run() {
 	// All original paths are relative to Data/, which the detector (kADFlagMatchFullPaths)
 	// has already added to SearchMan
-	// The original frames every mode as 4:3 (E-0040); widescreen keeps its height and view
-	// and shows more to the sides. 2D images stay 640x480, centred.
+	// The original frames every mode as 4:3; widescreen keeps its height and view and
+	// shows more to the sides. 2D images stay 640x480, centred.
 	ConfMan.registerDefault("high_fps", false);
 	ConfMan.registerDefault("high_res", false);
 	_highFps = ConfMan.getBool("high_fps");
@@ -102,7 +107,7 @@ Common::Error X3DEngine::run() {
 	keymapper->getKeymap("x3d-modern")->setEnabled(_modern);
 	_renderer = Renderer::create(ConfMan.getBool("widescreen") ? 854 : 640, 480, _nativeResolution);
 	_renderer->updateSize(ConfMan.getBool("widescreen"));
-	_renderer->filterTextures = ConfMan.getBool("filter_textures");
+	_renderer->setFilterTextures(ConfMan.getBool("filter_textures"));
 	_fovExtra = ConfMan.getInt("fov") - 90;
 	_sound = new Sound(_mixer);
 	_inventory = new Inventory();
@@ -111,7 +116,7 @@ Common::Error X3DEngine::run() {
 	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
 	// sequence and the scene's entry video
 	if (!ConfMan.hasKey("start_scene") && !ConfMan.hasKey("save_slot")) {
-		// Boot sequence: engines/x3d/docs/spec/boot.md
+		// Boot sequence: the two intro pictures
 		showBitmap("2dbit/Intro1.bmp");
 		wait(3000);
 		showBitmap("2dbit/Intro2.bmp");
@@ -126,7 +131,7 @@ Common::Error X3DEngine::run() {
 	}
 
 	// U00 shows the players screen and runs Monet's tutorial; the Option menu's New game
-	// then goes to App.bin's start scene (ui.md, Boot to U01)
+	// then goes to App.bin's start scene
 	Common::String sceneName = ConfMan.hasKey("start_scene") ? ConfMan.get("start_scene") : "U00.X3D";
 	// A game chosen in the launcher's load dialog
 	if (ConfMan.hasKey("save_slot"))
@@ -143,38 +148,58 @@ Common::Error X3DEngine::run() {
 	return Common::kNoError;
 }
 
-// Every event as the engine takes it: mouse positions in the logical frame, a resized
-// window resizes the frame, and a keymapper action becomes the key it stands for, so key
-// handling stays in one place
-void X3DEngine::actionToKey(Common::Event &e) {
+void X3DEngine::processEvent(Common::Event &e) {
 	if (Common::isMouseEvent(e))
 		e.mouse = _renderer->toLogical(e.mouse);
 	if (e.type == Common::EVENT_SCREEN_CHANGED)
 		_renderer->updateSize(ConfMan.getBool("widescreen"));
-	if (e.type != Common::EVENT_CUSTOM_ENGINE_ACTION_START && e.type != Common::EVENT_CUSTOM_ENGINE_ACTION_END)
-		return;
 	// ScummVM's hotspot overlay, as a toggle instead of while held; the cursor stays as
 	// it was (the base class hides it while the overlay shows)
-	if (e.customType == kActionToggleHotspots) {
+	if ((e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START || e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_END) &&
+	    e.customType == kActionToggleHotspots) {
 		if (e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START && ConfMan.getBool("enable_hotspots")) {
 			const bool cursor = CursorMan.isVisible();
 			showHotspots(!_showHotspots);
 			CursorMan.showMouse(cursor);
 		}
 		e.type = Common::EVENT_INVALID;
-		return;
 	}
-	static const Common::KeyCode keys[] = {
-		Common::KEYCODE_INVALID, Common::KEYCODE_UP, Common::KEYCODE_DOWN, Common::KEYCODE_LEFT,
-		Common::KEYCODE_RIGHT, Common::KEYCODE_PAGEUP, Common::KEYCODE_PAGEDOWN, Common::KEYCODE_LCTRL,
-		Common::KEYCODE_LSHIFT, Common::KEYCODE_SPACE, Common::KEYCODE_ESCAPE, Common::KEYCODE_RETURN,
-		Common::KEYCODE_KP0
-	};
-	if (e.customType <= kActionNone || e.customType > kActionCrouch)
-		return;
-	const bool down = e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START;
-	e.kbd = Common::KeyState(keys[e.customType]);
-	e.type = down ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
+}
+
+Common::String X3DEngine::message(uint id) const {
+	// Message.txt: lines "<id> <text>;", beside the game's EXE (INSTALL/02_PR on the CD)
+	if (!_messagesLoaded) {
+		_messagesLoaded = true;
+		Common::File file;
+		if (file.open("Message.txt") || file.open("INSTALL/02_PR/Message.txt")) {
+			while (!file.eos() && !file.err()) {
+				const Common::String line = file.readLine();
+				const char *text = strchr(line.c_str(), ' ');
+				if (!text || !Common::isDigit(line[0]))
+					continue;
+				const char *end = strchr(++text, ';');
+				_messages[atoi(line.c_str())] = end ? Common::String(text, end) : Common::String(text);
+			}
+		}
+	}
+	if (_messages.contains(id))
+		return _messages[id];
+	switch (id) {
+	case 1:
+		return "Empty";
+	case 300:
+		return "Save without name";
+	case 301:
+		return "Player's name";
+	case 1003:
+		return "Automatic save";
+	default:
+		return "";
+	}
+}
+
+void X3DEngine::autosave() {
+	saveGameState(getAutosaveSlot(), message(1003), true);
 }
 
 Common::Error X3DEngine::loadGameState(int slot) {
@@ -199,12 +224,18 @@ bool X3DEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 	// Only between the unit's sequences: a save inside one could not replay its end. Not
 	// in the air or during a game over either: ScummVM autosaves before every load, and a
 	// save of the fall would replay the death on each load
-	return _scene && _unit && _unit->gameStarted() && !_suspended && _frameDepth <= 1 &&
-	       !_inGameOver && !_player.falling() && !_player.jumping();
+	const bool can = _scene && _unit && _unit->gameStarted() && !_suspended && _frameDepth <= 1 &&
+	                 !_inGameOver && !_player.falling() && !_player.jumping();
+	if (!can && msg)
+		*msg = _("The game can only be saved while you are free to walk around.");
+	return can;
 }
 
 bool X3DEngine::canLoadGameStateCurrently(Common::U32String *msg) {
-	return _frameDepth <= 1;
+	const bool can = _frameDepth <= 1;
+	if (!can && msg)
+		*msg = _("A game cannot be loaded during a sequence.");
+	return can;
 }
 
 Common::Error X3DEngine::saveGameStream(Common::WriteStream *stream, bool isAutosave) {
@@ -252,7 +283,17 @@ Graphics::Surface *X3DEngine::thumbnail(int width, int height) {
 	// The player's view, not the last one drawn: a unit's entry autosave comes after its
 	// setView, before any frame
 	_scene->draw(viewCamera(1), _renderer->width(), _renderer->height());
-	return _renderer->thumbnail(width, height);
+	// A wider view is scaled to the thumbnail's height and its centre cut out
+	const int fullWidth = MAX(width, height * _renderer->width() / _renderer->height());
+	Graphics::Surface *full = _renderer->thumbnail(fullWidth, height);
+	if (!full || fullWidth == width)
+		return full;
+	const int x = (fullWidth - width) / 2;
+	Graphics::Surface *small = new Graphics::Surface();
+	small->copyFrom(full->getSubArea(Common::Rect(x, 0, x + width, height)));
+	full->free();
+	delete full;
+	return small;
 }
 
 void X3DEngine::storeHeldItem() {
@@ -281,7 +322,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 		error("Unable to load scene %s", sceneName.c_str());
 	_scene = &scene;
 
-	// Sound (sound.md): mode 0 group volumes, the scene's emitters
+	// Sound: the group volumes of sound mode 0, the scene's emitters
 	_sound->setGroupVolume(Sound::kAmbient, 85);
 	_sound->setGroupVolume(4, 80);
 	_sound->setGroupVolume(5, 80);
@@ -290,7 +331,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_talk = &talk;
 	Interaction interaction(scene, *_sound, talk);
 	_interaction = &interaction;
-	// The bar is opened, empty, when the player is chosen (ui.md, Boot to U01)
+	// The bar is opened, empty, when the player is chosen
 	_inventory->attach(&interaction);
 	interaction.inventory = _inventory;
 
@@ -362,7 +403,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	// skips the unit's scripted start
 	if (!_pendingLoad.empty()) {
 		// A load: the unit's load hook has run; restore the saved state, then the unit's
-		// start without its entry (save.md, Loading)
+		// start without its entry
 		Common::MemoryReadStream stream(_pendingLoad.data(), _pendingLoad.size());
 		Common::Serializer s(&stream, nullptr);
 		s.setVersion(_pendingVersion);
@@ -393,7 +434,7 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	while (!shouldQuit() && _nextScene.empty())
 		frame(true);
 
-	// A held item goes back to the bar before the unit changes (E-0251, E-0210)
+	// A held item goes back to the bar before the unit changes
 	storeHeldItem();
 	_clickedHotspot.clear();
 
@@ -468,94 +509,9 @@ void X3DEngine::frame(bool input) {
 	captureMouse(_modern && !_suspended && !_inventory->shown() && _player.canTurn);
 	const bool pointClick = _clickNow;
 	const Common::Point centre(_renderer->width() / 2, _renderer->height() / 2);
-	bool looked = false;
-
-	Common::Event e;
-	while (_system->getEventManager()->pollEvent(e)) {
-		actionToKey(e);
-		if (e.type == Common::EVENT_MOUSEMOVE && _mouseCaptured) {
-			// Mouse look, within the original's pitch limits (movement.md, Keys); the
-			// last step turns too, so the drawn view follows at once. Motion queued
-			// before the capture, or from its warp, does not turn.
-			looked |= e.relMouse.x || e.relMouse.y;
-			if ((input || _walk) && _player.canTurn && !_rideView && _system->getMillis() - _captureStart >= 100 &&
-			    (e.relMouse.x || e.relMouse.y)) {
-				const float dYaw = e.relMouse.x * _lookScale;
-				const float pitch = _player.pitch - (_invertY ? -1 : 1) * e.relMouse.y * _lookScale;
-				// Nearly straight down or up: the original's 0.6..2.7 keeps items at the
-				// feet out of reach of a crosshair
-				const float dPitch = CLIP(pitch, MIN(_player.pitch, 0.05f), MAX(_player.pitch, (float)M_PI - 0.05f)) - _player.pitch;
-				_player.yaw += dYaw;
-				_previous.yaw += dYaw;
-				_player.pitch += dPitch;
-				_previous.pitch += dPitch;
-				_keys.mouseTurn = true;
-			}
-			continue;
-		}
-		if (e.type == Common::EVENT_MOUSEMOVE) {
-			_mouse = e.mouse;
-			_hoverNow = true;
-			continue;
-		}
-		if (e.type == Common::EVENT_LBUTTONDOWN) {
-			debugC(1, kDebugInput, "click %d,%d", e.mouse.x, e.mouse.y);
-			_mouse = _mouseCaptured ? centre : e.mouse;
-			_clickNow = true;
-			continue;
-		}
-		if (e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START || e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_END) {
-			const bool down = e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START;
-			if (e.customType == kActionStrafeLeft)
-				_keys.strafeLeft = down;
-			else if (e.customType == kActionStrafeRight)
-				_keys.strafeRight = down;
-			continue;
-		}
-		if (e.type != Common::EVENT_KEYDOWN && e.type != Common::EVENT_KEYUP)
-			continue;
-		const bool down = e.type == Common::EVENT_KEYDOWN;
-		debugC(3, kDebugInput, "key %d %s", e.kbd.keycode, down ? "down" : "up");
-		if (!down) {
-			debugC(2, kDebugInput, "camera %g,%g,%g,%g,%g", _player.eye.x(), _player.eye.y(), _player.eye.z(), _player.yaw, _player.pitch);
-			_hoverNow = true; // the original re-hovers on every key release
-		}
-		switch (e.kbd.keycode) {
-		case Common::KEYCODE_UP: _keys.up = down; break;
-		case Common::KEYCODE_DOWN: _keys.down = down; break;
-		case Common::KEYCODE_LEFT: _keys.left = down; break;
-		case Common::KEYCODE_RIGHT: _keys.right = down; break;
-		case Common::KEYCODE_PAGEUP: _keys.pageUp = down; break;
-		case Common::KEYCODE_PAGEDOWN: _keys.pageDown = down; break;
-		case Common::KEYCODE_LCTRL:
-		case Common::KEYCODE_RCTRL: _keys.ctrl = down; break;
-		case Common::KEYCODE_RETURN:
-		case Common::KEYCODE_KP_ENTER:
-			_enterHeld = down;
-			if (down && (!input || _suspended))
-				startSkip();
-			break;
-		case Common::KEYCODE_SPACE:
-			_keys.space = down;
-			if (down && input && !_suspended)
-				_inventory->toggle();
-			break;
-		case Common::KEYCODE_LSHIFT:
-		case Common::KEYCODE_RSHIFT: _keys.shift = down; break;
-		case Common::KEYCODE_KP0: _keys.crouch = down; break;
-		case Common::KEYCODE_ESCAPE:
-		case Common::KEYCODE_F5: // the same in play (ui.md, Escape)
-			if (down && input && !_suspended && !_escapeBlocked)
-				_escapeNow = true;
-			else if (down && (!input || _suspended) && e.kbd.keycode == Common::KEYCODE_ESCAPE)
-				startSkip();
-			break;
-		default: break;
-		}
-	}
+	const bool looked = pollInput(input, centre);
 
 	// Logic runs in fixed steps; rendering interpolates the camera between the last two
-	// (movement.md, Engine model)
 	const uint32 stepMs = 1000 / kStepsPerSecond;
 	const uint32 now = _system->getMillis();
 	if (_devUp) {
@@ -610,9 +566,142 @@ void X3DEngine::frame(bool input) {
 		             memcmp(camera.position, _camera.position, sizeof(camera.position));
 		_mouse = centre;
 	}
+	updatePointer(camera, now, input);
 
-	// Hover and click (interaction.md): clicks closer together than one frame + 10 ms are
-	// ignored; nothing counts beyond 4 scene units of depth
+	_camera = camera;
+	if (drawNow)
+		drawFrame(camera, alpha);
+	if (!_skipping) {
+		// Without high_fps nothing is drawn before the next step: sleep until it is due,
+		// 10 ms at most so that input stays responsive
+		const uint32 due = _pending + (_system->getMillis() - now);
+		_system->delayMillis(!_highFps && due < stepMs ? CLIP<uint32>(stepMs - due, 1, 10) : 1);
+	}
+
+	if (now - _fpsStart >= 5000) {
+		debugC(2, kDebugGraphics, "%u frames per second", _frames * 1000 / (now - _fpsStart));
+		_frames = 0;
+		_fpsStart = now;
+	}
+
+	if (_escapeNow) {
+		_escapeNow = false;
+		handleEscape();
+	}
+	if (input)
+		runUnitCode();
+}
+
+bool X3DEngine::pollInput(bool input, const Common::Point &centre) {
+	// The game's keys come as keymapper actions, so they follow the player's remapping
+	bool looked = false;
+	Common::Event e;
+	while (_system->getEventManager()->pollEvent(e)) {
+		processEvent(e);
+		if (e.type == Common::EVENT_MOUSEMOVE && _mouseCaptured) {
+			// Mouse look, within the original's pitch limits; the last step turns too, so
+			// the drawn view follows at once. Motion queued before the capture, or from its
+			// warp, does not turn.
+			looked |= e.relMouse.x || e.relMouse.y;
+			if ((input || _walk) && _player.canTurn && !_rideView && _system->getMillis() - _captureStart >= 100 &&
+			    (e.relMouse.x || e.relMouse.y)) {
+				const float dYaw = e.relMouse.x * _lookScale;
+				const float pitch = _player.pitch - (_invertY ? -1 : 1) * e.relMouse.y * _lookScale;
+				// Nearly straight down or up: the original's 0.6..2.7 keeps items at the
+				// feet out of reach of a crosshair
+				const float dPitch = CLIP(pitch, MIN(_player.pitch, 0.05f), MAX(_player.pitch, (float)M_PI - 0.05f)) - _player.pitch;
+				_player.yaw += dYaw;
+				_previous.yaw += dYaw;
+				_player.pitch += dPitch;
+				_previous.pitch += dPitch;
+				_keys.mouseTurn = true;
+			}
+			continue;
+		}
+		if (e.type == Common::EVENT_MOUSEMOVE) {
+			_mouse = e.mouse;
+			_hoverNow = true;
+			continue;
+		}
+		if (e.type == Common::EVENT_LBUTTONDOWN) {
+			debugC(1, kDebugInput, "click %d,%d", e.mouse.x, e.mouse.y);
+			_mouse = _mouseCaptured ? centre : e.mouse;
+			_clickNow = true;
+			continue;
+		}
+		if (e.type == Common::EVENT_KEYUP) {
+			_hoverNow = true; // the original re-hovers on every key release
+			continue;
+		}
+		if (e.type != Common::EVENT_CUSTOM_ENGINE_ACTION_START && e.type != Common::EVENT_CUSTOM_ENGINE_ACTION_END)
+			continue;
+		const bool down = e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START;
+		debugC(3, kDebugInput, "action %d %s", e.customType, down ? "down" : "up");
+		if (!down) {
+			debugC(2, kDebugInput, "camera %g,%g,%g,%g,%g", _player.eye.x(), _player.eye.y(), _player.eye.z(), _player.yaw, _player.pitch);
+			_hoverNow = true;
+		}
+		switch (e.customType) {
+		case kActionForward:
+			_keys.up = down;
+			break;
+		case kActionBackward:
+			_keys.down = down;
+			break;
+		case kActionTurnLeft:
+			_keys.left = down;
+			break;
+		case kActionTurnRight:
+			_keys.right = down;
+			break;
+		case kActionLookUp:
+			_keys.pageUp = down;
+			break;
+		case kActionLookDown:
+			_keys.pageDown = down;
+			break;
+		case kActionRun:
+			_keys.ctrl = down;
+			break;
+		case kActionJump:
+			_keys.shift = down;
+			break;
+		case kActionCrouch:
+			_keys.crouch = down;
+			break;
+		case kActionStrafeLeft:
+			_keys.strafeLeft = down;
+			break;
+		case kActionStrafeRight:
+			_keys.strafeRight = down;
+			break;
+		case kActionSkip:
+			_enterHeld = down;
+			if (down && (!input || _suspended))
+				startSkip();
+			break;
+		case kActionInventory:
+			_keys.space = down;
+			if (down && input && !_suspended)
+				_inventory->toggle();
+			break;
+		case kActionMenu:
+		case kActionSaveMenu: // the same in play; only the menu key skips a sequence
+			if (down && input && !_suspended && !_escapeBlocked)
+				_escapeNow = true;
+			else if (down && (!input || _suspended) && e.customType == kActionMenu)
+				startSkip();
+			break;
+		default:
+			break;
+		}
+	}
+	return looked;
+}
+
+void X3DEngine::updatePointer(const Camera &camera, uint32 now, bool input) {
+	// Hover and click: clicks closer together than one frame + 10 ms are ignored; nothing
+	// counts beyond 4 scene units of depth
 	const bool interactive = input && !_suspended;
 	_freePlay = interactive;
 	// Modern controls: no cursor while it has no use (scripted scenes, dialogue), so none
@@ -626,7 +715,7 @@ void X3DEngine::frame(bool input) {
 	if (_clickNow && (!interactive || now - _lastClick < 1000 / kStepsPerSecond + 10))
 		_clickNow = false;
 	_interaction->setCursorScale(_renderer->pixelScale());
-	// The inventory bar takes the mouse before the scene (ui.md, Frame manager)
+	// The inventory bar takes the mouse before the scene
 	const int x2d = (_renderer->width() - 640) / 2;
 	const Common::Point mouse2d(_mouse.x - x2d, _mouse.y);
 	const bool overBar = interactive && _inventory->contains(mouse2d);
@@ -667,79 +756,79 @@ void X3DEngine::frame(bool input) {
 	}
 	if (interactive && !overBar)
 		_interaction->hover(_hotspot, now);
+}
 
-	_camera = camera;
-	if (drawNow) {
-		// At alpha 0 too: the camera is then at the step's start, and so must the objects be
-		if (_scene->interpolate(alpha)) {
-			if (_unit)
-				_unit->afterAnimate();
-			_scene->poseAll();
-			_posedBetween = true;
-		}
-		_scene->draw(camera, _renderer->width(), _renderer->height());
-		refreshHotspots();
-		if (_showHotspots && _freePlay)
-			_scene->drawHighlight(_highlight);
-		_inventory->draw(*_renderer, x2d);
+void X3DEngine::drawFrame(const Camera &camera, float alpha) {
+	// At alpha 0 too: the camera is then at the step's start, and so must the objects be
+	if (_scene->interpolate(alpha)) {
 		if (_unit)
-			_unit->draw();
-		if (_gauge.ms && _gauge.visible)
-			drawGauge(_renderer, MIN(1.0f, (_logicMs - _gauge.start) / (float)_gauge.ms));
-		drawHotspots();
-		_renderer->present();
-		_frames++;
+			_unit->afterAnimate();
+		_scene->poseAll();
+		_posedBetween = true;
 	}
-	if (!_skipping)
-		_system->delayMillis(1);
-
-	if (now - _fpsStart >= 5000) {
-		debugC(2, kDebugGraphics, "%u frames per second", _frames * 1000 / (now - _fpsStart));
-		_frames = 0;
-		_fpsStart = now;
-	}
-
-	// Escape in a game: "Do you want to save?" over the frozen scene (ui.md, Escape)
-	if (_escapeNow) {
-		_escapeNow = false;
-		// In a game a held item goes back to the bar first; in U00 it stays on the
-		// cursor (E-0210)
-		if (!_unit || _unit->gameStarted())
-			storeHeldItem();
-		if (_unit && _unit->escape()) {
-			// The unit's own Escape (the gallery's 3D view)
-		} else if (_unit && !_unit->gameStarted()) {
-			// No game yet (U00): the Option menu at once, the ambient stopped (ui.md, Escape)
-			_sound->stopGroup(Sound::kAmbient);
-			afterOptionMenu(optionMenu());
-		} else {
-			const Common::String c = runMenu("Save");
-			if (c == "SaveOui")
-				saveMenu();
-			else if (c == "SaveNon")
-				afterOptionMenu(optionMenu());
+	_scene->draw(camera, _renderer->width(), _renderer->height());
+	refreshHotspots();
+	if (_showHotspots && _freePlay)
+		_scene->drawHighlight(_highlight);
+	_inventory->draw(*_renderer, (_renderer->width() - 640) / 2);
+	if (_unit)
+		_unit->draw();
+	if (_gauge.ms && _gauge.visible)
+		drawGauge(_renderer, MIN(1.0f, (_logicMs - _gauge.start) / (float)_gauge.ms));
+	drawHotspots();
+	if (!_devSnap.empty()) {
+		// Console "snap": this frame as drawn, to a PNG
+		Common::DumpFile out;
+		if (Graphics::Surface *shot = _renderer->thumbnail(_renderer->width(), _renderer->height())) {
+			if (out.open(Common::Path(_devSnap, '/')))
+				Image::writePNG(out, *shot);
+			shot->free();
+			delete shot;
 		}
-		_last = _system->getMillis();
+		_devSnap.clear();
 	}
+	_renderer->present();
+	_frames++;
+}
 
+void X3DEngine::handleEscape() {
+	// Escape in a game: "Do you want to save?" over the frozen scene. In a game a held item
+	// goes back to the bar first; before one (U00) it stays on the cursor.
+	if (!_unit || _unit->gameStarted())
+		storeHeldItem();
+	if (_unit && _unit->escape()) {
+		// The unit's own Escape (the gallery's 3D view)
+	} else if (_unit && !_unit->gameStarted()) {
+		// No game yet (U00): the Option menu at once, the ambient stopped
+		_sound->stopGroup(Sound::kAmbient);
+		afterOptionMenu(optionMenu());
+	} else {
+		const Common::String c = runMenu("Save");
+		if (c == "SaveOui")
+			saveMenu();
+		else if (c == "SaveNon")
+			afterOptionMenu(optionMenu());
+	}
+	_last = _system->getMillis();
+}
+
+void X3DEngine::runUnitCode() {
 	// The unit's code: queued click actions, then its per-frame checks. Both may run
 	// blocking sequences (nested frames).
-	if (input) {
-		while (!_unitActions.empty() && !shouldQuit()) {
-			const Common::String action = _unitActions.remove_at(0);
-			if (!_unit || !_unit->handle(action))
-				warning("Unit action %s is not implemented", action.c_str());
-		}
-		// The click handler's check after the queue (u01.md, E-0250)
-		if (!_clickedHotspot.empty()) {
-			const Common::String hotspot = _clickedHotspot;
-			_clickedHotspot.clear();
-			if (_unit)
-				_unit->afterClick(hotspot);
-		}
-		if (_unit)
-			_unit->afterFrame();
+	while (!_unitActions.empty() && !shouldQuit()) {
+		const Common::String action = _unitActions.remove_at(0);
+		if (!_unit || !_unit->handle(action))
+			warning("Unit action %s is not implemented", action.c_str());
 	}
+	// The click handler's check, after the queue
+	if (!_clickedHotspot.empty()) {
+		const Common::String hotspot = _clickedHotspot;
+		_clickedHotspot.clear();
+		if (_unit)
+			_unit->afterClick(hotspot);
+	}
+	if (_unit)
+		_unit->afterFrame();
 }
 
 Camera X3DEngine::viewCamera(float alpha) const {
@@ -759,7 +848,7 @@ Camera X3DEngine::viewCamera(float alpha) const {
 }
 
 void X3DEngine::runFor(uint32 ms, bool walk) {
-	// 0 = one frame, which includes an animation tick (movement.md)
+	// 0 = one frame, which includes an animation tick
 	const uint32 end = _logicMs + MAX<uint32>(ms, 1);
 	const bool outer = _walk;
 	_walk = walk;
@@ -777,7 +866,7 @@ static float wrapAngle(float a) {
 
 void X3DEngine::moveTo(uint32 ms, const float *position, float yaw, float pitch, float fov) {
 	// N steps of 1/N of the difference each, then the targets; angles the short way
-	// round, 100.0 keeps (movement.md, E-0050)
+	// round, 100.0 (kKeep) keeps the current value
 	const uint n = MAX<uint>(1, ms * kStepsPerSecond / 1000);
 	Math::Vector3d target = position ? Math::Vector3d(position[0], position[1], position[2]) : _player.eye;
 	float dYaw = 0, dPitch = 0;
@@ -816,7 +905,7 @@ void X3DEngine::moveTo(uint32 ms, const float *position, float yaw, float pitch,
 }
 
 void X3DEngine::lookAt(uint32 ms, const Math::Vector3d &target) {
-	// The yaw and pitch whose view direction points at the target (E-0040)
+	// The yaw and pitch whose view direction points at the target
 	const Math::Vector3d d = target - _player.eye;
 	const float len = d.getMagnitude();
 	if (len == 0) {
@@ -893,20 +982,20 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 	while (result.empty() && !shouldQuit()) {
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
-			actionToKey(e);
+			processEvent(e);
 			if (e.type == Common::EVENT_MOUSEMOVE || e.type == Common::EVENT_LBUTTONDOWN) {
 				_mouse = e.mouse;
 				frame.drag(Common::Point(_mouse.x - x2d, _mouse.y));
 			}
 			if (e.type == Common::EVENT_LBUTTONUP)
 				frame.release();
-			// A click acts on press (ui.md, Events)
+			// A click acts on press
 			if (e.type == Common::EVENT_LBUTTONDOWN) {
 				const Common::Point p(_mouse.x - x2d, _mouse.y);
 				const int row = list ? frame.listRowAt(p) : -1;
 				if (row >= 0) {
 					frame.selectRow(row);
-					// Windows' double click on the players list: SelectUser (ui.md)
+					// Windows' double click on the players list: SelectUser
 					const uint32 now = _system->getMillis();
 					if (!list->names.empty() && lastPress && now - lastPress <= 500 &&
 						ABS(p.x - lastPoint.x) <= 2 && ABS(p.y - lastPoint.y) <= 2 && frame.selectedRow() >= 0) {
@@ -921,17 +1010,28 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 					result = frame.commandAt(_menuView);
 				}
 			}
+			// Keys come as keymapper actions, except on a frame with a text edit, which
+			// turns the keymap off and reads the keys as typed
+			int volume = 0;
+			if (e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START) {
+				if (e.customType == kActionMenu)
+					result = "escape";
+				else if (e.customType == kActionSkip)
+					result = "enter";
+				else if (e.customType == kActionVolumeUp || e.customType == kActionVolumeDown)
+					volume = e.customType == kActionVolumeUp ? 10 : -10;
+				else
+					result = "key";
+			}
 			if (e.type == Common::EVENT_KEYDOWN) {
-				if (e.kbd.keycode == Common::KEYCODE_ESCAPE) {
+				if (!frame.hasEdit()) {
+					result = "key"; // a key without an action
+				} else if (e.kbd.keycode == Common::KEYCODE_ESCAPE) {
 					result = "escape";
 				} else if (e.kbd.keycode == Common::KEYCODE_RETURN || e.kbd.keycode == Common::KEYCODE_KP_ENTER) {
 					result = "enter";
 				} else if (e.kbd.keycode == Common::KEYCODE_KP_PLUS || e.kbd.keycode == Common::KEYCODE_KP_MINUS) {
-					// Every sound group +-10 while a frame is open (E-0604)
-					for (int g = 1; g <= 6; g++)
-						_sound->setGroupVolume(g, _sound->groupVolume(g) + (e.kbd.keycode == Common::KEYCODE_KP_PLUS ? 10 : -10));
-				} else if (!frame.hasEdit()) {
-					result = "key";
+					volume = e.kbd.keycode == Common::KEYCODE_KP_PLUS ? 10 : -10;
 				} else if (e.kbd.keycode == Common::KEYCODE_BACKSPACE) {
 					frame.backspace();
 				} else if (e.kbd.keycode == Common::KEYCODE_LEFT || e.kbd.keycode == Common::KEYCODE_RIGHT) {
@@ -940,6 +1040,9 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 					frame.type(e.kbd.ascii);
 				}
 			}
+			// Every sound group +-10 while a frame is open
+			for (int g = 1; volume && g <= 6; g++)
+				_sound->setGroupVolume(g, _sound->groupVolume(g) + volume);
 		}
 		if (timeout && result.empty() && _system->getMillis() - start >= timeout)
 			result = "timeout";
@@ -999,7 +1102,7 @@ bool X3DEngine::picks(const Common::Point &s, int target) {
 	uint o;
 	float depth;
 	// At any distance, unlike a click (4 scene units): the overlay shows everything that
-	// works, near or far (user, 2026-09-28)
+	// works, near or far
 	if (!_scene->pick(_camera, _renderer->width(), _renderer->height(), s.x, s.y, model, o, depth))
 		return false;
 	Common::StringArray names;
@@ -1191,20 +1294,14 @@ bool X3DEngine::hotspotDirty() const {
 Common::String X3DEngine::command(const Common::String &line) {
 	if (!_scene)
 		return "no scene";
-	Common::StringArray a;
-	Common::String w;
-	for (uint i = 0; i <= line.size(); i++) {
-		if (i == line.size() || line[i] == ' ') {
-			if (!w.empty())
-				a.push_back(w);
-			w.clear();
-		} else {
-			w += line[i];
-		}
-	}
+	const Common::StringArray a = Common::StringTokenizer(line, " ").split();
 	if (a.empty())
 		return "";
 	const Common::String &c = a[0];
+	if (c == "snap" && a.size() >= 2) { // the next frame to a PNG file
+		_devSnap = a[1];
+		return "ok";
+	}
 	if (c == "where") {
 		_player.probeGround(*_collision);
 		float t = 1;
@@ -1364,7 +1461,7 @@ void X3DEngine::captureMouse(bool capture) {
 }
 
 void X3DEngine::startSkip() {
-	// Any scripted sequence can be skipped (user, 2026-09-28): voices stop, effects are
+	// Any scripted sequence can be skipped (an enhancement): voices stop, effects are
 	// muted until it is over
 	if (_skipping)
 		return;
@@ -1405,7 +1502,7 @@ void X3DEngine::wait(uint32 ms) {
 	while (!shouldQuit() && _system->getMillis() - start < ms) {
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e))
-			actionToKey(e); // a resized window still resizes the frame
+			processEvent(e); // a resized window still resizes the frame
 		_system->delayMillis(10);
 	}
 }
@@ -1428,7 +1525,8 @@ void X3DEngine::startGauge(uint32 ms, bool visible, const Common::String &label)
 }
 
 void X3DEngine::syncGauge(Common::Serializer &s) {
-	// save.md JAUGE: duration and elapsed; a restore resumes with the remainder
+	// The gauge as the original saves it (JAUGE): duration and elapsed; a restore resumes
+	// with the remainder
 	uint32 elapsed = _logicMs - _gauge.start;
 	s.syncAsUint32LE(_gauge.ms, 3);
 	s.syncAsUint32LE(elapsed, 3);
@@ -1454,7 +1552,7 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 
 	video.start();
 	if (!action && !keepSounds) {
-		_sound->stopAll(); // a video stops every sound (sound.md)
+		_sound->stopAll(); // a video stops every sound
 	} else if (action && _interaction) {
 		Common::StringArray ignored;
 		_interaction->runAction(action, ignored);
@@ -1478,9 +1576,9 @@ void X3DEngine::playVideo(const Common::String &name, const Common::String &wav,
 	while (!shouldQuit() && !skip && !video.endOfVideo()) {
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
-			actionToKey(e);
-			if (e.type == Common::EVENT_KEYDOWN &&
-			    (e.kbd.keycode == Common::KEYCODE_RETURN || (!action && e.kbd.keycode == Common::KEYCODE_ESCAPE))) {
+			processEvent(e);
+			if (e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START &&
+			    (e.customType == kActionSkip || (!action && e.customType == kActionMenu))) {
 				skip = true;
 				if (action)
 					_sound->stopGroup(Sound::kVoice);
