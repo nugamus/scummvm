@@ -97,7 +97,7 @@ public:
 				w.setHidden(node(w, t.object), true);
 
 		if (w.var(kCupboardOpen)) {
-			poseAt(w, kAnimCupboard, w.anims[kAnimCupboard].length);
+			poseAt(w, kAnimCupboard, w.anims[kAnimCupboard].length - 1);
 			_cupboard = true;
 			w.objects[kPorte].cursorType = 0xFF;
 			w.objects[kCamee].cursorType = 2;
@@ -112,17 +112,17 @@ public:
 		if (w.var(kMirrorBroken)) {
 			w.setHidden(node(w, kMirroir1), true);
 			w.setHidden(node(w, kMirroircas), false);
-			poseAt(w, kAnimMirror, w.anims[kAnimMirror].length);
+			poseAt(w, kAnimMirror, w.anims[kAnimMirror].length - 1);
 			if (!w.var(kItem24))
 				w.setHidden(node(w, kMirroirmor), false);
 		}
 		if (w.var(kDrawerOpen)) {
-			poseAt(w, kAnimDrawer, w.anims[kAnimDrawer].length);
+			poseAt(w, kAnimDrawer, w.anims[kAnimDrawer].length - 1);
 			_drawer = true;
 			w.objects[kTiroir].cursorType = 3;
 		}
 		if (w.var(kChairMoved)) {
-			poseAt(w, kAnimChair, w.anims[kAnimChair].length);
+			poseAt(w, kAnimChair, w.anims[kAnimChair].length - 1);
 			_chair = true;
 			w.objects[kChaise1].cursorType = 0xFF;
 		} else {
@@ -130,7 +130,7 @@ public:
 			w.objects[kPorte].cursorType = 0xFF;
 		}
 		if (w.var(kPaperOpen)) {
-			poseAt(w, kAnimPaper, w.anims[kAnimPaper].length);
+			poseAt(w, kAnimPaper, w.anims[kAnimPaper].length - 1);
 			_paper = true;
 			w.objects[kPapierferm].cursorType = 0xFF;
 		} else {

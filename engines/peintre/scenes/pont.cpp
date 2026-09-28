@@ -67,11 +67,11 @@ public:
 		if (w.var(kInk))
 			w.setHidden(node(w, kEncre01), true);
 		if (w.var(kApplesFallen))
-			poseAt(w, kAnimApples, w.anims[kAnimApples].length);
+			poseAt(w, kAnimApples, w.anims[kAnimApples].length - 1);
 		if (w.var(kApplesTaken))
 			w.setHidden(node(w, kApple01), true);
 		if (w.var(kBridgeDown)) {
-			poseAt(w, kAnimBridge, w.anims[kAnimBridge].length);
+			poseAt(w, kAnimBridge, w.anims[kAnimBridge].length - 1);
 			w.setBoxSet(0);
 			setPulleys(w, 0xFF);
 			fitHandle(w);
@@ -84,7 +84,7 @@ public:
 		else
 			w.setHidden(node(w, kPoignee04), true);
 		if (w.var(kTrapdoorOpen)) {
-			poseAt(w, kAnimTrapdoor, w.anims[kAnimTrapdoor].length);
+			poseAt(w, kAnimTrapdoor, w.anims[kAnimTrapdoor].length - 1);
 			w.objects[kTrappe].cursorType = 0xFF;
 		} else {
 			w.objects[kTrappe].cursorType = 4;

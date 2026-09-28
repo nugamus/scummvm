@@ -57,7 +57,7 @@ public:
 			w.anims[kAnimBirdOut].playing = true;
 			w.anims[kAnimBirdBack].playing = false;
 		}
-		poseAt(w, kAnimHen, w.var(kHenDone) ? w.anims[kAnimHen].length : 1);
+		poseAt(w, kAnimHen, w.var(kHenDone) ? w.anims[kAnimHen].length - 1 : 1);
 		if (!w.var(kDug)) {
 			poseAt(w, kAnimSpade, 1);
 			w.setHidden(node(w, kTerre), true);

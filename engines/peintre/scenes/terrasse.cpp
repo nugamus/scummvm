@@ -61,7 +61,7 @@ public:
 			w.setHidden(node(w, kLunette), true);
 		if (w.var(kAwning)) {
 			w.anims[0].playing = false;
-			poseAt(w, 0, w.anims[0].length);
+			poseAt(w, 0, w.anims[0].length - 1);
 			w.objects[kManivelle].cursorType = 0xFF;
 		} else {
 			poseAt(w, 0, 1);

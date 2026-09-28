@@ -95,13 +95,13 @@ public:
 			w.setHidden(node(w, kTheiere), true);
 		if (w.var(kBarOpen)) {
 			w.setHidden(node(w, kClef), true);
-			poseAt(w, kAnimBarDoor, w.anims[kAnimBarDoor].length);
+			poseAt(w, kAnimBarDoor, w.anims[kAnimBarDoor].length - 1);
 		}
 		if (w.var(kShadow)) {
 			w.setHidden(node(w, kKe), false);
 			w.setHidden(node(w, kOmbre), true);
 			w.objects[kKe].cursorType = 0xFF;
-			poseAt(w, kAnimCue, w.anims[kAnimCue].length);
+			poseAt(w, kAnimCue, w.anims[kAnimCue].length - 1);
 		} else {
 			w.objects[kKe].cursorType = 4;
 			w.objects[kOmbre].cursorType = 0xFF;

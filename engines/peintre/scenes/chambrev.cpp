@@ -42,7 +42,7 @@ public:
 		w.setAmbience("chambrVG");
 		const bool open = w.var(kDoorOpen) == 1;
 		if (open)
-			poseAt(w, 0, w.anims[0].length);
+			poseAt(w, 0, w.anims[0].length - 1);
 		w.objects[kPorte].cursorType = open ? 0xFF : 4;
 	}
 

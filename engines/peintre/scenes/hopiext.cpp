@@ -57,7 +57,7 @@ public:
 		static const int kGateObjects[] = { kCloche, kKorde1, kKorde2, kKorde3, kKorde4, kGrilledrt, kGrillegche };
 		const bool open = w.var(kGateOpen) != 0;
 		if (open) {
-			poseAt(w, kAnimGate, w.anims[kAnimGate].length);
+			poseAt(w, kAnimGate, w.anims[kAnimGate].length - 1);
 			w.setBoxSet(1);
 		}
 		for (int i : kGateObjects)

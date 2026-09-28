@@ -50,7 +50,7 @@ public:
 		setAnims(w, kAnims, ARRAYSIZE(kAnims));
 		w.setAmbience("hopi_int");
 		if (w.var(kWardrobeOpen)) {
-			poseAt(w, kAnimWardrobe, w.anims[kAnimWardrobe].length);
+			poseAt(w, kAnimWardrobe, w.anims[kAnimWardrobe].length - 1);
 			w.objects[kArmoire].cursorType = 0xFF;
 		} else {
 			w.objects[kArmoire].cursorType = 4;
