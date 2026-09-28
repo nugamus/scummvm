@@ -32,7 +32,20 @@ namespace Peintre {
 //   GAME<pp><ss>.BIN -> <target>.game<pp><ss>
 
 void GameState::clear() {
+	// save.md "A new player's block": the EXE's initial data at 0x4aba40, whose non-zero
+	// words are these (offset, value); e.g. 0x298 keeps the kite out of the church until
+	// the garden, 0x1C8 sounds mangeurs' cuckoo on the first visit.
+	static const uint32 kInitial[][2] = {
+		{ 0x1AC, 0xFF }, { 0x1B8, 0x10001 }, { 0x1C4, 0xFF }, { 0x1C8, 1 },
+		{ 0x1D0, 0xFFFFFF }, { 0x1D4, 0xFF }, { 0x1E0, 0xFFFFFF }, { 0x1E4, 0xFF }, { 0x1E8, 1 },
+		{ 0x1F0, 0xFFFFFF }, { 0x1F4, 0xFF }, { 0x200, 0xFFFFFF }, { 0x204, 0xFF },
+		{ 0x210, 0xFFFFFF }, { 0x214, 0xFF }, { 0x220, 0xFFFFFF }, { 0x230, 0xFF },
+		{ 0x23C, 1 }, { 0x240, 0xFF }, { 0x24C, 1 }, { 0x250, 0xFF }, { 0x25C, 1 },
+		{ 0x288, 0xFF }, { 0x294, 0x10001 }, { 0x298, 1 }, { 0x320, 1 }
+	};
 	memset(block3D, 0, sizeof(block3D));
+	for (const auto &w : kInitial)
+		WRITE_LE_UINT32(block3D + w[0], w[1]);
 	memset(zoneDone, 0, sizeof(zoneDone));
 	memset(placed, 0, sizeof(placed));
 	memset(counters, 0, sizeof(counters));
