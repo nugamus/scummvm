@@ -59,7 +59,11 @@ public:
 	virtual void present(const Graphics::Surface &page) = 0;
 
 	// Hardware only: one 3D frame, its 2D images, then end3D() shows it.
-	virtual void begin3D(float focal, float nearZ, float farZ) {}
+	/**
+	 * `view` is the 3D's rectangle in logical coordinates (the player's view size); a
+	 * smaller one gets the original's border colour around it.
+	 */
+	virtual void begin3D(const Common::Rect &view, float focal, float nearZ, float farZ) {}
 	virtual void drawTriangles(const Common::Array<Tri3D> &tris) {}
 	/** A 2D image at logical (x, y); keyed: the TGA key colour is transparent. */
 	virtual void drawImage(const Graphics::Surface &image, int x, int y, bool keyed) {}

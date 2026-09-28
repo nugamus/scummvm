@@ -151,7 +151,12 @@ public:
 		afterZone(code);
 	}
 	/** Back from the option menu opened in 3D (0x42f515 sets 0x4e3120). */
-	void afterOptions() { localVar(0x4e3120) = 1; }
+	void afterOptions() {
+		localVar(0x4e3120) = 1;
+		// 0x42f515 resets only the viewport (0x435170), whose clip defaults are 128 and
+		// 65,000; the next scene load sets 64 and 80,000 again (scene.md "Camera and view").
+		_renderer.setClip(128, 65000);
+	}
 
 	PeintreEngine *vm() { return _vm; }
 	int scene() const { return _scene; }
@@ -245,6 +250,8 @@ private:
 	void storeView(bool pitch);
 	void move();
 	void collide();
+	/** The fixed focal length for the fov option scaled to the view, 0 for the original's. */
+	float focal() const { return _focal > 0 ? _focal * MIN<int>(viewRect().width(), 640) / 640 : 0.0f; }
 	/** Whether the last move went through a wall from its front (the bug fix in tick()). */
 	bool crossedWall(const Vec3i &from) const;
 	void mouse();
@@ -294,7 +301,7 @@ private:
 	int _barState = 0;   ///< 0 hidden, 1 shown, 2 opening, 3 closing
 	int _barY = 480;
 	int _barFirst = 0;
-	bool _barSoundPlayed = false;
+	bool _barSound = true;     ///< 0x599138: bar_obj plays on the next opening
 	int _barButton = -1;      ///< the bar arrow clicked this tick, drawn pressed
 	bool _returnShown = false;
 	bool _hourglass = false;

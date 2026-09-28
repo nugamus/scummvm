@@ -488,8 +488,10 @@ bool World::load(int scene, int prevScene, bool keepCamera) {
 		_cam.roll = 0;
 	}
 	_v = _vy = _w = _p = _s = 0;
+	_renderer.setClip(64, 80000); // 0x4353c0, 0x4353d0
 	_cursor = kCursorArrow;
 	_barState = 0;
+	_barSound = true; // Cursors_Load 0x426594
 	_barY = 480;
 	_reload = false;
 	_exit = kExitNone;
@@ -741,10 +743,8 @@ int32 World::distance(int node) const {
 }
 
 void World::openBar() {
-	if (_barState == 0 || _barState == 3) {
+	if (_barState != 1)
 		_barState = 2;
-		_barSoundPlayed = false;
-	}
 }
 
 void World::takeItem(int node, int object) {
@@ -788,20 +788,23 @@ void World::barLogic() {
 	const int barH = _bar.h;
 	_barButton = -1;
 	if (_barState == 2) {
-		if (!_barSoundPlayed) {
+		// 0x426171: the sound once per closing (a bar reopened while closing is silent).
+		if (_barSound) {
 			_vm->sound()->playStatic("bar_obj");
-			_barSoundPlayed = true;
+			_barSound = false;
 		}
 		_barY -= 8;
-		if (_barY <= 480 - barH) {
+		if (_barY < 480 - barH) {
 			_barY = 480 - barH;
 			_barState = 1;
+			_barSound = false;
 		}
 	} else if (_barState == 3) {
 		_barY += 8;
 		if (_barY >= 480) {
 			_barY = 480;
 			_barState = 0;
+			_barSound = true;
 			autosave();
 		}
 	}
@@ -811,7 +814,9 @@ void World::barLogic() {
 		int held = 0;
 		for (uint i = 0; i < kNumObjects; i++)
 			held += _vm->state().held(i) ? 1 : 0;
-		if (_cursor == kCursorArrow) {
+		if (_cursor == kCursorHand) {
+			// The hand does nothing on the bar.
+		} else if (_cursor == kCursorArrow) {
 			if (m.x >= 12 && m.x <= 44 && m.y >= _barY + 15 && m.y <= _barY + 47) {
 				_barButton = 0;
 				if (_barFirst > 0)
@@ -822,16 +827,23 @@ void World::barLogic() {
 				if (held < _barFirst + 6)
 					_barFirst--;
 			}
-		} else if (_cursor < kNumObjects && m.y >= _barY - 30 && m.y <= _barY + 70) {
+		} else {
+			// Any other cursor is dropped: the original does not check that it is an object
+			// (a finger or zone cursor over the bar closes it too, and marks an inventory word
+			// past the 35 objects, not kept here). Object 0 in hand counts anywhere.
 			if (_cursor == 0)
 				var(0x4abbd8) = 1;
-			_vm->sound()->playStatic("cf_clic3");
-			_vm->state().setHeld(_cursor, 1);
-			_cursor = kCursorArrow;
-			held++;
-			if (held > 6)
-				_barFirst = held - 7;
-			_barState = 3;
+			if (m.y >= _barY - 30 && m.y <= _barY + 70) {
+				_vm->sound()->playStatic("cf_clic3");
+				if (_cursor < kNumObjects && !_vm->state().held(_cursor)) {
+					_vm->state().setHeld(_cursor, 1);
+					held++;
+				}
+				_cursor = kCursorArrow;
+				if (held > 6)
+					_barFirst = held - 7;
+				_barState = 3;
+			}
 		}
 	}
 }
@@ -864,7 +876,15 @@ void World::drawBar(int barY) {
 }
 
 Common::Rect World::viewRect() const {
-	// The original's 640x480; a wide display adds columns on both sides (enhancement).
+	// The player's view size (scene.md "Camera and view"); at full size a wide display
+	// adds columns on both sides (enhancement).
+	static const Common::Rect kViews[4] = {
+		Common::Rect(0, 0, 640, 480), Common::Rect(64, 48, 576, 432),
+		Common::Rect(120, 90, 520, 390), Common::Rect(160, 120, 480, 360)
+	};
+	const uint size = _vm->players().empty() ? 0 : _vm->players()[_vm->currentPlayer()].viewSize;
+	if (size > 0 && size < 4)
+		return kViews[size];
 	const Display *display = _vm->display();
 	return Common::Rect(display->left(), 0, display->left() + display->width(), 480);
 }
@@ -872,18 +892,10 @@ Common::Rect World::viewRect() const {
 void World::frameLogic(bool hourglass) {
 	// The part of the original's frame that the game reads back: what is under the mouse
 	// and where the nodes are (render.md "Picking"), for this tick's camera.
-	_renderer.setFocal(_focal);
+	_renderer.setFocal(focal());
 	_renderer.draw(nullptr, viewRect(), _scene3D, viewOf(_cam));
 	barLogic();
-	// The return icon (interaction.md "The return icon and the ways out").
-	const Graphics::Surface &ret = _cursors[kCursorRetour];
-	_returnShown = !hourglass && _scene != kSceneMusee && _barState == 0 &&
-		_mousePos.x < ret.w + 10 && _mousePos.y > 474 - ret.h;
-	if (_returnShown) {
-		_cursor = kCursorFinger;
-		if (_click)
-			requestMuseum();
-	}
+	// 0x4223e8: the carried object's cursor first, then the return icon's finger over it.
 	if (_carrying && _carried >= 0) {
 		const Common::String &n = _scene3D.nodes[_carried].name;
 		if (n.equalsIgnoreCase("fagot"))
@@ -894,6 +906,15 @@ void World::frameLogic(bool hourglass) {
 			_cursor = kCursorManivel;
 		else if (n.equalsIgnoreCase("clef"))
 			_cursor = kCursorCle;
+	}
+	// The return icon (interaction.md "The return icon and the ways out").
+	const Graphics::Surface &ret = _cursors[kCursorRetour];
+	_returnShown = !hourglass && _scene != kSceneMusee && _barState == 0 &&
+		_mousePos.x < ret.w + 10 && _mousePos.y > 474 - ret.h;
+	if (_returnShown) {
+		_cursor = kCursorFinger;
+		if (_click)
+			requestMuseum();
 	}
 	_hourglass = hourglass;
 }
@@ -1095,14 +1116,17 @@ void World::render(float alpha) {
 		poses = _poseDraw.data();
 	}
 
-	_view.setFocal(_focal);
+	const Common::Rect vr = viewRect();
+	_view.setFocal(focal());
 	_view.setClip(_renderer.nearZ(), _renderer.farZ());
 	if (display->hardware()) {
-		_view.draw(nullptr, viewRect(), _scene3D, view, poses, &_tris);
-		display->begin3D(_focal > 0 ? _focal : 480.0f, _renderer.nearZ(), _renderer.farZ());
+		_view.draw(nullptr, vr, _scene3D, view, poses, &_tris);
+		display->begin3D(vr, focal() > 0 ? focal() : 480.0f * MIN<int>(vr.width(), 640) / 640, _renderer.nearZ(), _renderer.farZ());
 		display->drawTriangles(_tris);
 	} else {
-		_view.draw(&_vm->screen(), Common::Rect(0, 0, 640, 480), _scene3D, view, poses);
+		if (vr.width() < 640)
+			_vm->screen().fillRect(Common::Rect(640, 480), 0x114A); // 0x4223e8
+		_view.draw(&_vm->screen(), vr, _scene3D, view, poses);
 	}
 
 	// The 2D over it: the bar (sliding between ticks too), the return icon, the hourglass.
