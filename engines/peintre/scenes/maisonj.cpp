@@ -30,9 +30,9 @@ namespace {
 enum { kPot01, kPot02, kNuages, kEscargot, kPendule, kPortail, kPortemj, kPortail01 };
 
 const ObjectDef kObjects[] = {
-	{ "pot01", 4, false }, { "pot02", 0xFF, false }, { "nuages", 0xFF, true },
-	{ "escargot", 2, false }, { "pendule", 3, false }, { "portail", 4, false },
-	{ "portemj", 4, false }, { "portail01", 4, false }
+	{ "pot01", 0xFF, false }, { "pot02", 0xFF, false }, { "nuages", 0xFF, true },
+	{ "escargot", 2, false }, { "pendule", 3, false }, { "portail", 0xFF, false },
+	{ "portemj", 0xFF, false }, { "portail01", 0xFF, false }
 };
 
 enum { kAnimSnail, kAnimClouds, kAnimGate, kAnimDoor, kAnimTrain };
