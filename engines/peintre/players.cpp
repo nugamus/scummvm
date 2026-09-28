@@ -122,8 +122,15 @@ void PeintreEngine::checkSessions() {
 
 void PeintreEngine::deletePlayerSaves(uint player) {
 	_saveFileMan->removeSavefile(resumeName(_targetName, player));
-	for (uint s = 0; s < kNumObjects; s++)
-		_saveFileMan->removeSavefile(gameName(_targetName, player, s));
+	SaveOrder order = readSaveOrder();
+	for (uint s = 0; s < kNumObjects; s++) {
+		const Common::String name = gameName(_targetName, player, s);
+		_saveFileMan->removeSavefile(name);
+		for (uint i = 0; i < order.size(); i++)
+			if (order[i].name == name)
+				order.remove_at(i--);
+	}
+	writeSaveOrder(order);
 }
 
 static void writeBlocks(Common::WriteStream &out, const GameState &st) {
@@ -146,13 +153,57 @@ static void readBlocks(Common::ReadStream &in, GameState &st) {
 		st.counters[i] = in.readUint32LE();
 }
 
+// The original lists saved games by their files' write times (save.md, Q-0355); ScummVM
+// saves have none, so <target>.order keeps a write counter per file name ("name n"
+// lines), beside the original's files (which stay byte for byte).
+SaveOrder PeintreEngine::readSaveOrder() const {
+	SaveOrder order;
+	Common::ScopedPtr<Common::InSaveFile> in(_saveFileMan->openForLoading(_targetName + ".order"));
+	while (in && !in->eos() && !in->err()) {
+		const Common::String line = in->readLine();
+		const size_t sp = line.findLastOf(' ');
+		if (sp != Common::String::npos)
+			order.push_back({ line.substr(0, sp), (uint32)strtoul(line.c_str() + sp + 1, nullptr, 10) });
+	}
+	return order;
+}
+
+void PeintreEngine::writeSaveOrder(const SaveOrder &order) {
+	Common::ScopedPtr<Common::OutSaveFile> out(_saveFileMan->openForSaving(_targetName + ".order", false));
+	if (!out)
+		return;
+	for (const SaveOrderEntry &e : order)
+		out->writeString(Common::String::format("%s %u\n", e.name.c_str(), e.when));
+	out->finalize();
+}
+
+uint32 PeintreEngine::saveOrder(uint player, uint slot) const {
+	const Common::String name = gameName(_targetName, player, slot);
+	for (const SaveOrderEntry &e : readSaveOrder())
+		if (e.name == name)
+			return e.when;
+	return 0;
+}
+
 bool PeintreEngine::writeGame(uint slot) {
-	Common::ScopedPtr<Common::OutSaveFile> out(_saveFileMan->openForSaving(gameName(_targetName, _player, slot), false));
+	const Common::String name = gameName(_targetName, _player, slot);
+	Common::ScopedPtr<Common::OutSaveFile> out(_saveFileMan->openForSaving(name, false));
 	if (!out)
 		return false;
 	writeBlocks(*out, _state);
 	out->finalize();
-	return !out->err();
+	if (out->err())
+		return false;
+	SaveOrder order = readSaveOrder();
+	uint32 last = 0;
+	for (uint i = 0; i < order.size(); i++) {
+		last = MAX(last, order[i].when);
+		if (order[i].name == name)
+			order.remove_at(i--);
+	}
+	order.push_back({ name, last + 1 });
+	writeSaveOrder(order);
+	return true;
 }
 
 bool PeintreEngine::writeResume(uint32 in2d) {
