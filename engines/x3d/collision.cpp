@@ -212,12 +212,12 @@ bool Collision::cast(const Vector3d &from, const Vector3d &to, float &t, Common:
                      const Scene::Model **hitModel, uint *hitObject) const {
 	bool hit = false;
 	t = 1;
+	const Vector3d d = to - from;
+	const float length = Vector3d::dotProduct(d, d);
 	for (const Object &o : _objects) {
 		if (!o.enabled || o.faces.empty())
 			continue;
 		// Segments passing outside the object's bounding sphere cannot hit it
-		const Vector3d d = to - from;
-		const float length = Vector3d::dotProduct(d, d);
 		const float s = length > 0 ? CLIP(Vector3d::dotProduct(o.center - from, d) / length, 0.0f, 1.0f) : 0.0f;
 		if ((from + d * s - o.center).getMagnitude() > o.radius * 1.001f + 0.01f)
 			continue;
@@ -227,7 +227,7 @@ bool Collision::cast(const Vector3d &from, const Vector3d &to, float &t, Common:
 			if (d0 < 0 || d1 >= 0)
 				continue;
 			const float u = d0 / (d0 - d1);
-			if (u >= t || !inside(f, from + (to - from) * u))
+			if (u >= t || !inside(f, from + d * u))
 				continue;
 			t = u;
 			hit = true;

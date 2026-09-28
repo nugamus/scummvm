@@ -31,8 +31,6 @@
 #include "graphics/wincursor.h"
 #include "graphics/surface.h"
 
-#include "image/bmp.h"
-
 #include "x3d/detection.h"
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
@@ -68,23 +66,21 @@ static const int kCursorHotspots[][2] = { { 0, 0 }, { 9, 2 }, { 9, 2 }, { 10, 10
 
 Interaction::Interaction(Scene &scene, Sound &sound, Talk &talk) : _scene(scene), _sound(sound), _talk(talk) {
 	// The cursors are resources of the game's EXE: next to Data/ in an installed copy,
-	// under INSTALL/02_PR/ on the CD
+	// under INSTALL/02_PR/ on the CD; without it every kind is Windows' arrow (setCursor)
 	Common::PEResources exe;
-	if (!exe.loadFromEXE("MissionMonet.exe") && !exe.loadFromEXE("INSTALL/02_PR/MissionMonet.exe")) {
-		// Windows' arrow instead (the engine told the player at start)
-		Graphics::Cursor *arrow = Graphics::makeDefaultWinCursor();
-		CursorMan.replaceCursor(arrow);
-		delete arrow;
-		CursorMan.showMouse(true);
-		return;
-	}
-	for (int i = 0; i < ARRAYSIZE(kCursorNames); i++) {
+	const bool found = exe.loadFromEXE("MissionMonet.exe") || exe.loadFromEXE("INSTALL/02_PR/MissionMonet.exe");
+	for (int i = 0; found && i < ARRAYSIZE(kCursorNames); i++) {
 		Common::SeekableReadStream *res = exe.getResource(Common::kWinBitmap, Common::WinResourceID(kCursorNames[i]));
 		if (!res)
 			continue;
 		// A bitmap resource lacks the 14-byte file header: add it
 		const uint32 size = res->size();
-		byte *data = (byte *)malloc(size + 14);
+		if (size < 40) { // shorter than its BITMAPINFOHEADER
+			delete res;
+			continue;
+		}
+		Common::Array<byte> buffer(size + 14);
+		byte *data = buffer.data();
 		res->read(data + 14, size);
 		delete res;
 		const uint32 infoSize = READ_LE_UINT32(data + 14);
@@ -95,7 +91,7 @@ Interaction::Interaction(Scene &scene, Sound &sound, Talk &talk) : _scene(scene)
 		WRITE_LE_UINT32(data + 2, size + 14);
 		WRITE_LE_UINT32(data + 6, 0);
 		WRITE_LE_UINT32(data + 10, 14 + infoSize + colors * 4);
-		Common::MemoryReadStream stream(data, size + 14, DisposeAfterUse::YES);
+		Common::MemoryReadStream stream(data, size + 14);
 		_cursors[i] = decodeBitmap(stream);
 	}
 	setCursor(0);
@@ -138,6 +134,8 @@ void Interaction::load(const Common::String &unitDir) {
 					collision->setEnabled(h.name, false);
 			}
 			_scene.setAnimationState(h.name, frame, paused, fps, loop);
+			h.lowerName = h.name;
+			h.lowerName.toLowercase();
 			_hotspots.push_back(h);
 		}
 		delete s;
@@ -169,6 +167,7 @@ void Interaction::load(const Common::String &unitDir) {
 					a.args.push_back(arg);
 				}
 			}
+			a.hotspotIndex = findHotspot(a.hotspot);
 			_actions.push_back(a);
 		}
 		delete s;
@@ -193,23 +192,26 @@ int Interaction::hotspotFor(const Common::StringArray &names) const {
 		Common::String text = n.substr(star);
 		text.toLowercase();
 		for (uint i = 0; i < _hotspots.size(); i++)
-			if (_hotspots[i].name.equalsIgnoreCase(text))
+			if (_hotspots[i].lowerName == text)
 				return i;
-		for (uint i = 0; i < _hotspots.size(); i++) {
-			Common::String h = _hotspots[i].name;
-			h.toLowercase();
-			if (h.contains(text))
+		for (uint i = 0; i < _hotspots.size(); i++)
+			if (_hotspots[i].lowerName.contains(text))
 				return i;
-		}
 	}
 	return -1;
 }
 
 void Interaction::setCursor(uint kind) {
-	if (_shownCursor == (int)kind || kind >= ARRAYSIZE(_cursors) || !_cursors[kind])
+	if (_shownCursor == (int)kind || kind >= ARRAYSIZE(_cursors))
 		return;
-	const Graphics::Surface *s = _cursors[kind];
-	replaceCursor(*s, kCursorHotspots[kind][0], kCursorHotspots[kind][1]);
+	if (const Graphics::Surface *s = _cursors[kind]) {
+		replaceCursor(*s, kCursorHotspots[kind][0], kCursorHotspots[kind][1]);
+	} else {
+		// No EXE cursor: Windows' arrow instead (the engine told the player at start)
+		Graphics::Cursor *arrow = Graphics::makeDefaultWinCursor();
+		CursorMan.replaceCursor(arrow);
+		delete arrow;
+	}
 	_shownCursor = kind;
 }
 
@@ -398,7 +400,7 @@ bool Interaction::clickable(int index) const {
 		return true;
 	const uint32 trigger = _heldItem.empty() ? 8 : 7;
 	for (const Action &a : _actions)
-		if (a.hotspotType == h.type && findHotspot(a.hotspot) == index && runnable(a, trigger))
+		if (a.hotspotType == h.type && a.hotspotIndex == index && runnable(a, trigger))
 			return true;
 	return false;
 }
@@ -409,7 +411,7 @@ void Interaction::click(int hotspot, Common::StringArray &unitActions) {
 	const Hotspot &h = _hotspots[hotspot];
 	const uint32 trigger = _heldItem.empty() ? 8 : 7;
 	for (Action &a : _actions) {
-		if (a.hotspotType != h.type || findHotspot(a.hotspot) != hotspot || !runnable(a, trigger))
+		if (a.hotspotType != h.type || a.hotspotIndex != hotspot || !runnable(a, trigger))
 			continue;
 		run(a, unitActions);
 		return;
@@ -418,19 +420,16 @@ void Interaction::click(int hotspot, Common::StringArray &unitActions) {
 
 // Sound/<name>.WAV, or Sound/<name> when the name has the extension (sound.md)
 Common::Path Interaction::soundPath(const Common::String &name) const {
-	Common::String lower = name;
-	lower.toLowercase();
-	return Common::Path(_soundDir + (lower.contains(".wav") ? name : name + ".WAV"));
+	return Common::Path(_soundDir + (name.hasSuffixIgnoreCase(".wav") ? name : name + ".WAV"));
 }
 
 Common::String Interaction::hotspotName(const Action &a) const {
-	const int h = findHotspot(a.hotspot);
-	return h >= 0 ? _hotspots[h].name : a.hotspot;
+	return a.hotspotIndex >= 0 ? _hotspots[a.hotspotIndex].name : a.hotspot;
 }
 
 void Interaction::syncState(Common::Serializer &s) {
-	// ponytail: the original does not restore an action's private run counter, so after a
-	// load a multi-run action counts from 0 again (save.md); this restores the count
+	// The original does not save an action's private run counter, so after its loads a
+	// multi-run action counts from 0 again (save.md); the engine saves and restores the count
 	Common::String held = _heldItem;
 	s.syncString(held);
 	uint32 n = _hotspots.size();
@@ -480,6 +479,12 @@ void Interaction::useUp(const Common::String &hotspot) {
 }
 
 void Interaction::run(Action &a, Common::StringArray &unitActions) {
+	// Op 14 runs other actions: a cycle in the data would never end
+	if (a.running) {
+		warning("Action %s runs itself through op 14", a.name.c_str());
+		return;
+	}
+	a.running = true;
 	debugC(1, kDebugScript, "action %s on %s", a.name.c_str(), a.hotspot.c_str());
 	const int target = findHotspot(a.target);
 	const Common::String targetName = target >= 0 ? _hotspots[target].name : a.target;
@@ -545,6 +550,7 @@ void Interaction::run(Action &a, Common::StringArray &unitActions) {
 			break;
 		}
 	}
+	a.running = false;
 	_lastRun = a.id;
 	if (a.id < kIds) {
 		_runs[a.id]++;

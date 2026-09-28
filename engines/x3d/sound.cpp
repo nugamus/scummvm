@@ -96,8 +96,8 @@ void Sound::stopAll() {
 	_playing.clear();
 }
 
-// ponytail: "playing" ends at the audible end; the original's early end for streamed
-// sounds (sound.md, E-0123, Q-0071) is not modelled
+// "Playing" ends at the audible end; the original's early end for streamed sounds
+// (sound.md) is not modelled
 bool Sound::isGroupPlaying(int group) {
 	prune();
 	for (const Playing &p : _playing)
@@ -107,6 +107,7 @@ bool Sound::isGroupPlaying(int group) {
 }
 
 void Sound::setGroupVolume(int group, int g) {
+	assert(validGroup(group));
 	_groupVolume[group] = CLIP(g, 0, 100);
 	for (Playing &p : _playing)
 		if (p.group == group)

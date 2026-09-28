@@ -51,7 +51,7 @@ public:
 	void stopAll();
 	bool isGroupPlaying(int group);
 	void setGroupVolume(int group, int g); // 0..100, applied at once
-	int groupVolume(int group) const { return _groupVolume[group]; }
+	int groupVolume(int group) const { assert(validGroup(group)); return _groupVolume[group]; }
 
 	// Emitters: ranges from the scene scale, then play at a position; false when the same
 	// file is still playing on it
@@ -69,6 +69,7 @@ private:
 	};
 
 	void apply(Playing &p);
+	static bool validGroup(int group) { return group >= 0 && group < ARRAYSIZE(_groupVolume); }
 	void prune();
 
 	Audio::Mixer *_mixer;
