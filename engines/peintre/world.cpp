@@ -1187,8 +1187,9 @@ void World::render(float alpha) {
 
 bool World::objectClickable(int object) {
 	// The game's own sign that a click does something: the object's hover cursor (hand,
-	// zone, finger, access, deja vu), on a shown node the scene lets the player reach, while
-	// nothing is carried or held and no flight or redraw runs.
+	// zone, finger, access, deja vu), on a shown node, while nothing is carried or held and
+	// no flight or redraw runs. The scenes' distance limits are left out: the overlay is a
+	// development view of everything that works, near or far (user, 2026-09-28).
 	const SceneObject &o = objects[object];
 	if (o.node < 0 || _flying || _hourglass || _carrying || _cursor < (int)kNumObjects || !_script ||
 		!_renderer.nodeVisible(o.node))
@@ -1203,7 +1204,7 @@ bool World::objectClickable(int object) {
 	default:
 		return false;
 	}
-	return _script->reachable(*this, object);
+	return true;
 }
 
 bool World::findAnchor(int node, int &frame, float local[3]) const {
