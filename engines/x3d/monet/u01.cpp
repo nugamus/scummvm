@@ -38,8 +38,6 @@ namespace X3D {
 
 using Math::Vector3d;
 
-static const float kHalfPi = (float)M_PI / 2;
-
 U01::U01(X3DEngine *vm) : _vm(vm), _random("x3d_u01") {
 }
 
@@ -396,7 +394,7 @@ void U01::ride(float dt) {
 	if (_train2Loaded) {
 		if (frame >= scene->nodeLastFrame("*U01_20"))
 			leave();
-	} else if (_switchThrown && fabs(floorf(frame) - 90) <= 1) {
+	} else if (_switchThrown && fabsf(floorf(frame) - 90) <= 1) {
 		scene->loadClip("*U01_20", "Anim/U01_20A.A3D", 10, 15);
 		_train2Loaded = true;
 	}

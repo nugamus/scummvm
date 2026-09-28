@@ -29,8 +29,6 @@
 
 namespace X3D {
 
-static const float kHalfPi = (float)M_PI / 2;
-
 // ui.md Gallery, 3D view: the scene and the viewpoint of each painting (E-0502)
 static const struct {
 	const char *painting, *scene;
@@ -65,7 +63,7 @@ Common::String Gallery3D::sceneFor(const Common::String &painting) {
 
 int Gallery3D::unit() const {
 	const Common::String scene = sceneFor(_painting);
-	return atoi(scene.c_str() + 1);
+	return scene.empty() ? 0 : atoi(scene.c_str() + 1);
 }
 
 void Gallery3D::afterLoad() {

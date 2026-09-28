@@ -44,7 +44,6 @@ public:
 	void syncState(Common::Serializer &s) override; // PARAMS
 
 private:
-	void run(uint32 id);
 	void say(const char *line); // Monet
 	void hide(const char *object);
 	void voiceAt(const char *name, const Math::Vector3d &position);
@@ -81,7 +80,7 @@ private:
 
 	X3DEngine *_vm;
 	Common::RandomSource _random;
-	bool _onBoat = false, _faceSwapped = false, _painted = false;
+	bool _onBoat = false, _painted = false;
 	X3DEngine::Gauge _savedGauge;
 };
 

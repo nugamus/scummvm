@@ -34,7 +34,6 @@ namespace X3D {
 
 using Math::Vector3d;
 
-static const float kHalfPi = (float)M_PI / 2;
 static const float kKeep = X3DEngine::kKeep;
 static const uint32 kGaugeMs = 15000;
 
@@ -47,7 +46,6 @@ void U05::afterLoad() {
 	Scene *scene = _vm->scene();
 	scene->renameObject("fil", "*Fil");
 	scene->renameNode("fil", "*Fil");
-	scene->renameNode("Object02", "*U05_10"); // no such node in the corpus (E-0361)
 }
 
 Vector3d U05::at(const char *object) const {
@@ -216,7 +214,7 @@ void U05::leave() {
 }
 
 void U05::afterFrame() {
-	// u05.md, Every frame (E-0362). ponytail: the original runs these checks just before
+	// u05.md, Every frame (E-0362). The original runs these checks just before
 	// rendering, the engine just after: one frame later.
 	Interaction *interaction = _vm->interaction();
 	Player &player = _vm->player();

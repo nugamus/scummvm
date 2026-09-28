@@ -34,7 +34,6 @@ namespace X3D {
 
 using Math::Vector3d;
 
-static const float kHalfPi = (float)M_PI / 2;
 static const float kKeep = X3DEngine::kKeep;
 static const char *const kMonet = "*U04_03";
 static const char *const kDoor = "*U04_02";
@@ -62,13 +61,6 @@ Vector3d U04::head() const {
 		if (objects[o].name.equalsIgnoreCase("TETE"))
 			return Vector3d(objects[o].world[12], objects[o].world[13], objects[o].world[14]);
 	return at(kMonet);
-}
-
-void U04::run(uint32 id) {
-	Common::StringArray actions;
-	_vm->interaction()->runAction(id, actions);
-	for (const Common::String &a : actions)
-		_vm->addUnitAction(a);
 }
 
 // A hotspot's hide: invisible and out of collision (E-0272)
@@ -132,7 +124,6 @@ void U04::beeEmitter() {
 
 void U04::faceMap(bool gagged) {
 	_vm->scene()->setObjectMap("TETE", gagged ? "teteBA.TGA" : "tete.TGA");
-	_faceSwapped = true;
 }
 
 void U04::start(bool newGame, bool video) {
@@ -172,8 +163,17 @@ void U04::start(bool newGame, bool video) {
 
 void U04::syncState(Common::Serializer &s) {
 	s.syncAsByte(_onBoat);
-	s.syncAsByte(_faceSwapped);
+	byte faceSwapped = 0; // the original's flag, read by nothing
+	s.syncAsByte(faceSwapped);
 	s.syncAsByte(_painted);
+	// The timer parked under the boat's (not saved by the original), as the engine's gauge
+	uint32 elapsed = _vm->logicMs() - _savedGauge.start;
+	s.syncAsUint32LE(_savedGauge.ms, 6);
+	s.syncAsUint32LE(elapsed, 6);
+	s.syncAsByte(_savedGauge.visible, 6);
+	s.syncString(_savedGauge.label, 6);
+	if (s.isLoading())
+		_savedGauge.start = _vm->logicMs() - elapsed;
 }
 
 void U04::afterFrame() {
@@ -229,15 +229,15 @@ bool U04::input(float dt) {
 	Player &player = _vm->player();
 	const Keys &keys = _vm->keys();
 	const float s = _vm->scene()->scale;
-	const float yaw = fmod(fmod(player.yaw, 2 * (float)M_PI) + 2 * (float)M_PI, 2 * (float)M_PI);
+	const float yaw = fmodf(fmodf(player.yaw, 2 * (float)M_PI) + 2 * (float)M_PI, 2 * (float)M_PI);
 	if (!_onBoat) {
 		if (_vm->interaction()->exhausted(24) && keys.shift &&
-		    (player.eye - Vector3d(191, 240.8f, 15)).getMagnitude() < 0.5f * s && fabs(yaw - 1.54f) < 1.5f) {
+		    (player.eye - Vector3d(191, 240.8f, 15)).getMagnitude() < 0.5f * s && fabsf(yaw - 1.54f) < 1.5f) {
 			climbOut();
 			return true;
 		}
 		if (_vm->interaction()->exhausted(32) && _vm->interaction()->exhausted(39) && keys.up &&
-		    player.eye.x() < -22 && player.eye.y() > 307 && fabs(yaw - 4.9f) < 1.5f) {
+		    player.eye.x() < -22 && player.eye.y() > 307 && fabsf(yaw - 4.9f) < 1.5f) {
 			leave();
 			return true;
 		}
@@ -671,7 +671,7 @@ void U04::row(bool forward) {
 	// round removes that stall (a fix, user 2026-09-28)
 	float dYaw = player.yaw - yaw;
 	dYaw -= 2 * (float)M_PI * floorf(dYaw / (2 * (float)M_PI) + 0.5f);
-	if (fabs(trunc(dYaw)) + fabs(trunc(player.pitch - pitch)) >= 1) {
+	if (fabsf(truncf(dYaw)) + fabsf(truncf(player.pitch - pitch)) >= 1) {
 		_vm->moveTo(1000, nullptr, yaw, pitch);
 	} else {
 		player.yaw = yaw;

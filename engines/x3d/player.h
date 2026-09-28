@@ -55,7 +55,7 @@ public:
 	bool tick(float dt, const Keys &keys, const Collision &collision);
 
 	Math::Vector3d eye;
-	float yaw = 0, pitch = M_PI / 2, fov = 90, roll = 0;
+	float yaw = 0, pitch = (float)M_PI / 2, fov = 90, roll = 0;
 	float sphereOffset = 0; // eye minus collision sphere centre, along Z
 	bool canMove = true, canTurn = true;
 	bool runAllowed = true, jumpAllowed = true; // Ctrl runs, Shift jumps (never unset: on; U33's caravan turns them off)

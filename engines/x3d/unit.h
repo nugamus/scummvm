@@ -32,6 +32,8 @@ class Serializer;
 
 namespace X3D {
 
+constexpr float kHalfPi = (float)M_PI / 2; // the level pitch
+
 // A unit's own code on top of the generic scene (U##.cpp in the original): U00, U01, ...
 class Unit {
 public:
