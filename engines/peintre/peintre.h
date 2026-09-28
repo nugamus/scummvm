@@ -148,7 +148,8 @@ public:
 	bool keyHeld(Common::KeyCode key) const {
 		return Common::find(_keysDown.begin(), _keysDown.end(), key) != _keysDown.end();
 	}
-	/** Characters typed since the last poll. */
+	/** Characters typed since the last poll; '\b' Backspace, and the edit keys below. */
+	enum { kTypedLeft = 1, kTypedRight, kTypedHome, kTypedEnd, kTypedDelete };
 	const Common::String &typed() const { return _typed; }
 	/** Waits until `ms` after the previous tick. */
 	void waitTick(uint32 ms);
