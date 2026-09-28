@@ -233,13 +233,13 @@ private:
 		const int o = node(w, kOrloge);
 		switch (_clockState) {
 		case 1:
-			scrollUVs(w, o, 0x80, 0);
+			scrollUVs(w, o, 0x800000, 0);
 			break;
 		case 2:
-			scrollUVs(w, o, -0x80, 0x80);
+			scrollUVs(w, o, -0x800000, 0x800000);
 			break;
 		case 3:
-			scrollUVs(w, o, 0x80, 0);
+			scrollUVs(w, o, 0x800000, 0);
 			_clockRuns = false;
 			startSound(w, "pendule");
 			w.objects[kOrloge].cursorType = 2;

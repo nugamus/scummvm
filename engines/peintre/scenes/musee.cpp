@@ -120,8 +120,9 @@ private:
 	int _line = 0;             ///< 0x599020
 	bool _hint = false;        ///< 0x599014
 	bool _scroll = false;      ///< 0x599010
-	uint32 _scrollTicks = 0;
-	int _scrollStep = 0;
+	uint32 _scrollTicks = 0;   ///< 0x599018
+	int _scrollStep = 0;       ///< 0x4e3128
+	bool _scrollUp = true;     ///< 0x599000
 };
 
 void Musee::init(World &w) {
@@ -193,6 +194,8 @@ void Musee::init(World &w) {
 	_line = 0;
 	_hint = false;
 	_scroll = false;
+	_scrollStep = 0;   // 0x4e3128
+	_scrollUp = true;  // 0x599000
 	for (const char *t : kTextures)
 		w.loadTexture(t, t);
 	w.retexture(node(w, kEcran), "ROBI3", "ROBI3N");
@@ -290,15 +293,27 @@ void Musee::animate(World &w) {
 			w.anims[i].playing = false;
 	}
 
-	// The robot's screen scrolls every 10 ticks (0x42ad1c: word 1 by 0x7f0000, six steps
-	// each way).
-	if (_scroll) {
-		_scrollTicks += e;
-		if (_scrollTicks >= 10) {
-			_scrollTicks = 0;
-			// Q-0401: which way the first six steps go.
-			scrollUVs(w, node(w, kEcran), 0, _scrollStep < 6 ? 0x7F0000 : -0x7F0000);
-			_scrollStep = (_scrollStep + 1) % 12;
+	// The robot's screen (ecran) scrolls once more than 10 ticks have passed; the tick
+	// count runs all the time (0x42b776). 0x4399d0 calls 0x42ad1c for each UV in turn,
+	// which moves its v by 0x7f0000 and counts: six calls up, then six down, so the
+	// direction turns part-way through a node's UVs (E-0375).
+	_scrollTicks += e;
+	if (_scroll && _scrollTicks > 10) {
+		_scrollTicks = 0;
+		const int n = node(w, kEcran);
+		if (n >= 0) {
+			Common::Array<int32> &uvs = w.scene3D().nodes[n].uvs;
+			for (uint i = 0; i + 1 < uvs.size(); i += 2) {
+				if (_scrollUp) {
+					uvs[i + 1] += 0x7F0000;
+					if (++_scrollStep == 6)
+						_scrollUp = false;
+				} else {
+					uvs[i + 1] -= 0x7F0000;
+					if (--_scrollStep == 0)
+						_scrollUp = true;
+				}
+			}
 		}
 	}
 }
