@@ -45,8 +45,6 @@
 
 #include "gui/message.h"
 
-#include "image/bmp.h"
-
 #include "video/avi_decoder.h"
 
 #include "x3d/detection.h"
@@ -70,6 +68,8 @@ X3DEngine::X3DEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(
 }
 
 X3DEngine::~X3DEngine() {
+	if (_skipping)
+		endSkip(); // the mixer's effects are muted while a sequence is skipped
 	delete _inventory;
 	delete _sound;
 	delete _renderer;
@@ -129,7 +129,10 @@ Common::Error X3DEngine::run() {
 	// then goes to App.bin's start scene (ui.md, Boot to U01)
 	Common::String sceneName = ConfMan.hasKey("start_scene") ? ConfMan.get("start_scene") : "U00.X3D";
 	// A game chosen in the launcher's load dialog
-	if (ConfMan.hasKey("save_slot") && loadGameState(ConfMan.getInt("save_slot")).getCode() == Common::kNoError)
+	if (ConfMan.hasKey("save_slot"))
+		loadGameState(ConfMan.getInt("save_slot"));
+	// A load (that one, or one from the global menu during the intro) names the scene
+	if (!_nextScene.empty())
 		sceneName = _nextScene;
 
 	while (!shouldQuit() && !sceneName.empty()) {
@@ -190,7 +193,7 @@ Common::Error X3DEngine::loadGameState(int slot) {
 	return result;
 }
 
-static const uint32 kSaveVersion = 5; // 2: numbered clip slots; 3: the scene gauge; 4: U01 on it; 5: U05/U33 clocks
+static const uint32 kSaveVersion = 6; // 2: numbered clip slots; 3: the scene gauge; 4: U01 on it; 5: U05/U33 clocks; 6: more unit state
 
 bool X3DEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 	// Only between the unit's sequences: a save inside one could not replay its end. Not
@@ -246,7 +249,9 @@ Common::Error X3DEngine::loadGameStream(Common::SeekableReadStream *stream) {
 Graphics::Surface *X3DEngine::thumbnail(int width, int height) {
 	if (!_scene)
 		return nullptr;
-	_scene->draw(_camera, _renderer->width(), _renderer->height());
+	// The player's view, not the last one drawn: a unit's entry autosave comes after its
+	// setView, before any frame
+	_scene->draw(viewCamera(1), _renderer->width(), _renderer->height());
 	return _renderer->thumbnail(width, height);
 }
 
@@ -452,7 +457,8 @@ void X3DEngine::frame(bool input) {
 	// Due commands, up to the first click (one click per frame)
 	while (input && !_clickNow && !_devCommands.empty() && _system->getMillis() - _devStart >= (uint32)atoi(_devCommands[0].c_str())) {
 		const Common::String c = _devCommands.remove_at(0);
-		debugC(1, kDebugScript, "dev command %s: %s", c.c_str(), command(c.substr(c.findFirstOf(':') + 1)).c_str());
+		const Common::String result = command(c.substr(c.findFirstOf(':') + 1));
+		debugC(1, kDebugScript, "dev command %s: %s", c.c_str(), result.c_str());
 	}
 
 	// Modern controls: the mouse is captured in free play, the bar closed; a locked view
@@ -593,20 +599,9 @@ void X3DEngine::frame(bool input) {
 
 	// The original draws one frame per step; the high_fps option draws at the display's
 	// rate, interpolating between the last two steps.
-	Camera camera;
 	const float alpha = _highFps ? (float)_pending / stepMs : 1.0f;
 	const bool drawNow = !_skipping && (_highFps || stepped);
-	for (int k = 0; k < 3; k++)
-		camera.position[k] = _previous.eye.getData()[k] + (_player.eye.getData()[k] - _previous.eye.getData()[k]) * alpha;
-	// Angles the short way round: a step from 6.28 to 0.01 (U04's boat) is not a full turn
-	const float twoPi = 2 * (float)M_PI;
-	const float dYaw = _player.yaw - _previous.yaw, dPitch = _player.pitch - _previous.pitch;
-	camera.yaw = _previous.yaw + (dYaw - twoPi * floorf(dYaw / twoPi + 0.5f)) * alpha;
-	camera.pitch = _previous.pitch + (dPitch - twoPi * floorf(dPitch / twoPi + 0.5f)) * alpha;
-	// The fov option widens free play's 90 degrees; scripted views (70 and below) keep
-	// theirs, and zooms between blend
-	camera.fov = _player.fov + _fovExtra * CLIP((_player.fov - 70) / 20, 0.0f, 1.0f);
-	camera.roll = _player.roll;
+	const Camera camera = viewCamera(alpha);
 	if (_mouseCaptured && looked) // the cursor stays at the centre, as the crosshair
 		_system->warpMouse(_system->getWidth() / 2, _system->getHeight() / 2);
 	if (_mouseCaptured && !pointClick) {
@@ -747,6 +742,22 @@ void X3DEngine::frame(bool input) {
 	}
 }
 
+Camera X3DEngine::viewCamera(float alpha) const {
+	Camera camera;
+	for (int k = 0; k < 3; k++)
+		camera.position[k] = _previous.eye.getData()[k] + (_player.eye.getData()[k] - _previous.eye.getData()[k]) * alpha;
+	// Angles the short way round: a step from 6.28 to 0.01 (U04's boat) is not a full turn
+	const float twoPi = 2 * (float)M_PI;
+	const float dYaw = _player.yaw - _previous.yaw, dPitch = _player.pitch - _previous.pitch;
+	camera.yaw = _previous.yaw + (dYaw - twoPi * floorf(dYaw / twoPi + 0.5f)) * alpha;
+	camera.pitch = _previous.pitch + (dPitch - twoPi * floorf(dPitch / twoPi + 0.5f)) * alpha;
+	// The fov option widens free play's 90 degrees; scripted views (70 and below) keep
+	// theirs, and zooms between blend
+	camera.fov = _player.fov + _fovExtra * CLIP((_player.fov - 70) / 20, 0.0f, 1.0f);
+	camera.roll = _player.roll;
+	return camera;
+}
+
 void X3DEngine::runFor(uint32 ms, bool walk) {
 	// 0 = one frame, which includes an animation tick (movement.md)
 	const uint32 end = _logicMs + MAX<uint32>(ms, 1);
@@ -760,7 +771,7 @@ void X3DEngine::runFor(uint32 ms, bool walk) {
 
 // Reduces an angle to [0, 2pi)
 static float wrapAngle(float a) {
-	a = fmod(a, 2 * (float)M_PI);
+	a = fmodf(a, 2 * (float)M_PI);
 	return a < 0 ? a + 2 * (float)M_PI : a;
 }
 
@@ -773,18 +784,18 @@ void X3DEngine::moveTo(uint32 ms, const float *position, float yaw, float pitch,
 	if (yaw != kKeep) {
 		_player.yaw = wrapAngle(_player.yaw);
 		dYaw = wrapAngle(yaw) - _player.yaw;
-		if (dYaw > M_PI)
-			dYaw -= 2 * M_PI;
-		else if (dYaw < -M_PI)
-			dYaw += 2 * M_PI;
+		if (dYaw > (float)M_PI)
+			dYaw -= 2 * (float)M_PI;
+		else if (dYaw < -(float)M_PI)
+			dYaw += 2 * (float)M_PI;
 	}
 	if (pitch != kKeep) {
 		_player.pitch = wrapAngle(_player.pitch);
 		dPitch = wrapAngle(pitch) - _player.pitch;
-		if (dPitch > M_PI)
-			dPitch -= 2 * M_PI;
-		else if (dPitch < -M_PI)
-			dPitch += 2 * M_PI;
+		if (dPitch > (float)M_PI)
+			dPitch -= 2 * (float)M_PI;
+		else if (dPitch < -(float)M_PI)
+			dPitch += 2 * (float)M_PI;
 	}
 	const float dFov = fov != kKeep ? fov - _player.fov : 0;
 	const Math::Vector3d dEye = (target - _player.eye) * (1.0f / n);
@@ -911,22 +922,23 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 				}
 			}
 			if (e.type == Common::EVENT_KEYDOWN) {
-				if (e.kbd.keycode == Common::KEYCODE_ESCAPE)
+				if (e.kbd.keycode == Common::KEYCODE_ESCAPE) {
 					result = "escape";
-				else if (e.kbd.keycode == Common::KEYCODE_RETURN || e.kbd.keycode == Common::KEYCODE_KP_ENTER)
+				} else if (e.kbd.keycode == Common::KEYCODE_RETURN || e.kbd.keycode == Common::KEYCODE_KP_ENTER) {
 					result = "enter";
-				else if (e.kbd.keycode == Common::KEYCODE_KP_PLUS || e.kbd.keycode == Common::KEYCODE_KP_MINUS) {
+				} else if (e.kbd.keycode == Common::KEYCODE_KP_PLUS || e.kbd.keycode == Common::KEYCODE_KP_MINUS) {
 					// Every sound group +-10 while a frame is open (E-0604)
 					for (int g = 1; g <= 6; g++)
 						_sound->setGroupVolume(g, _sound->groupVolume(g) + (e.kbd.keycode == Common::KEYCODE_KP_PLUS ? 10 : -10));
-				} else if (!frame.hasEdit())
+				} else if (!frame.hasEdit()) {
 					result = "key";
-				else if (e.kbd.keycode == Common::KEYCODE_BACKSPACE)
+				} else if (e.kbd.keycode == Common::KEYCODE_BACKSPACE) {
 					frame.backspace();
-				else if (e.kbd.keycode == Common::KEYCODE_LEFT || e.kbd.keycode == Common::KEYCODE_RIGHT)
+				} else if (e.kbd.keycode == Common::KEYCODE_LEFT || e.kbd.keycode == Common::KEYCODE_RIGHT) {
 					frame.moveCaret(e.kbd.keycode == Common::KEYCODE_LEFT ? -1 : 1);
-				else if (e.kbd.ascii >= 32 && e.kbd.ascii < 127)
+				} else if (e.kbd.ascii >= 32 && e.kbd.ascii < 127) {
 					frame.type(e.kbd.ascii);
+				}
 			}
 		}
 		if (timeout && result.empty() && _system->getMillis() - start >= timeout)
@@ -969,13 +981,17 @@ bool X3DEngine::toScreen(const Math::Vector3d &p, Common::Point &s) const {
 	const Math::Vector3d right(-sinf(yaw), -cosf(yaw), 0);
 	const Math::Vector3d up(cosf(pitch) * cosf(yaw), -cosf(pitch) * sinf(yaw), sinf(pitch));
 	const Math::Vector3d fwd(sinf(pitch) * cosf(yaw), -sinf(pitch) * sinf(yaw), -cosf(pitch));
-	const float ky = (4.0f / 3.0f) / tan(_camera.fov * M_PI / 360.0), kx = ky * _renderer->height() / _renderer->width();
+	const float ky = (4.0f / 3.0f) / tanf(_camera.fov * (float)M_PI / 360), kx = ky * _renderer->height() / _renderer->width();
 	const float cx = _renderer->width() / 2.0f, cy = _renderer->height() / 2.0f;
 	const float z = Math::Vector3d::dotProduct(d, fwd);
 	if (z <= 0)
 		return false;
-	s = Common::Point(cx + cx * Math::Vector3d::dotProduct(d, right) * kx / z, cy - cy * Math::Vector3d::dotProduct(d, up) * ky / z);
-	return s.x >= 0 && s.y >= 0 && s.x < _renderer->width() && s.y < _renderer->height();
+	const float x = cx + cx * Math::Vector3d::dotProduct(d, right) * kx / z, y = cy - cy * Math::Vector3d::dotProduct(d, up) * ky / z;
+	// In float first: a point far off screen does not fit a Common::Point
+	if (!(x >= 0 && y >= 0 && x < _renderer->width() && y < _renderer->height()))
+		return false;
+	s = Common::Point((int16)x, (int16)y);
+	return true;
 }
 
 bool X3DEngine::picks(const Common::Point &s, int target) {
@@ -1054,7 +1070,7 @@ void X3DEngine::refreshHotspots() {
 		return;
 	Common::Array<bool> now;
 	if (_freePlay && _scene) {
-		const uint n = _interaction->hotspotNames().size();
+		const uint n = _interaction->hotspotCount();
 		now.resize(n + 1);
 		for (uint i = 0; i < n; i++)
 			now[i] = _interaction->clickable(i);
@@ -1070,13 +1086,13 @@ void X3DEngine::placeMarkers() {
 	// Each marker's point, moved with its object's origin, in the drawn view (with its
 	// roll), to window pixels without rounding to the logical frame
 	_hotspots.clear();
-	const float a = _camera.yaw, e = _camera.pitch, r = _camera.roll * M_PI / 180;
+	const float a = _camera.yaw, e = _camera.pitch, r = _camera.roll * (float)M_PI / 180;
 	const Math::Vector3d eye(_camera.position[0], _camera.position[1], _camera.position[2]);
 	const Math::Vector3d right0(-sinf(a), -cosf(a), 0), up0(cosf(e) * cosf(a), -cosf(e) * sinf(a), sinf(e));
 	const Math::Vector3d right = right0 * cosf(r) + up0 * sinf(r), up = up0 * cosf(r) - right0 * sinf(r);
 	const Math::Vector3d fwd(sinf(e) * cosf(a), -sinf(e) * sinf(a), -cosf(e));
 	const float w = _renderer->width(), h = _renderer->height();
-	const float ky = (4.0f / 3.0f) / tan(_camera.fov * M_PI / 360.0), kx = ky * h / w;
+	const float ky = (4.0f / 3.0f) / tanf(_camera.fov * (float)M_PI / 360), kx = ky * h / w;
 	const Common::Point o = _renderer->toWindow(Common::Point(0, 0)), c = _renderer->toWindow(Common::Point(w, h));
 	const Common::Array<Scene::Model *> &models = _scene->models();
 	for (const Marker &m : _markers) {
@@ -1135,7 +1151,7 @@ void X3DEngine::findHotspots() {
 				}
 			if (!hit) {
 				Math::Vector3d p;
-				// ponytail: 24 picks per hotspot; a sliver of an object may not get its marker
+				// At most 24 picks per hotspot, so a sliver of an object may get no marker
 				if (!aimAt(m, o, h, s, hit, 24, &p) || !hit)
 					continue;
 				const Common::String &label = _interaction->hotspotName(h);
@@ -1305,7 +1321,16 @@ Common::String X3DEngine::command(const Common::String &line) {
 		return Common::String::format("frame %g running %d", _scene->nodeFrame(a[1]), (int)_scene->nodeRunning(a[1]));
 	if (c == "press" && a.size() >= 3) { // hold up, down, shift or crouch for ms, for scripted play
 		const uint32 until = _system->getMillis() + atoi(a[2].c_str());
-		(a[1] == "shift" ? _devShift : a[1] == "crouch" ? _devCrouch : a[1] == "down" ? _devDown : _devUp) = until;
+		if (a[1] == "up")
+			_devUp = until;
+		else if (a[1] == "down")
+			_devDown = until;
+		else if (a[1] == "shift")
+			_devShift = until;
+		else if (a[1] == "crouch")
+			_devCrouch = until;
+		else
+			return "unknown key " + a[1];
 		return "ok";
 	}
 	if (c == "probe" && a.size() >= 4) { // the ground below a point, without moving

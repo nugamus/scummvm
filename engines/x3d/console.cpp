@@ -36,6 +36,13 @@ bool Console::cmd(int argc, const char **argv) {
 	Common::String line;
 	for (int i = 0; i < argc; i++)
 		line += Common::String(i ? " " : "") + argv[i];
+	// Commands that run frames or menus of their own run from the main loop once the
+	// console is closed, not inside its event handling
+	const Common::String c = argv[0];
+	if (c == "lookat" || c == "page" || c == "savemenu" || c == "loadmenu" || c == "load") {
+		_vm->queueCommand(line);
+		return false;
+	}
 	debugPrintf("%s\n", _vm->command(line).c_str());
 	return true;
 }

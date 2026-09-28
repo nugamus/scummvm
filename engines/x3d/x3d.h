@@ -226,6 +226,7 @@ private:
 	// One pass of the main loop: events, the logic steps due, hover/click, rendering
 	void frame(bool input);
 	void logicStep(bool input);
+	Camera viewCamera(float alpha) const; // the player's view, alpha of the way from the last step
 	void showBitmap(const Common::Path &path);
 	void wait(uint32 ms);
 

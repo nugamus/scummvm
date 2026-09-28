@@ -39,6 +39,8 @@ extern const PlainGameDescriptor monetGames[];
 
 extern const ADGameDescription gameDescriptions[];
 
+} // End of namespace X3D
+
 #define GAMEOPTION_WIDESCREEN GUIO_GAMEOPTIONS1
 #define GAMEOPTION_MAX_DETAIL GUIO_GAMEOPTIONS2
 #define GAMEOPTION_RUN_TOGGLE GUIO_GAMEOPTIONS3
@@ -51,8 +53,6 @@ extern const ADGameDescription gameDescriptions[];
 #define GAMEOPTION_CROUCH_TOGGLE GUIO_GAMEOPTIONS10
 #define GAMEOPTION_HIGH_FPS GUIO_GAMEOPTIONS11
 #define GAMEOPTION_HIGH_RES GUIO_GAMEOPTIONS12
-
-} // End of namespace X3D
 
 class X3DMetaEngineDetection : public AdvancedMetaEngineDetection<ADGameDescription> {
 	static const DebugChannelDef debugFlagList[];
