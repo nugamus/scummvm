@@ -13,7 +13,6 @@ MODULE_OBJS = \
 	player.o \
 	renderer.o \
 	renderer_opengl.o \
-	renderer_tinygl.o \
 	scene.o \
 	sound.o \
 	talk.o \
@@ -29,6 +28,10 @@ MODULE_OBJS = \
 	monet/u06.o \
 	monet/u07.o \
 	monet/u33.o
+
+ifdef USE_TINYGL
+MODULE_OBJS += renderer_tinygl.o
+endif
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_X3D), DYNAMIC_PLUGIN)

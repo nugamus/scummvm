@@ -30,12 +30,18 @@
 #include "x3d/detection.h"
 #include "x3d/renderer.h"
 
-#if defined(USE_OPENGL_GAME) && !defined(USE_GLES2)
+#if defined(USE_OPENGL_GAME)
 
 #include "graphics/opengl/context.h"
 #include "graphics/opengl/system_headers.h"
 
 namespace X3D {
+
+// GL_EXT_texture_filter_anisotropic's names, which the GL headers may lack
+enum {
+	kGLTextureMaxAnisotropy = 0x84FE,
+	kGLMaxTextureMaxAnisotropy = 0x84FF
+};
 
 // Hardware rendering with the fixed-function OpenGL pipeline
 class OpenGLRenderer : public Renderer {
@@ -46,6 +52,12 @@ public:
 		initGraphics3d(width, height);
 		_viewport = Common::Rect(width, height);
 		_windowHeight = height;
+		const char *extensions = (const char *)glGetString(GL_EXTENSIONS);
+		if (extensions && strstr(extensions, "GL_EXT_texture_filter_anisotropic")) {
+			GLfloat most = 1;
+			glGetFloatv(kGLMaxTextureMaxAnisotropy, &most);
+			_anisotropy = MIN<GLfloat>(most, 8);
+		}
 	}
 
 	bool updateSize(bool widescreen) override {
@@ -98,12 +110,8 @@ public:
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		if (filterTextures) {
 			glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
-			const char *extensions = (const char *)glGetString(GL_EXTENSIONS);
-			if (extensions && strstr(extensions, "GL_EXT_texture_filter_anisotropic")) {
-				GLfloat most = 1;
-				glGetFloatv(0x84FF, &most); // GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
-				glTexParameterf(GL_TEXTURE_2D, 0x84FE, MIN<GLfloat>(most, 8)); // GL_TEXTURE_MAX_ANISOTROPY_EXT
-			}
+			if (_anisotropy)
+				glTexParameterf(GL_TEXTURE_2D, kGLTextureMaxAnisotropy, _anisotropy);
 		}
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rgba.w, rgba.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.getPixels());
@@ -307,6 +315,7 @@ public:
 private:
 	Common::Rect _viewport; // in window pixels, top-left origin
 	int _windowHeight = 480;
+	GLfloat _anisotropy = 0; // the most anisotropic filtering used, 0 without the extension
 	uint32 _texture = ~0u;
 	int _blend = -1, _clamp = -1; // the last setBlend (blend * 2 + keyed) and setClamp; -1: unknown
 };

@@ -35,10 +35,13 @@ namespace X3D {
 Renderer *Renderer::create(int width, int height, bool &native) {
 	const Graphics::RendererType desired = Graphics::Renderer::parseTypeCode(ConfMan.get("renderer"));
 	const Graphics::RendererType type = Graphics::Renderer::getBestMatchingAvailableType(desired,
-#if defined(USE_OPENGL_GAME) && !defined(USE_GLES2)
+#if defined(USE_OPENGL_GAME)
 		Graphics::kRendererTypeOpenGL |
 #endif
-		Graphics::kRendererTypeTinyGL);
+#if defined(USE_TINYGL)
+		Graphics::kRendererTypeTinyGL |
+#endif
+		0);
 
 	// OpenGL draws at the window's size only with the high_res option. Otherwise it draws
 	// the original's 640x480 (or wider) frame into ScummVM's frame buffer, which ScummVM
@@ -48,7 +51,11 @@ Renderer *Renderer::create(int width, int height, bool &native) {
 		if (Renderer *r = createOpenGLRenderer(width, height))
 			return r;
 	native = false;
+#if defined(USE_TINYGL)
 	return createTinyGLRenderer(width, height);
+#else
+	error("No renderer available: this build has neither classic OpenGL nor TinyGL");
+#endif
 }
 
 Graphics::Surface *loadBitmap(Common::SeekableReadStream &s) {
@@ -62,7 +69,7 @@ Graphics::Surface *loadBitmap(Common::SeekableReadStream &s) {
 	Image::BitmapDecoder bmp;
 	if (!bmp.loadStream(padded))
 		return nullptr;
-	return bmp.getSurface()->convertTo(Graphics::PixelFormat::createFormatRGBA32(), bmp.getPalette().data());
+	return bmp.getSurface()->convertTo(Graphics::PixelFormat::createFormatRGBA32(), bmp.getPalette().data(), bmp.getPalette().size());
 }
 
 Graphics::Surface *loadBitmap(const Common::Path &path) {

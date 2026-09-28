@@ -182,32 +182,42 @@ public:
 		TinyGL::presentBuffer();
 		Graphics::Surface frame;
 		TinyGL::getSurfaceRef(frame);
-		const uint32 white = frame.format.RGBToColor(255, 255, 255);
-		for (Image &i : _images) {
-			Common::Rect r(i.x, i.y, i.x + i.surface.w, i.y + i.surface.h);
-			r.clip(Common::Rect(frame.w, frame.h));
-			if (!r.isEmpty()) {
-				const Common::Rect src(r.left - i.x, r.top - i.y, r.right - i.x, r.bottom - i.y);
-				if (i.keyed)
-					frame.copyRectToSurfaceWithKey(i.surface, r.left, r.top, src, white);
-				else
-					frame.copyRectToSurface(i.surface, r.left, r.top, src);
-			}
+		composite(frame);
+		for (Image &i : _images)
 			i.surface.free();
-		}
 		_images.clear();
 		g_system->copyRectToScreen(frame.getPixels(), frame.pitch, 0, 0, frame.w, frame.h);
 		g_system->updateScreen();
 	}
 
 	Graphics::Surface *thumbnail(int width, int height) override {
+		// A copy with the queued 2D images, which stay queued for present()
 		TinyGL::presentBuffer();
-		Graphics::Surface frame;
+		Graphics::Surface frame, copy;
 		TinyGL::getSurfaceRef(frame);
-		return frame.scale(width, height, true);
+		copy.copyFrom(frame);
+		composite(copy);
+		Graphics::Surface *small = copy.scale(width, height, true);
+		copy.free();
+		return small;
 	}
 
 private:
+	void composite(Graphics::Surface &frame) const {
+		const uint32 white = frame.format.RGBToColor(255, 255, 255);
+		for (const Image &i : _images) {
+			Common::Rect r(i.x, i.y, i.x + i.surface.w, i.y + i.surface.h);
+			r.clip(Common::Rect(frame.w, frame.h));
+			if (r.isEmpty())
+				continue;
+			const Common::Rect src(r.left - i.x, r.top - i.y, r.right - i.x, r.bottom - i.y);
+			if (i.keyed)
+				frame.copyRectToSurfaceWithKey(i.surface, r.left, r.top, src, white);
+			else
+				frame.copyRectToSurface(i.surface, r.left, r.top, src);
+		}
+	}
+
 	struct Image {
 		Graphics::Surface surface;
 		int x, y;
