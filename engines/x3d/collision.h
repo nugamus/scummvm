@@ -23,7 +23,7 @@
 #define X3D_COLLISION_H
 
 #include "common/array.h"
-#include "common/str-array.h"
+#include "common/str.h"
 
 #include "math/vector3d.h"
 

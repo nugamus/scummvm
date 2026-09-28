@@ -40,7 +40,7 @@ class Interaction;
 class Renderer;
 
 // The Space inventory bar, frame PorteF (engines/x3d/docs/spec/ui.md, Inventory bar)
-// ponytail: the layout of PorteF.fra is built in; load it with the frame system once the
+// The layout of PorteF.fra is built in; it could be loaded with the frame system once the
 // menus need one
 class Inventory {
 public:
@@ -69,6 +69,7 @@ public:
 
 private:
 	void slide(bool up);
+	Common::Rect slotRect(uint i) const; // empty when outside the strip
 	Graphics::Surface *image(const Common::String &name);
 
 	Interaction *_interaction = nullptr;

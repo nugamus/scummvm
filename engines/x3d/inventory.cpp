@@ -26,8 +26,6 @@
 
 #include "graphics/surface.h"
 
-#include "image/bmp.h"
-
 #include "x3d/detection.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
@@ -37,7 +35,6 @@ namespace X3D {
 
 // PorteF.fra: the bar, its arrows and the item strip (ui.md table), at the bar's y
 static const int kBarTop = 420, kParked = 480;
-static const Common::Rect kLeftArrow(20, 10, 53, 50), kRightArrow(580, 10, 613, 50);
 static const int kStripLeft = 57, kStripRight = 592, kSlots = 7;
 
 void Inventory::syncState(Common::Serializer &s) {
@@ -126,24 +123,29 @@ bool Inventory::contains(const Common::Point &p) const {
 	return _y < kParked && p.y >= _y && p.x >= 0 && p.x < 640;
 }
 
+Common::Rect Inventory::slotRect(uint i) const {
+	// An item's slot clipped to the strip (57..592): only the visible part shows and takes clicks
+	const int x = 86 + 70 * ((int)i + _offset);
+	const int left = MAX(x, kStripLeft), right = MIN(x + 51, kStripRight);
+	return left < right ? Common::Rect(left, _y + 5, right, _y + 56) : Common::Rect();
+}
+
 int Inventory::cursorAt(const Common::Point &p) const {
 	// Items take (4), the rest of the bar clicks (2)
-	for (uint i = 0; i < _items.size(); i++) {
-		const int x = 86 + 70 * ((int)i + _offset);
-		if (Common::Rect(x, _y + 5, x + 51, _y + 56).contains(p))
+	for (uint i = 0; i < _items.size(); i++)
+		if (slotRect(i).contains(p))
 			return 4;
-	}
 	return 2;
 }
 
 void Inventory::click(const Common::Point &p) {
 	const Common::Point local(p.x, p.y - _y);
-	if (kLeftArrow.contains(local)) {
+	if (Common::Rect(20, 10, 53, 50).contains(local)) { // left arrow
 		if ((int)_items.size() + _offset > kSlots)
 			_offset--;
 		return;
 	}
-	if (kRightArrow.contains(local)) {
+	if (Common::Rect(580, 10, 613, 50).contains(local)) { // right arrow
 		if (_offset < 0)
 			_offset++;
 		return;
@@ -154,9 +156,7 @@ void Inventory::click(const Common::Point &p) {
 	// An item goes onto the cursor (a held one goes back first); the strip stores a held item
 	const Common::String held = _interaction->heldItem();
 	for (uint i = 0; i < _items.size(); i++) {
-		const int x = 86 + 70 * ((int)i + _offset);
-		// Clipped to the strip: only the visible part takes clicks (E-0602)
-		if (!Common::Rect(MAX(x, kStripLeft), _y + 5, MIN(x + 51, kStripRight), _y + 56).contains(p))
+		if (!slotRect(i).contains(p))
 			continue;
 		const Common::String item = _items.remove_at(i);
 		if (!held.empty())
@@ -178,14 +178,16 @@ void Inventory::draw(Renderer &r, int xOffset) {
 	if (_background)
 		r.drawImage(*_background, xOffset, _y, false);
 	for (uint i = 0; i < _items.size(); i++) {
-		// Items are clipped to the strip (57..592, E-0602)
-		const int x = 86 + 70 * ((int)i + _offset);
-		const int left = MAX(x, kStripLeft), right = MIN(x + 51, kStripRight);
-		if (left >= right)
+		const Common::Rect slot = slotRect(i);
+		if (slot.isEmpty())
 			continue;
 		if (Graphics::Surface *s = image(_items[i])) {
-			const Graphics::Surface part = s->getSubArea(Common::Rect(left - x, 0, MIN(right - x, (int)s->w), s->h));
-			r.drawImage(part, xOffset + left, _y + 5, false);
+			const int x = 86 + 70 * ((int)i + _offset);
+			const int left = slot.left - x, right = MIN(slot.right - x, (int)s->w);
+			if (left >= right)
+				continue;
+			const Graphics::Surface part = s->getSubArea(Common::Rect(left, 0, right, s->h));
+			r.drawImage(part, xOffset + slot.left, _y + 5, false);
 		}
 	}
 }

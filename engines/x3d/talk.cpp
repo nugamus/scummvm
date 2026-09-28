@@ -62,11 +62,16 @@ bool Talk::say(const Common::String &character, const Common::String &name) {
 	if (talker < 0)
 		return false;
 
-	stop();
-	const Common::String sound = _unitDir + "Sound/" + (name.contains(".wav") || name.contains(".WAV") ? name : name + ".WAV");
+	// Sound/<name>.WAV, or Sound/<name> when the name has the extension; the lip table has
+	// the same name with .bin
+	const bool hasExtension = name.hasSuffixIgnoreCase(".wav");
+	const Common::String base = hasExtension ? name.substr(0, name.size() - 4) : name;
+	const Common::String sound = _unitDir + "Sound/" + (hasExtension ? name : name + ".WAV");
 	const Math::Vector3d at = _scene.facePosition(_talkers[talker].face, _talkers[talker].character);
+	// The same line still playing goes on, lip sync included
 	if (!_sound.emit(Sound::kVoiceEmitter, Common::Path(sound), at, false))
 		return true;
+	stop();
 
 	debugC(1, kDebugSound, "%s says %s at %g,%g,%g", character.c_str(), name.c_str(), at.x(), at.y(), at.z());
 	_current = talker;
@@ -75,7 +80,7 @@ bool Talk::say(const Common::String &character, const Common::String &name) {
 	_times.clear();
 	_shapes.clear();
 	// Lip table: a .BIN #INDEX# chunk of {u32 time ms, u16 shape, u16 filler} (lip.ksy)
-	if (Common::SeekableReadStream *s = openBinChunk(Common::Path(_unitDir + "Sound/" + name + ".bin"), "#INDEX#")) {
+	if (Common::SeekableReadStream *s = openBinChunk(Common::Path(_unitDir + "Sound/" + base + ".bin"), "#INDEX#")) {
 		const uint32 count = s->readUint32LE();
 		for (uint32 i = 0; i < count && !s->err(); i++) {
 			_times.push_back(s->readUint32LE());

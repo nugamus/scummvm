@@ -89,6 +89,7 @@ public:
 	void take(const Common::String &hotspot);
 	void useUp(const Common::String &hotspot);
 	const Common::String &hotspotObject(const Common::String &hotspot) const; // "U01_07" -> "*U01_07"
+	uint hotspotCount() const { return _hotspots.size(); }
 	Common::StringArray hotspotNames() const;
 	const Common::String &hotspotName(int index) const { return _hotspots[index].name; }
 	// A click on it would do something: an action cursor, or a runnable action (E-0251)
@@ -103,6 +104,7 @@ public:
 private:
 	struct Hotspot {
 		Common::String name; // "*U01_04"
+		Common::String lowerName; // name in lower case, for hotspotFor
 		uint32 type, cursor;
 	};
 
@@ -111,6 +113,8 @@ private:
 		Common::String name, condition, item, hotspot, target;
 		int32 maxRuns;
 		uint32 trigger, hotspotType, targetType;
+		int hotspotIndex = -1; // findHotspot(hotspot), set at load
+		bool running = false;  // inside run(): op 14 does not enter it again
 		Common::Array<uint32> ops;
 		Common::StringArray args;
 	};
