@@ -44,7 +44,7 @@ struct A3DTrack {
 struct A3DAnimation {
 	Common::String name;
 	int parent = -1; // index into A3DFile::animations
-	uint32 firstFrame, lastFrame;
+	uint32 firstFrame = 0, lastFrame = 0;
 	A3DTrack translation, scale, rotation; // hide and morph have no keys in the corpus
 };
 

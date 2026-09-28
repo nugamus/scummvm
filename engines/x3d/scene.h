@@ -241,8 +241,8 @@ private:
 	// An object's playback, plus a scripted clip that replaces it while active (slot 1)
 	struct AnimNode {
 		Common::String name; // the object's name unless the unit renames it
-		Model *model;
-		uint object;
+		Model *model = nullptr;
+		uint object = 0;
 		Playback base, clip;
 		bool clipActive = false;
 		// Numbered clip slots (animation.md "Sub-slots"): clip is slot `slot`; the others
@@ -257,7 +257,8 @@ private:
 	float _stepDt = 0; // the last advance's dt
 	AnimNode *findNode(const Common::String &objectName);
 	const A3DFile *clipFile(const Common::String &path); // loaded once, owned by the scene
-	void syncPlayback(Common::Serializer &s, Playback &p);
+	// Loading: false when the saved indices do not fit p's file or m, which resets them
+	bool syncPlayback(Common::Serializer &s, Playback &p, const Model *m);
 	Playback &active(AnimNode &n);
 
 	Model *loadModel(const Common::String &path);

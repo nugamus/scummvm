@@ -35,16 +35,23 @@ Common::SeekableReadStream *openBinChunk(const Common::Path &file, const char *n
 	Common::File f;
 	if (!f.open(file))
 		return nullptr;
+	const int64 fileSize = f.size();
+	if (fileSize < 4)
+		return nullptr;
 	f.seek(-4, SEEK_END);
 	const uint32 count = f.readUint32LE();
-	f.seek(-(int32)(count * 28 + 4), SEEK_END);
-	for (uint32 i = 0; i < count; i++) {
+	if (count > (fileSize - 4) / 28)
+		return nullptr;
+	f.seek(-(int64)(count * 28 + 4), SEEK_END);
+	for (uint32 i = 0; i < count && !f.eos(); i++) {
 		char entry[21];
 		f.read(entry, 20);
 		entry[20] = 0;
 		const uint32 offset = f.readUint32LE();
 		const uint32 size = f.readUint32LE();
 		if (!strcmp(entry, name)) {
+			if ((int64)offset + size > fileSize)
+				return nullptr;
 			f.seek(offset);
 			return f.readStream(size);
 		}
@@ -412,7 +419,7 @@ bool Scene::interpolate(float alpha) {
 }
 
 void Scene::poseAll() {
-	// ponytail: re-poses every animated file each step; track dirty objects if it shows up in profiles
+	// Re-poses every animated file each step. TODO: track dirty objects if this shows up in profiles
 	for (Model *m : _models) {
 		if (m->animated) {
 			m->file.updateWorld();
@@ -591,7 +598,7 @@ Common::StringArray Scene::siblings(const Common::String &name) const {
 Scene::AnimNode *Scene::findNode(const Common::String &objectName) {
 	// Steps name hotspot nodes without their '*' (op 4 "U01_24" is node "*U01_24")
 	for (AnimNode &n : _nodes)
-		if (n.name.equalsIgnoreCase(objectName) || (n.name.hasPrefix("*") && n.name.substr(1).equalsIgnoreCase(objectName)))
+		if (n.model && (n.name.equalsIgnoreCase(objectName) || (n.name.hasPrefix("*") && !scumm_stricmp(n.name.c_str() + 1, objectName.c_str()))))
 			return &n;
 	return nullptr;
 }
@@ -881,7 +888,9 @@ void Scene::setAnimationState(const Common::String &objectName, float frame, boo
 	AnimNode *n = findNode(objectName);
 	Common::String lower = objectName;
 	lower.toLowercase();
-	for (uint i = 0; i < _nodes.size() && !n; i++) {
+	for (uint i = 0; i < _nodes.size() && !n && !lower.empty(); i++) {
+		if (!_nodes[i].model)
+			continue;
 		Common::String name = _nodes[i].name;
 		name.toLowercase();
 		if (name.contains(lower))
@@ -987,13 +996,9 @@ Math::Vector3d Scene::facePosition(const Common::String &faceObject, const Commo
 int Scene::addFaceClip(const Common::String &faceObject, const Common::String &path, const Common::String &owner) {
 	Model *model;
 	uint object;
-	findFace(faceObject, owner, model, object);
-	Common::File f;
-	A3DFile *file = new A3DFile();
-	if (!model || !f.open(Common::Path(_dir + path)) || !file->load(f)) {
-		delete file;
+	const A3DFile *file = findFace(faceObject, owner, model, object) ? clipFile(path) : nullptr;
+	if (!file)
 		return -1;
-	}
 	// The sub-animation named like the face (E-0125). Else, as a fix (the original leaves
 	// the slot empty), the one at the face's place: the same child of the parent's
 	// namesake (U02_04's B.A3D still calls his face $$$DUMMY.Dummy01)
@@ -1017,11 +1022,8 @@ int Scene::addFaceClip(const Common::String &faceObject, const Common::String &p
 				}
 		}
 	}
-	if (found < 0) {
-		delete file;
+	if (found < 0)
 		return -1;
-	}
-	_animationFiles.push_back(file);
 	addNode(file, found, model, object, 15);
 	_nodes.back().enabled = false;
 	_nodes.back().base.running = false;
@@ -1116,10 +1118,14 @@ void Scene::Playback::advance(float dt) {
 		frame = CLIP(frame, lo, hi);
 		if (backward ? frame <= lo : frame >= hi)
 			running = false;
+	} else if (hi <= lo) {
+		frame = lo;
 	} else if (frame > hi) {
-		frame = fmodf(frame, hi) + lo;
+		// The original's fmod(frame, last) + first, the same for overshoots under one loop,
+		// kept inside the range for longer ones
+		frame = lo + fmodf(frame - lo, hi - lo);
 	} else if (frame < lo) {
-		frame = hi - (lo - frame);
+		frame = hi - fmodf(lo - frame, hi - lo);
 	}
 	if (stopAt >= 0 && fabsf(frame - stopAt) <= 2 * dt * fps) {
 		frame = stopAt;
@@ -1128,7 +1134,7 @@ void Scene::Playback::advance(float dt) {
 	}
 }
 
-void Scene::syncPlayback(Common::Serializer &s, Playback &p) {
+bool Scene::syncPlayback(Common::Serializer &s, Playback &p, const Model *m) {
 	s.syncAsUint32LE(p.animation);
 	s.syncAsFloatLE(p.fps);
 	s.syncAsFloatLE(p.frame);
@@ -1140,6 +1146,13 @@ void Scene::syncPlayback(Common::Serializer &s, Playback &p) {
 	s.syncAsFloatLE(p.first);
 	s.syncAsFloatLE(p.last);
 	s.syncAsSint32LE(p.object);
+	if (!s.isLoading() || !p.file || (p.animation < p.file->animations.size() &&
+	                                  (p.object < 0 || (m && (uint)p.object < m->file.objects.size()))))
+		return true;
+	p.animation = 0;
+	p.object = -1;
+	p.running = false;
+	return false;
 }
 
 void Scene::syncState(Common::Serializer &s) {
@@ -1177,7 +1190,7 @@ void Scene::syncState(Common::Serializer &s) {
 		byte enabled = n.enabled, clipActive = n.clipActive;
 		s.syncAsByte(enabled);
 		s.syncAsByte(clipActive);
-		syncPlayback(s, n.base);
+		syncPlayback(s, n.base, n.model);
 		Common::String path = n.clip.path;
 		s.syncString(path);
 		if (s.isLoading()) {
@@ -1191,8 +1204,10 @@ void Scene::syncState(Common::Serializer &s) {
 					n.clipActive = false;
 			}
 		}
-		syncPlayback(s, n.clip);
+		if (!syncPlayback(s, n.clip, n.model))
+			n.clipActive = false;
 		s.syncAsSint32LE(n.slot, 2);
+		n.slot = CLIP(n.slot, 1, 15);
 		for (int k = 1; k < 16; k++) {
 			Common::String extra = n.slots[k].path;
 			s.syncString(extra, 2);
@@ -1200,8 +1215,8 @@ void Scene::syncState(Common::Serializer &s) {
 				n.slots[k].file = extra.empty() ? nullptr : clipFile(extra);
 			if (s.isLoading())
 				n.slots[k].path = extra;
-			if (!extra.empty())
-				syncPlayback(s, n.slots[k]);
+			if (!extra.empty() && !syncPlayback(s, n.slots[k], n.model))
+				n.slots[k].file = nullptr;
 		}
 	}
 }
@@ -1352,7 +1367,7 @@ void Scene::draw(const Camera &cam, int width, int height) {
 		for (uint i = 0; i < m->file.objects.size(); i++) {
 			if (m->hiddenObjects[i])
 				continue;
-			// ponytail: culls on the base object's sphere; a LOD far outside it would be missed
+			// TODO: culls on the base object's sphere; a LOD far outside it would be missed
 			if (!inView(&m->bounds[i * 4]))
 				continue;
 			const Model *drawn;
@@ -1424,7 +1439,7 @@ const Common::Array<float> *Scene::drawnVertices(const Model &m, uint object) {
 		return nullptr;
 	const Common::Array<float> *vertices = &m.worldVertices[owner];
 
-	// ponytail: only camera type 2 ($Z$, the only one in U01); types 1 and 3 fix the yaw at
+	// TODO: only camera type 2 ($Z$, the only one in U01); types 1 and 3 fix the yaw at
 	// -pi/2 instead (E-0045, E-0058)
 	if (objects[object].cameraType == 2) {
 		_facingVertices.resize(vertices->size());
@@ -1491,6 +1506,12 @@ void Scene::drawObject(const Model &m, uint object) {
 				}
 			}
 			f.count++;
+		}
+		if (f.count < 3) {
+			// Not a polygon: nothing to draw, and a held-back face gives its slot back
+			if (deferred)
+				_deferredCount--;
+			continue;
 		}
 		if (deferred) {
 			f.key = (int)farthest;
@@ -1725,7 +1746,7 @@ bool Scene::pick(const Camera &cam, int width, int height, float x, float y,
 					bool usable = true;
 					for (uint32 index : f.indices)
 						usable &= index * 3 + 2 < cam3.size() && cam3[index * 3 + 2] > 0.1f;
-					// ponytail: faces crossing the near plane are skipped, not clipped
+					// TODO: faces crossing the near plane are skipped, not clipped
 					if (!usable)
 						continue;
 					// The any-corner test (E-0607): corners k = 1..n-1, then 0, with

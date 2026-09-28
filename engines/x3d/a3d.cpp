@@ -34,9 +34,16 @@ static Common::String readName(Common::SeekableReadStream &s) {
 	return Common::String(buf);
 }
 
-static void readTrack(Common::SeekableReadStream &s, A3DTrack &t, uint valueFloats) {
+// Whether count elements of at least bytes each fit in the rest of the stream
+static bool fits(Common::SeekableReadStream &s, uint32 count, uint32 bytes) {
+	return !s.eos() && count <= (s.size() - s.pos()) / bytes;
+}
+
+static bool readTrack(Common::SeekableReadStream &s, A3DTrack &t, uint valueFloats) {
 	const uint32 count = s.readUint32LE();
 	s.readUint32LE(); // flags, 0 in the corpus
+	if (!fits(s, count, (1 + 5 + valueFloats) * 4))
+		return false;
 	t.frames.resize(count);
 	for (uint32 &f : t.frames)
 		f = s.readUint32LE();
@@ -46,6 +53,7 @@ static void readTrack(Common::SeekableReadStream &s, A3DTrack &t, uint valueFloa
 	t.values.resize(count * valueFloats);
 	for (float &v : t.values)
 		v = s.readFloatLE();
+	return true;
 }
 
 bool A3DFile::load(Common::SeekableReadStream &s) {
@@ -55,8 +63,11 @@ bool A3DFile::load(Common::SeekableReadStream &s) {
 		return false;
 	}
 
-	animations.resize(s.readUint32LE());
-	for (uint i = 0; i < animations.size(); i++) {
+	const uint32 n = s.readUint32LE();
+	if (!fits(s, n, 4))
+		return false;
+	animations.resize(n);
+	for (uint i = 0; i < animations.size() && !s.eos(); i++) {
 		A3DAnimation &a = animations[i];
 		a.name = readName(s);
 		if (s.readUint32LE()) {
@@ -69,9 +80,8 @@ bool A3DFile::load(Common::SeekableReadStream &s) {
 		s.readUint32LE(); // number of frames
 		a.firstFrame = s.readUint32LE();
 		a.lastFrame = s.readUint32LE();
-		readTrack(s, a.translation, 3);
-		readTrack(s, a.scale, 3);
-		readTrack(s, a.rotation, 4);
+		if (!readTrack(s, a.translation, 3) || !readTrack(s, a.scale, 3) || !readTrack(s, a.rotation, 4))
+			return false;
 
 		// Hide: frames and one u32 per key
 		uint32 count = s.readUint32LE();

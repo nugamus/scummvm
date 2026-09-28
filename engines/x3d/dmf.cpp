@@ -39,9 +39,17 @@ Graphics::Surface *loadDMF(Common::SeekableReadStream &s) {
 	byte key[3] = {};
 	Graphics::Surface *surface = nullptr;
 
-	while (!s.err() && (uint32)s.pos() < total) {
+	while (!s.err() && !s.eos() && (uint32)s.pos() < total) {
 		const uint16 id = s.readUint16LE();
 		const uint32 size = s.readUint32LE();
+		// A chunk shorter than its own header, or one past the end, would never advance
+		if (size < 6 || s.eos() || s.pos() - 6 + size > s.size()) {
+			if (surface) {
+				surface->free();
+				delete surface;
+			}
+			return nullptr;
+		}
 		const int64 next = s.pos() + size - 6;
 
 		switch (id) {
