@@ -119,7 +119,6 @@ public:
 		w.clearClick();
 
 		const int32 e = w.elapsed();
-		const int32 half = MAX<int32>(e / 2, 1);
 		if (stepAnim(w, kAnimHen, e)) {
 			w.anims[kAnimHen].playing = false;
 			w.var(kHenDone) = 1;
@@ -132,13 +131,14 @@ public:
 			w.objects[kPelle].cursorType = 0xFF;
 			w.objects[kTerre].cursorType = 2;
 		}
-		if (stepAnim(w, kAnimBirdOut, half)) {
+		// The bird: elapsed / 2 per tick in the original (0x427b98, at least 1).
+		if (stepAnim(w, kAnimBirdOut, halfStep(w, kAnimBirdOut))) {
 			w.var(kBirdFlown) = 1;
 			w.anims[kAnimBirdOut].playing = false;
 			w.anims[kAnimBirdOut].frame = 1;
 			w.anims[kAnimBirdBack].playing = true;
 		}
-		if (stepAnim(w, kAnimBirdBack, half)) {
+		if (stepAnim(w, kAnimBirdBack, halfStep(w, kAnimBirdBack))) {
 			w.anims[kAnimBirdBack].playing = false;
 			w.anims[kAnimBirdBack].frame = 1; // Q-0402
 			w.anims[kAnimBirdOut].playing = true;

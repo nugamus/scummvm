@@ -75,7 +75,7 @@ public:
 		// 0x4243cb: half the elapsed ticks; back to 1 only on reaching the length exactly.
 		AnimRecord &a = w.anims[0];
 		if (a.playing) {
-			a.frame += w.elapsed() >> 1;
+			a.frame += halfStep(w, 0);
 			if (a.frame == a.length)
 				a.frame = 1;
 			w.pose(0, a.frame);

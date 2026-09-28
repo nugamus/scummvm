@@ -62,6 +62,13 @@ bool stepAnim(World &w, uint rec, int32 step, int32 end);
 inline bool stepAnim(World &w, uint rec, int32 step) {
 	return stepAnim(w, rec, step, w.anims[rec].length);
 }
+/**
+ * The step of a track the original advances by `elapsed / 2` per handled tick: one frame
+ * per two ticks. The original's integer halving gives 0 (or its floor of 1) at its full
+ * 15 frames per second, so these tracks froze or ran at double speed on a fast machine
+ * and ran as designed only where frames took two ticks (a bug fix, E-0378).
+ */
+int32 halfStep(World &w, uint rec);
 /** A looping record: past its end it restarts at frame 1, posed the same tick. */
 bool loopAnim(World &w, uint rec, int32 step);
 /** Sets a record's frame and poses it there. */
