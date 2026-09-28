@@ -32,7 +32,7 @@ struct Surface;
 
 namespace X3D {
 
-// Decodes a .DMF texture (docs/formats/dmf.ksy) to RGBA32 in file row order. Texels equal
+// Decodes a .DMF texture to RGBA32 in file row order. Texels equal
 // to the colour key get alpha 0. Returns nullptr on a malformed file.
 Graphics::Surface *loadDMF(Common::SeekableReadStream &s);
 
