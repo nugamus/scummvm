@@ -34,8 +34,8 @@ namespace {
 enum { kApple01, kChemise, kTrappe, kPouli03, kEncre01, kPouli02, kPoignee04 };
 
 const ObjectDef kObjects[] = {
-	{ "apple01", 2, false }, { "chemise", 3, false }, { "trappe", 4, false },
-	{ "pouli03", 4, false }, { "encre01", 2, false }, { "pouli02", 4, false },
+	{ "apple01", 2, false }, { "chemise", 3, false }, { "trappe", 0xFF, false },
+	{ "pouli03", 0xFF, false }, { "encre01", 2, false }, { "pouli02", 0xFF, false },
 	{ "poignee04", 4, false }
 };
 

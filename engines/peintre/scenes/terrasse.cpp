@@ -32,7 +32,7 @@ namespace {
 enum { kLettre, kDe, kManivelle, kLunette, kKasket, kDrapo, kPorte01, kPorte02, kPlatode };
 
 const ObjectDef kObjects[] = {
-	{ "lettre", 2, false }, { "de", 0xFF, false }, { "MANIVELLE", 4, false },
+	{ "lettre", 2, false }, { "de", 0xFF, false }, { "MANIVELLE", 0xFF, false },
 	{ "lunette", 2, false }, { "KASKET", 3, false }, { "drapo", 3, false },
 	{ "porte01", 6, false }, { "porte02", 6, false }, { "platode", 2, false }
 };

@@ -39,13 +39,13 @@ enum {
 const ObjectDef kObjects[] = {
 	{ "Object09", 2, false }, { "porte", 0xFF, false }, { "CHAISE1", 0xFF, false },
 	{ "cadre", 2, false }, { "Object02", 2, false }, { "TIROIR", 0xFF, false },
-	{ "camee", 0xFF, false }, { "shoes", 0xFF, false }, { "Object07", 2, false },
-	{ "papier", 0xFF, false }, { "mirroircas", 0xFF, true }, { "ombrelle", 0xFF, false },
+	{ "camee", 2, false }, { "shoes", 2, false }, { "Object07", 2, false },
+	{ "papier", 0xFF, false }, { "mirroircas", 0xFF, true }, { "ombrelle", 2, false },
 	{ "oreiller", 3, false }, { "tab01", 3, false }, { "tab02", 3, false },
 	{ "bougie", 0xFF, false }, { "Object01", 0xFF, false }, { "mirroir1", 0xFF, false },
 	{ "rasoir", 0xFF, false }, { "mirroirmor", 2, true }, { "porte02", 6, false },
 	{ "papierferm", 0xFF, false }, { "Object10", 0xFF, false }, { "Object01", 0xFF, false },
-	{ "shoes01", 0xFF, false }, { "tabpay", 3, false }, { "Object06", 0xFF, false }
+	{ "shoes01", 2, false }, { "tabpay", 3, false }, { "Object06", 2, false }
 };
 
 enum { kAnimChair, kAnimShoes, kAnimMirror, kAnimPaper, kAnimCupboard, kAnimDrawer };
