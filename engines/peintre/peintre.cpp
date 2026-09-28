@@ -612,6 +612,10 @@ void PeintreEngine::runWorld(int scene, int prevScene, int zone, int zoneCode) {
 			break;
 		}
 		// Back in the 3D: the next tick comes a full tick later, as after the original's wait.
+		// The key buffers are cleared on returning from 2D or the option menu (movement.md
+		// "Keyboard"): the Escape that closed the menu must not open it again.
+		endTick();
+		_keysDown.clear();
 		world.cut();
 		pending = 0;
 		last = _system->getMillis();
