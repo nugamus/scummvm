@@ -28,8 +28,7 @@ namespace X3D {
 
 class X3DEngine;
 
-// The debugger console: every command goes to X3DEngine::command, which dev_commands
-// (the game's config) also feeds, for unattended test runs
+// The debugger console: every command goes to X3DEngine::command
 class Console : public GUI::Debugger {
 public:
 	explicit Console(X3DEngine *vm);

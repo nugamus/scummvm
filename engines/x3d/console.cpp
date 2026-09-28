@@ -34,7 +34,6 @@ Console::Console(X3DEngine *vm) : GUI::Debugger(), _vm(vm) {
 	//   give <item>                    add an item to the inventory bar
 	//   hold <item | ->                put an item on the cursor ("-": none)
 	//   bar                            show or hide the inventory bar, as Space
-	//   press <up|down|shift|crouch> <ms>   hold a key for ms
 	//   probe <x> <y> <z>              the ground below a point
 	//   objs <text>                    every object whose name contains the text
 	//   node <name>                    an animation node's frame
@@ -48,9 +47,9 @@ Console::Console(X3DEngine *vm) : GUI::Debugger(), _vm(vm) {
 	//   view3d <painting>              the painting's 3D gallery scene
 	//   overlay                        the hotspot overlay on or off, as its key
 	static const char *const commands[] = {
-		"where", "goto", "lookat", "click", "hotspots", "give", "hold", "bar", "press", "probe",
-		"objs", "node", "pos", "act", "exhaust", "gauge", "save", "load", "page", "savemenu",
-		"loadmenu", "view3d", "overlay"
+		"where", "goto", "lookat", "click", "hotspots", "give", "hold", "bar", "probe", "objs",
+		"node", "pos", "act", "exhaust", "gauge", "save", "load", "page", "savemenu", "loadmenu",
+		"view3d", "overlay"
 	};
 	for (const char *c : commands)
 		registerCmd(c, WRAP_METHOD(Console, cmd));

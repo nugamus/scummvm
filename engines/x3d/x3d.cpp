@@ -46,8 +46,6 @@
 #include "graphics/hotspot_renderer.h"
 #include "graphics/surface.h"
 
-#include "image/png.h"
-
 #include "gui/message.h"
 
 #include "video/avi_decoder.h"
@@ -113,9 +111,7 @@ Common::Error X3DEngine::run() {
 	_inventory = new Inventory();
 	setDebugger(new Console(this));
 
-	// Development shortcut: start_scene=<file.X3D> in the game's config skips the boot
-	// sequence and the scene's entry video
-	if (!ConfMan.hasKey("start_scene") && !ConfMan.hasKey("save_slot")) {
+	if (!ConfMan.hasKey("save_slot")) {
 		// Boot sequence: the two intro pictures
 		showBitmap("2dbit/Intro1.bmp");
 		wait(3000);
@@ -132,7 +128,7 @@ Common::Error X3DEngine::run() {
 
 	// U00 shows the players screen and runs Monet's tutorial; the Option menu's New game
 	// then goes to App.bin's start scene
-	Common::String sceneName = ConfMan.hasKey("start_scene") ? ConfMan.get("start_scene") : "U00.X3D";
+	Common::String sceneName = "U00.X3D";
 	// A game chosen in the launcher's load dialog
 	if (ConfMan.hasKey("save_slot"))
 		loadGameState(ConfMan.getInt("save_slot"));
@@ -353,54 +349,11 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 	_enterHeld = _suspended = _hoverNow = _clickNow = false;
 	_hotspot = -1;
 	_unitActions.clear();
-	_last = _fpsStart = _sceneStart = _system->getMillis();
+	_last = _fpsStart = _system->getMillis();
 	_pending = _logicMs = _lastClick = _frames = 0;
 	_gauge = Gauge();
 	_inGameOver = false;
 
-	// Development shortcut: dev_click=x,y,ms[;x,y,ms...] clicks at game pixel (x, y) ms
-	// after the first scene starts, for testing without focus (SDL takes click positions
-	// from the real cursor). Parsed once: the schedule runs on across scene changes.
-	const bool parseDev = !_devParsed;
-	if (parseDev) {
-		_devParsed = true;
-		_devStart = _sceneStart;
-	}
-	if (parseDev && ConfMan.hasKey("dev_click")) {
-		const Common::String clicks = ConfMan.get("dev_click");
-		const char *c = clicks.c_str();
-		int x, y, ms, n;
-		while (sscanf(c, "%d,%d,%d%n", &x, &y, &ms, &n) == 3) {
-			_devClicks.push_back(x);
-			_devClicks.push_back(y);
-			_devClicks.push_back(ms);
-			c += n;
-			if (*c == ';')
-				c++;
-		}
-	}
-
-	// Development shortcut: dev_commands=ms:command[;ms:command...] runs console commands
-	// at those times after the first scene starts (console.h)
-	if (parseDev && ConfMan.hasKey("dev_commands")) {
-		const Common::String commands = ConfMan.get("dev_commands");
-		Common::String c;
-		for (const char *p = commands.c_str(); ; p++) {
-			if (*p == ';' || !*p) {
-				c.trim();
-				if (!c.empty())
-					_devCommands.push_back(c);
-				c.clear();
-				if (!*p)
-					break;
-			} else {
-				c += *p;
-			}
-		}
-	}
-
-	// Development shortcut: start_camera=x,y,z,yaw,pitch places the camera anywhere and
-	// skips the unit's scripted start
 	if (!_pendingLoad.empty()) {
 		// A load: the unit's load hook has run; restore the saved state, then the unit's
 		// start without its entry
@@ -420,14 +373,8 @@ void X3DEngine::playScene(const Common::String &sceneName) {
 		if (_unit)
 			_unit->start(false, false);
 		_restoring = false;
-	} else if (ConfMan.hasKey("start_camera")) {
-		sscanf(ConfMan.get("start_camera").c_str(), "%f,%f,%f,%f,%f", &_player.eye.x(),
-		       &_player.eye.y(), &_player.eye.z(), &_player.yaw, &_player.pitch);
-		if (_unit)
-			_unit->start(false, false);
 	} else if (_unit) {
-		// start_scene skips the prologue as well as the boot sequence
-		_unit->start(true, !ConfMan.hasKey("start_scene"));
+		_unit->start(true, true);
 	}
 	_previous = _player;
 
@@ -488,24 +435,16 @@ void X3DEngine::frame(bool input) {
 		explicit Depth(int &depth) : d(depth) { d++; }
 		~Depth() { d--; }
 	} nesting(_frameDepth);
-	if (!_devClicks.empty() && _system->getMillis() - _devStart >= (uint32)_devClicks[2]) {
-		_mouse = Common::Point(_devClicks[0], _devClicks[1]);
-		_clickNow = true;
-		for (int i = 0; i < 3; i++)
-			_devClicks.remove_at(0);
-	}
-
-	// Due commands, up to the first click (one click per frame)
-	while (input && !_clickNow && !_devCommands.empty() && _system->getMillis() - _devStart >= (uint32)atoi(_devCommands[0].c_str())) {
-		const Common::String c = _devCommands.remove_at(0);
-		const Common::String result = command(c.substr(c.findFirstOf(':') + 1));
-		debugC(1, kDebugScript, "dev command %s: %s", c.c_str(), result.c_str());
+	// A console command that runs frames of its own, up to the first click
+	while (input && !_clickNow && !_queuedCommands.empty()) {
+		const Common::String c = _queuedCommands.remove_at(0);
+		debugC(1, kDebugScript, "command %s: %s", c.c_str(), command(c).c_str());
 	}
 
 	// Modern controls: the mouse is captured in free play, the bar closed; a locked view
 	// (no turning, as in close-ups) points with a free cursor. Short sequences that are not
-	// suspended keep it captured but do not look. A click at a given point (dev_click,
-	// dev_commands) keeps its point.
+	// suspended keep it captured but do not look. A click at a given point (the console's
+	// click) keeps its point.
 	captureMouse(_modern && !_suspended && !_inventory->shown() && _player.canTurn);
 	const bool pointClick = _clickNow;
 	const Common::Point centre(_renderer->width() / 2, _renderer->height() / 2);
@@ -514,26 +453,6 @@ void X3DEngine::frame(bool input) {
 	// Logic runs in fixed steps; rendering interpolates the camera between the last two
 	const uint32 stepMs = 1000 / kStepsPerSecond;
 	const uint32 now = _system->getMillis();
-	if (_devUp) {
-		_keys.up = now < _devUp;
-		if (!_keys.up)
-			_devUp = 0;
-	}
-	if (_devDown) {
-		_keys.down = now < _devDown;
-		if (!_keys.down)
-			_devDown = 0;
-	}
-	if (_devShift) {
-		_keys.shift = now < _devShift;
-		if (!_keys.shift)
-			_devShift = 0;
-	}
-	if (_devCrouch) {
-		_keys.crouch = now < _devCrouch;
-		if (!_keys.crouch)
-			_devCrouch = 0;
-	}
 	// Skipping a scripted sequence: one step per frame, as fast as it runs, undrawn and
 	// silent, until free play or the next scene (enhancement)
 	if (_skipping && ((input && !_suspended) || !_nextScene.empty()))
@@ -776,17 +695,6 @@ void X3DEngine::drawFrame(const Camera &camera, float alpha) {
 	if (_gauge.ms && _gauge.visible)
 		drawGauge(_renderer, MIN(1.0f, (_logicMs - _gauge.start) / (float)_gauge.ms));
 	drawHotspots();
-	if (!_devSnap.empty()) {
-		// Console "snap": this frame as drawn, to a PNG
-		Common::DumpFile out;
-		if (Graphics::Surface *shot = _renderer->thumbnail(_renderer->width(), _renderer->height())) {
-			if (out.open(Common::Path(_devSnap, '/')))
-				Image::writePNG(out, *shot);
-			shot->free();
-			delete shot;
-		}
-		_devSnap.clear();
-	}
 	_renderer->present();
 	_frames++;
 }
@@ -961,24 +869,6 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 	const uint32 start = _system->getMillis();
 	_menuView = -1;
 	Common::String result;
-	// Development shortcut: dev_menu=cmd,cmd,... answers the next menus in order after
-	// 1.5 s each ("key" for any key, "text:<name>" types into the edit then Enter)
-	if (!_devMenuParsed) {
-		_devMenuParsed = true;
-		const Common::String all = ConfMan.get("dev_menu");
-		Common::String c;
-		for (const char *p = all.c_str(); ; p++) {
-			if (*p == ',' || !*p) {
-				if (!c.empty())
-					_devMenu.push_back(c);
-				c.clear();
-				if (!*p)
-					break;
-			} else {
-				c += *p;
-			}
-		}
-	}
 	while (result.empty() && !shouldQuit()) {
 		Common::Event e;
 		while (_system->getEventManager()->pollEvent(e)) {
@@ -1046,16 +936,6 @@ Common::String X3DEngine::runFrame(Frame &frame, MenuList *list, uint32 timeout)
 		}
 		if (timeout && result.empty() && _system->getMillis() - start >= timeout)
 			result = "timeout";
-		if (result.empty() && !_devMenu.empty() && _system->getMillis() - start >= 1500) {
-			const Common::String c = _devMenu.remove_at(0);
-			if (c.hasPrefix("text:")) {
-				frame.setText(c.substr(5));
-				result = "enter";
-			} else {
-				result = c;
-			}
-			debugC(1, kDebugMenu, "dev menu: %s", c.c_str());
-		}
 
 		const int hovered = frame.viewAt(Common::Point(_mouse.x - x2d, _mouse.y));
 		if (_interaction)
@@ -1298,10 +1178,6 @@ Common::String X3DEngine::command(const Common::String &line) {
 	if (a.empty())
 		return "";
 	const Common::String &c = a[0];
-	if (c == "snap" && a.size() >= 2) { // the next frame to a PNG file
-		_devSnap = a[1];
-		return "ok";
-	}
 	if (c == "where") {
 		_player.probeGround(*_collision);
 		float t = 1;
@@ -1416,20 +1292,6 @@ Common::String X3DEngine::command(const Common::String &line) {
 	}
 	if (c == "node" && a.size() >= 2) // an animation node's frame
 		return Common::String::format("frame %g running %d", _scene->nodeFrame(a[1]), (int)_scene->nodeRunning(a[1]));
-	if (c == "press" && a.size() >= 3) { // hold up, down, shift or crouch for ms, for scripted play
-		const uint32 until = _system->getMillis() + atoi(a[2].c_str());
-		if (a[1] == "up")
-			_devUp = until;
-		else if (a[1] == "down")
-			_devDown = until;
-		else if (a[1] == "shift")
-			_devShift = until;
-		else if (a[1] == "crouch")
-			_devCrouch = until;
-		else
-			return "unknown key " + a[1];
-		return "ok";
-	}
 	if (c == "probe" && a.size() >= 4) { // the ground below a point, without moving
 		const Math::Vector3d p(atof(a[1].c_str()), atof(a[2].c_str()), atof(a[3].c_str()));
 		float t = 1;
