@@ -242,6 +242,8 @@ private:
 	void storeView(bool pitch);
 	void move();
 	void collide();
+	/** Whether the last move went through a wall from its front (the bug fix in tick()). */
+	bool crossedWall(const Vec3i &from) const;
 	void mouse();
 	void frameLogic(bool hourglass);
 	void barLogic();
