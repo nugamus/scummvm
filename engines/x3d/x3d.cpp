@@ -982,9 +982,9 @@ bool X3DEngine::picks(const Common::Point &s, int target) {
 	const Scene::Model *model;
 	uint o;
 	float depth;
-	// As a click: nothing beyond 4 scene units of depth counts
-	if (!_scene->pick(_camera, _renderer->width(), _renderer->height(), s.x, s.y, model, o, depth) ||
-	    depth > 4 * _scene->scale)
+	// At any distance, unlike a click (4 scene units): the overlay shows everything that
+	// works, near or far (user, 2026-09-28)
+	if (!_scene->pick(_camera, _renderer->width(), _renderer->height(), s.x, s.y, model, o, depth))
 		return false;
 	Common::StringArray names;
 	for (int k = o; k >= 0; k = model->file.objects[k].parent)
