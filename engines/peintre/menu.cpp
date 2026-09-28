@@ -76,11 +76,20 @@ int PeintreEngine::runOptionMenu(bool from3D) {
 	// v = volume % × 211 / 100; the record holds (percent - 100) × 50.
 	int v = CLIP<int>((player.volume / 50 + 100) * 211 / 100, 0, 210);
 	uint viewSize = player.viewSize;
-	// Q-0355: the saved games, slots 1..34, in slot order (the original sorts by file time).
+	// The saved games, slots 1..34, oldest write first (Save_ListGames sorts by file time;
+	// here by the write counter, games without one first in slot order).
 	Common::Array<uint> games;
 	for (uint s = 1; s < kNumObjects; s++)
 		if (gameExists(_player, s))
 			games.push_back(s);
+	Common::Array<uint32> when;
+	for (uint s : games)
+		when.push_back(saveOrder(_player, s));
+	for (uint i = 1; i < games.size(); i++) // insertion sort, stable
+		for (uint j = i; j > 0 && when[j - 1] > when[j]; j--) {
+			SWAP(when[j - 1], when[j]);
+			SWAP(games[j - 1], games[j]);
+		}
 
 	Page page = kMain;
 	drawBackground(bg, "option");

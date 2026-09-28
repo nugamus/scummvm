@@ -55,6 +55,12 @@ class SceneScript;
  * tracks' playing flags keep their values from one visit to the next (only what the init
  * sets is reset; LoadAnims resets the frames). Not saved, as in the original.
  */
+struct SaveOrderEntry {
+	Common::String name;
+	uint32 when;
+};
+typedef Common::Array<SaveOrderEntry> SaveOrder;
+
 struct SceneSession {
 	SceneScript *script = nullptr;
 	Common::Array<byte> cursorTypes;
@@ -169,6 +175,10 @@ public:
 	bool readGame(uint player, uint slot);
 	bool readResume(uint player, uint32 &in2d);
 	bool gameExists(uint player, uint slot) const;
+	/** The write counter of a saved game (0: unknown), for the Load page's order. */
+	uint32 saveOrder(uint player, uint slot) const;
+	SaveOrder readSaveOrder() const;
+	void writeSaveOrder(const SaveOrder &order);
 
 	/** The zone's sunflower count when the 2D side left it (passed to 0x42f2c2). */
 	uint32 zoneLeaveCount = 0;
