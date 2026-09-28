@@ -40,10 +40,11 @@ Renderer *Renderer::create(int width, int height, bool &native) {
 #endif
 		Graphics::kRendererTypeTinyGL);
 
-	// OpenGL draws at the window's size: only with the high_res option. Otherwise the
-	// original's 640x480 (or wider) frame, which ScummVM scales to the window.
-	native = type == Graphics::kRendererTypeOpenGL && ConfMan.getBool("high_res");
-	if (native)
+	// OpenGL draws at the window's size only with the high_res option. Otherwise it draws
+	// the original's 640x480 (or wider) frame into ScummVM's frame buffer, which ScummVM
+	// scales to the window (native is read while the renderer sets the mode up).
+	native = ConfMan.getBool("high_res");
+	if (type == Graphics::kRendererTypeOpenGL)
 		if (Renderer *r = createOpenGLRenderer(width, height))
 			return r;
 	native = false;
