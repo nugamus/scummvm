@@ -20,15 +20,14 @@
  */
 
 #include "common/serializer.h"
-#include "common/file.h"
 
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
 #include "x3d/scene.h"
 #include "x3d/sound.h"
-#include "x3d/monet/u07.h"
 #include "x3d/x3d.h"
+#include "x3d/monet/u07.h"
 
 namespace X3D {
 
@@ -36,22 +35,25 @@ using Math::Vector3d;
 
 static const float kKeep = X3DEngine::kKeep;
 static const char *const kPlank = "*U06_30";
+static const uint32 kDynamiteMs = 270000; // until the dynamite explodes
 
 void U07::afterLoad() {
-	// u07.md, Load-time renames (E-0394)
 	Scene *scene = _vm->scene();
 	Scene::Model *m;
 	uint o;
-	for (int i = 0; scene->findObject("Object04", m, o); i++)
-		m->file.objects[o].name = i == 0 ? Common::String("*U06_260") : i == 1 ? Common::String("*U06_26") : Common::String::format("*U06_26%d", i);
+	for (int i = 0; scene->findObject("Object04", m, o); i++) {
+		Common::String &name = m->file.objects[o].name;
+		if (i == 0)
+			name = "*U06_260";
+		else if (i == 1)
+			name = "*U06_26";
+		else
+			name = Common::String::format("*U06_26%d", i);
+	}
 	scene->renameObject("secretpioc", "*U06_28");
 	scene->renameObject("*U06_27", "*U06_29"); // Cave2's wall: the grille keeps *U06_27
 	if (scene->findObject("planche", m, o) && m->file.objects[o].parent >= 0)
 		m->file.objects[m->file.objects[o].parent].name = kPlank;
-}
-
-void U07::effect(const char *name, const Vector3d &position) {
-	_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(_vm->scene()->dir() + "Sound/" + name + ".wav"), position, false);
 }
 
 float U07::heightAboveGround(const Vector3d &p) {
@@ -60,14 +62,13 @@ float U07::heightAboveGround(const Vector3d &p) {
 }
 
 void U07::start(bool newGame, bool video) {
-	// u07.md, Entry (E-0394)
 	Scene *scene = _vm->scene();
 	Sound *sound = _vm->sound();
 	Player &player = _vm->player();
 	Interaction *interaction = _vm->interaction();
 	sound->play(Common::Path(scene->dir() + "Sound/s4_16.wav"), Sound::kAmbient, 85, true);
-	// The original's falls in U07 are silent (camera +0x58 = 0); the engine's land
-	// with SAUT
+	// The original's falls in U07 are silent (its landing sound is off); the engine's
+	// land with SAUT
 	for (Scene::Model *m : scene->models())
 		for (const O3DObject &obj : m->file.objects)
 			if (obj.name.hasPrefix("halo"))
@@ -75,10 +76,10 @@ void U07::start(bool newGame, bool video) {
 	const float s = scene->scale;
 	if (!interaction->exhausted(7)) {
 		sound->setEmitter(Sound::kUnitEmitter1, 4, 50 * s);
-		sound->emit(Sound::kUnitEmitter1, Common::Path(scene->dir() + "Sound/s4_22.wav"), Vector3d(1299, -143, 473), true);
+		sound->emit(Sound::kUnitEmitter1, soundPath("s4_22"), Vector3d(1299, -143, 473), true);
 	}
 	sound->setEmitter(Sound::kUnitEmitter2, 5, 50 * s);
-	sound->emit(Sound::kUnitEmitter2, Common::Path(scene->dir() + "Sound/s4_19.wav"), Vector3d(1536, 363, 374), true);
+	sound->emit(Sound::kUnitEmitter2, soundPath("s4_19"), Vector3d(1536, 363, 374), true);
 	player.setSphere(s / 4, 0.4f * 1.5f * s);
 	player.groundObject = kPlank;
 	if (interaction->exhausted(4))
@@ -98,7 +99,7 @@ void U07::start(bool newGame, bool video) {
 		scene->hideObject("*U06_19");
 		_vm->collision()->setEnabled("*U06_19", false);
 	}
-	_vm->saveGameState(_vm->getAutosaveSlot(), "Automatic save", true);
+	_vm->autosave();
 }
 
 void U07::syncState(Common::Serializer &s) {
@@ -106,11 +107,12 @@ void U07::syncState(Common::Serializer &s) {
 }
 
 bool U07::input(float dt) {
-	// u07.md, Input hook (E-0395): the ladder, then the plank and the water
+	// The ladder, then the plank and the water
 	Player &player = _vm->player();
 	const Keys &keys = _vm->keys();
-	const float s = _vm->scene()->scale, h = 1.5f * s;
-	// The generic input first: the tests below see this step's ground (movement.md)
+	const float s = _vm->scene()->scale;
+	const float h = 1.5f * s;
+	// The generic input first: the tests below see this step's ground
 	if (player.tick(dt, keys, *_vm->collision()))
 		_vm->sound()->emit(Sound::kEffectsEmitter, "SAUT.WAV", player.eye, false);
 	if (!_vm->interaction()->exhausted(1)) {
@@ -118,22 +120,18 @@ bool U07::input(float dt) {
 		if (keys.up && !_upWas) {
 			const Vector3d p = player.eye + Vector3d(0, 0, 20);
 			float t;
-			if (!_vm->collision()->cast(p, p + Vector3d(0, 0, 0.4f * s), t)) {
-				const float to[3] = { p.x(), p.y(), p.z() };
-				_vm->moveTo(1200, to, kKeep, kKeep);
-			}
+			if (!_vm->collision()->cast(p, p + Vector3d(0, 0, 0.4f * s), t))
+				moveTo(1200, p, kKeep, kKeep);
 		} else if (keys.down && !_downWas) {
 			const Vector3d p = player.eye - Vector3d(0, 0, 20);
-			if (heightAboveGround(p) >= h) {
-				const float to[3] = { p.x(), p.y(), p.z() };
-				_vm->moveTo(1200, to, kKeep, kKeep);
-			}
+			if (heightAboveGround(p) >= h)
+				moveTo(1200, p, kKeep, kKeep);
 		}
 		_upWas = keys.up;
 		_downWas = keys.down;
 		return true;
 	}
-	// Both tests compare the ground object's name, not its identity (E-0619)
+	// Both tests compare the ground object's name, not its identity
 	if (!_plankTipped && player.groundObject.equalsIgnoreCase("Planch01"))
 		tipPlank(); // then the water test, in the same call
 	if (player.groundObject.empty() || player.groundObject.hasPrefixIgnoreCase("*eau"))
@@ -146,36 +144,31 @@ void U07::switchAndDescent() {
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	Sound *sound = _vm->sound();
-	const float s = scene->scale, h = 1.5f * s;
+	const float s = scene->scale;
+	const float h = 1.5f * s;
 	_vm->suspend(true);
 	scene->runNodeTo("*U06_22", -1, false);
 	effect("s1_08bis", player.eye);
-	while (sound->isGroupPlaying(Sound::kEffects) && !_vm->shouldQuit())
-		_vm->runFor(0);
+	waitGroup(Sound::kEffects);
 	scene->runNodeTo("*Eteint01", -1, false);
 	effect("s4_20", player.eye);
 	_vm->moveTo(1000, nullptr, 4.64f, 0.3f);
-	while (scene->nodeRunning("*Eteint01") && !_vm->shouldQuit())
-		_vm->runFor(0);
-	_vm->startGauge(270000);
+	waitNode("*Eteint01");
+	_vm->startGauge(kDynamiteMs);
 	_vm->moveTo(1000, nullptr, 1.54286f, 0.530796f);
 	do {
-		const float q[3] = { player.eye.x(), player.eye.y(), player.eye.z() - 0.6f * s };
-		_vm->moveTo(1000, q, kKeep, kKeep);
+		moveTo(1000, player.eye - Vector3d(0, 0, 0.6f * s), kKeep, kKeep);
 		_vm->runFor(300);
 	} while (heightAboveGround(player.eye) >= 1.8f * h && !_vm->shouldQuit());
-	// The snap is a fall done here, in the sequence (u07.md step 6)
+	// The snap is a fall done here, in the sequence
 	if (player.ground(*_vm->collision())) {
 		const Keys none;
 		while (player.falling() && !_vm->shouldQuit()) {
 			player.tick(1.0f / X3DEngine::kStepsPerSecond, none, *_vm->collision());
-			const uint32 t = _vm->logicMs();
-			while (_vm->logicMs() == t && !_vm->shouldQuit())
-				_vm->runFor(0);
+			waitStep();
 		}
 	}
-	if (Common::File::exists("SAUT.WAV"))
-		sound->emit(Sound::kEffectsEmitter, "SAUT.WAV", player.eye, false);
+	sound->emit(Sound::kEffectsEmitter, "SAUT.WAV", player.eye, false);
 	_vm->moveTo(800, nullptr, kKeep, kHalfPi);
 	const float p[3] = { 1453.19f, 1912.76f, 362.294f };
 	_vm->moveTo(1500, p, 2.663f, kKeep);
@@ -189,14 +182,14 @@ void U07::tipPlank() {
 	Scene *scene = _vm->scene();
 	_vm->suspend(true);
 	_plankTipped = true;
-	const float p1[3] = { 1034.62f, 287.2f, 374 }, p2[3] = { 1034.55f, 284.2f, 374.3f };
+	const float p1[3] = { 1034.62f, 287.2f, 374 };
+	const float p2[3] = { 1034.55f, 284.2f, 374.3f };
 	_vm->moveTo(800, p1, 7.863f, 1.0108f);
 	_vm->moveTo(1000, p2, 4.743f, 0.85f);
 	if (scene->addObjectNode(kPlank, "Anim/planche.A3D", 30)) {
 		scene->setNodeLoop(kPlank, false);
 		effect("planche", _vm->player().eye);
-		while (scene->nodeRunning(kPlank) && !_vm->shouldQuit())
-			_vm->runFor(0);
+		waitNode(kPlank);
 	}
 	_vm->moveTo(1000, nullptr, kKeep, kHalfPi);
 	_vm->suspend(false);
@@ -206,12 +199,13 @@ void U07::fallInWater() {
 	// U07_FallInWater: U02's fall without the dimming
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
-	const float s = scene->scale, h = 1.5f * s;
+	const float s = scene->scale;
+	const float h = 1.5f * s;
 	_vm->suspend(true);
 	effect("eau", player.eye);
 	const Vector3d d(cosf(player.yaw) * sinf(player.pitch), -sinf(player.yaw) * sinf(player.pitch), -cosf(player.pitch));
 	const float p[3] = { player.eye.x() + s * d.x(), player.eye.y() + s * d.y(), player.eye.z() - h + 10 };
-	const float drop = player.eye.z() - p[2]; // movement.md's fall is vertical
+	const float drop = player.eye.z() - p[2]; // the fall is vertical
 	player.collide = false;
 	const float z0 = player.eye.z();
 	const uint32 t0 = _vm->logicMs();
@@ -249,11 +243,11 @@ void U07::explosion() {
 	static const byte colours[5][3] = { { 0, 0, 0 }, { 255, 0, 0 }, { 128, 0, 255 }, { 128, 255, 0 }, { 255, 255, 255 } };
 	const uint32 t0 = _vm->logicMs();
 	uint32 last = 0;
-	float fov = 70;
+	bool wide = false; // the FOV flickers between 70 and 90
 	bool first = true;
 	while (_vm->logicMs() - t0 < 2000 && !_vm->shouldQuit()) {
-		_vm->moveTo(100, nullptr, kKeep, kKeep, fov);
-		fov = fov == 70 ? 90 : 70;
+		_vm->moveTo(100, nullptr, kKeep, kKeep, wide ? 90 : 70);
+		wide = !wide;
 		if (first || _vm->logicMs() - last > 100) {
 			first = false;
 			last = _vm->logicMs();
@@ -268,10 +262,10 @@ void U07::explosion() {
 }
 
 void U07::end() {
-	// CouperDynamite: the fuse is cut, the epilogue, the Option menu (E-0399)
+	// CouperDynamite: the fuse is cut, the epilogue, the Option menu
 	Scene *scene = _vm->scene();
 	_vm->stopGauge();
-	_vm->interaction()->useUp(""); // only the held item goes (E-0539)
+	_vm->interaction()->useUp(""); // only the held item goes
 	scene->hideObject("*U06_26");
 	_vm->collision()->setEnabled("*U06_26", false);
 	_vm->sound()->stopEmitter(Sound::kUnitEmitter1);
@@ -282,7 +276,6 @@ void U07::end() {
 }
 
 bool U07::handle(const Common::String &action) {
-	// u07.md, Click handlers (E-0396)
 	Scene *scene = _vm->scene();
 	Collision *collision = _vm->collision();
 	if (action.equalsIgnoreCase("DoInterrupteur")) {
@@ -296,7 +289,7 @@ bool U07::handle(const Common::String &action) {
 		effect("s4_21", _vm->player().eye);
 		scene->hideObject("*U06_29");
 		collision->setEnabled("*U06_29", false);
-		_vm->interaction()->useUp(""); // only the held item goes, no cursor changes (E-0539)
+		_vm->interaction()->useUp(""); // only the held item goes, no cursor changes
 		collision->setEnabled("mursecreth", false);
 	} else if (action.equalsIgnoreCase("CouperDynamite")) {
 		end();

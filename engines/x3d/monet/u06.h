@@ -22,18 +22,14 @@
 #ifndef X3D_MONET_U06_H
 #define X3D_MONET_U06_H
 
-#include "math/vector3d.h"
-
 #include "x3d/unit.h"
 
 namespace X3D {
 
-class X3DEngine;
-
-// U06, the orangery garden and the clown with the rifle (games/monet/docs/u06.md)
+// U06, the orangery garden and the clown with the rifle
 class U06 : public Unit {
 public:
-	explicit U06(X3DEngine *vm) : _vm(vm) {}
+	explicit U06(X3DEngine *vm) : Unit(vm) {}
 
 	void start(bool newGame, bool video) override;
 	bool input(float dt) override;
@@ -42,15 +38,13 @@ public:
 	void afterAnimate() override; // the clown turns
 
 private:
-	void effect(const char *name, const Math::Vector3d &position);
 	void startShooting();
 	void stopShooting();
 	void shotDown();
 	void wakeMan();
 	void drain();
 
-	X3DEngine *_vm;
-	bool _shooting = true; // never written by the original: debug-heap fill, so true (E-0534)
+	bool _shooting = true; // never set by the original: its debug heap fills it, so true
 	int _shots = 0;
 	float _clownYaw = 3 * (float)M_PI / 2;
 	bool _turned = false;

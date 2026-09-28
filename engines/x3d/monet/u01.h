@@ -25,15 +25,13 @@
 #include "common/random.h"
 #include "common/str.h"
 
-#include "x3d/unit.h"
-
 #include "math/vector3d.h"
+
+#include "x3d/unit.h"
 
 namespace X3D {
 
-class X3DEngine;
-
-// U01, the station: its unit code (games/monet/docs/u01.md)
+// U01, the station
 class U01 : public Unit {
 public:
 	explicit U01(X3DEngine *vm);
@@ -56,13 +54,13 @@ private:
 	void ride(float dt);
 	void caught();
 	void leave();
-	void waitVoice();
 	Math::Vector3d objectUnder(const Common::String &parent, const Common::String &name);
-	Math::Vector3d at(const char *object);
 
-	X3DEngine *_vm;
 	Common::RandomSource _random;
-	bool _switchThrown = false, _train2Loaded = false, _onTrain = false, _firstMaire = true;
+	bool _switchThrown = false;
+	bool _train2Loaded = false;
+	bool _onTrain = false;
+	bool _firstMaire = true;
 };
 
 } // End of namespace X3D

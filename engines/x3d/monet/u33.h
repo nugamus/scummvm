@@ -28,13 +28,10 @@
 
 namespace X3D {
 
-class X3DEngine;
-
 // U33, the square at night: the projectionist, the caravan, the clown and the bike
-// (games/monet/docs/u33.md)
 class U33 : public Unit {
 public:
-	explicit U33(X3DEngine *vm) : _vm(vm) {}
+	explicit U33(X3DEngine *vm) : Unit(vm) {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
@@ -45,14 +42,9 @@ public:
 	void syncState(Common::Serializer &s) override; // the clock (not in the original)
 
 private:
-	void run(uint32 id);
 	Math::Vector3d ground(float x, float y, float z);
 	void walk(uint32 ms, const Math::Vector3d &to, float yaw);
 	void walkG(uint32 ms, float x, float y, float z, float yaw);
-	float facing(const Math::Vector3d &target, const Math::Vector3d &from) const;
-	Math::Vector3d at(const char *object) const;
-	void effect(const char *name, const Math::Vector3d &position);
-	void waitNode(const char *node, float frame); // until the node pauses or reaches frame
 	void voiceWait(bool enterStops);
 
 	void walkToScreen();
@@ -70,10 +62,10 @@ private:
 	void policeman();
 	void ride();
 
-	X3DEngine *_vm;
-	uint32 _timer = 0; // the nag's and the clown search's shared clock (E-0422)
+	uint32 _timer = 0; // the nag's and the clown search's shared clock
 	bool _riding = false;
-	float _roll = 0, _rho = 2; // the ride's sway
+	float _roll = 0; // the ride's sway
+	float _rho = 2;
 };
 
 } // End of namespace X3D

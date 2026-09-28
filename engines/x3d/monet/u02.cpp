@@ -20,7 +20,6 @@
  */
 
 #include "common/serializer.h"
-#include "common/textconsole.h"
 
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
@@ -28,27 +27,34 @@
 #include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
-#include "x3d/monet/u02.h"
 #include "x3d/x3d.h"
+#include "x3d/monet/u02.h"
 
 namespace X3D {
 
 using Math::Vector3d;
 
 static const float kKeep = X3DEngine::kKeep;
-static const uint32 kGaugeMs = 180000;
+static const uint32 kGaugeMs = 180000;     // the train gauge
+static const uint32 kWarnFromMs = 160000;  // the inspector's warning window on it
+static const uint32 kWarnToMs = 170000;
 
-// The magpie, the clerk, the seller, the inspector and the bell (u02.md, Cast)
+// Action ids
+enum {
+	kActionFeedMagpie = 8, // M08 MarronToPie
+	kActionRingBell = 12,  // M12 Sonner
+	kActionSnore = 20      // M20 ClickRonfle
+};
+
+// The magpie, the clerk, the seller, the inspector and the bell
 static const char *const kMagpie = "*U02_05";
 static const char *const kClerk = "*U02_04";
 static const char *const kSeller = "*U02_03";
 static const char *const kInspector = "*U02_02";
 static const char *const kBell = "$Z$*U02_10";     // the whistle cord's node
-static const char *const kBellObject = "*U02_10";  // its object after the name cut (E-0271)
-
+static const char *const kBellObject = "*U02_10";  // its object after the name cut
 
 void U02::afterLoad() {
-	// u02.md, Load-time fixes (E-0160)
 	Scene *scene = _vm->scene();
 	_vm->sound()->play(Common::Path(scene->dir() + "Sound/s1_15.wav"), Sound::kAmbient, 85, true);
 	scene->renameObject("*U02_01", "*U02_06");
@@ -62,26 +68,24 @@ void U02::afterLoad() {
 }
 
 void U02::start(bool newGame, bool video) {
-	// u02.md, Entry (E-0160)
 	Talk *talk = _vm->talk();
 	talk->addTalker("U02_02", "$$$DUMMY.*U02Parle");
 	talk->addTalker("U02_03", "$$$DUMMY.*U_03Parle");
 	talk->addTalker("U02_04", "$$$DUMMY.*visage");
 	// The clerk asleep on a restore: his snore as a looping effect, not the snore
-	// emitter, so the next effect cuts it (E-0618)
-	if (_vm->interaction()->exhausted(8) && !_vm->interaction()->exhausted(12))
-		_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(_vm->scene()->dir() + "Sound/d1_25.wav"), hotspotPosition("U02_04"), true);
+	// emitter, so the next effect cuts it
+	if (_vm->interaction()->exhausted(kActionFeedMagpie) && !_vm->interaction()->exhausted(kActionRingBell))
+		_vm->sound()->emit(Sound::kEffectsEmitter, soundPath("d1_25"), hotspotPosition("U02_04"), true);
 	if (!newGame)
 		return;
 	const float p[3] = { 122.626f, 67.0605f, 52.529f };
 	_vm->setView(p, 0.1f, kHalfPi);
 	if (!_vm->inventory()->has("U02_01P"))
 		_vm->inventory()->add("U02_01P");
-	// The autosave, named after Message.txt line 1003 (E-0160)
-	_vm->saveGameState(_vm->getAutosaveSlot(), "Automatic save", true);
+	_vm->autosave();
 }
 
-// A hotspot's show: visible and back in collision (E-0272)
+// A hotspot's show: visible and back in collision
 void U02::show(const char *object) {
 	_vm->scene()->hideObject(object, false);
 	_vm->collision()->setEnabled(object, true);
@@ -89,10 +93,6 @@ void U02::show(const char *object) {
 
 void U02::say(const char *character, const char *line) {
 	_vm->talk()->say(character, line);
-}
-
-void U02::effect(const char *name, const Vector3d &position) {
-	_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(_vm->scene()->dir() + "Sound/" + name + ".wav"), position, false);
 }
 
 Vector3d U02::hotspotPosition(const char *hotspot) {
@@ -103,31 +103,19 @@ void U02::resetCalls() {
 	_callStart = _vm->logicMs();
 }
 
-void U02::waitClip(const char *node) {
-	while (_vm->scene()->clipPlaying(node) && !_vm->shouldQuit())
-		_vm->runFor(0);
-}
-
-void U02::waitGroup(int group, bool walk) {
-	while (_vm->sound()->isGroupPlaying(group) && !_vm->shouldQuit())
-		_vm->runFor(0, walk);
-}
-
 void U02::startSnore() {
-	_vm->sound()->emit(Sound::kPhoneEmitter, Common::Path(_vm->scene()->dir() + "Sound/d1_25.wav"), hotspotPosition("U02_04"), true);
+	_vm->sound()->emit(Sound::kPhoneEmitter, soundPath("d1_25"), hotspotPosition("U02_04"), true);
 }
 
 void U02::walkPath(uint32 ms, const Vector3d &target) {
-	// WalkPath (E-0161): straight steps snapped to the ground, no collision
+	// WalkPath: straight steps snapped to the ground, no collision
 	Player &player = _vm->player();
 	const uint n = MAX<uint>(1, ms * X3DEngine::kStepsPerSecond / 1000);
 	const Vector3d step = (target - player.eye) * (1.0f / n);
 	for (uint i = 0; i < n && !_vm->shouldQuit(); i++) {
 		player.eye += step;
 		player.ground(*_vm->collision());
-		const uint32 t = _vm->logicMs();
-		while (_vm->logicMs() == t && !_vm->shouldQuit())
-			_vm->runFor(0);
+		waitStep();
 	}
 	player.eye = target;
 }
@@ -140,7 +128,6 @@ void U02::follow(const char *object, float untilFrame) {
 }
 
 bool U02::handle(const Common::String &action) {
-	// u02.md, Click handlers (E-0162..E-0164)
 	Scene *scene = _vm->scene();
 	Interaction *interaction = _vm->interaction();
 	if (action.equalsIgnoreCase("ClickControleur")) {
@@ -162,7 +149,7 @@ bool U02::handle(const Common::String &action) {
 		retakeCoin();
 	} else if (action.equalsIgnoreCase("ClickVendeuse")) {
 		_callPeriod = 20000;
-		if (interaction->exhausted(8) && !interaction->exhausted(12) && interaction->runs(20) > 0) {
+		if (interaction->exhausted(kActionFeedMagpie) && !interaction->exhausted(kActionRingBell) && interaction->runs(kActionSnore) > 0) {
 			say("U02_03", _random.getRandomNumber(1) == 1 ? "d1_29" : "d1_30");
 			resetCalls();
 		}
@@ -177,7 +164,7 @@ bool U02::handle(const Common::String &action) {
 			scene->runNodeTo("*U02_12", 1, true);
 	} else if (action.equalsIgnoreCase("TakePlanche")) {
 		// Only from the floor the plank lies on: the original compares the ground
-		// object's name, and plncher01 is unique in U02 (E-0618)
+		// object's name, and plncher01 is unique in U02
 		if (_vm->player().groundObject.equalsIgnoreCase("plncher01"))
 			interaction->take("*U02_07");
 	} else if (action.equalsIgnoreCase("PoserPlanche")) {
@@ -189,7 +176,7 @@ bool U02::handle(const Common::String &action) {
 	} else if (action.equalsIgnoreCase("MarronToPie")) {
 		feedMagpie();
 	} else if (action.equalsIgnoreCase("ClickRonfle")) {
-		const int n = interaction->runs(20);
+		const int n = interaction->runs(kActionSnore);
 		if (n == 1)
 			interaction->setCursorKind(kSeller, 3);
 		if (n == 3)
@@ -212,7 +199,7 @@ bool U02::handle(const Common::String &action) {
 }
 
 void U02::refuseCoin() {
-	// The refused coin (E-0162)
+	// The refused coin
 	Scene *scene = _vm->scene();
 	Interaction *interaction = _vm->interaction();
 	Player &player = _vm->player();
@@ -247,7 +234,7 @@ void U02::retakeCoin() {
 }
 
 void U02::buyChestnuts() {
-	// AcheterMarron (E-0163)
+	// AcheterMarron
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	_vm->suspend(true);
@@ -268,7 +255,7 @@ void U02::buyChestnuts() {
 }
 
 void U02::magpieSteals() {
-	// PieVoleur: the seller gives the change, the magpie takes it (E-0163)
+	// PieVoleur: the seller gives the change, the magpie takes it
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	scene->setNodeFrame(kMagpie, 30);
@@ -282,7 +269,8 @@ void U02::magpieSteals() {
 	scene->setNodeFrame(kSeller, 1);
 	scene->runNodeTo(kSeller, -1, false);
 
-	const float yaw = player.yaw, pitch = player.pitch;
+	const float yaw = player.yaw;
+	const float pitch = player.pitch;
 	player.collide = false;
 	bool said = false;
 	while (scene->nodeFrame(kMagpie) <= 145 && scene->nodeRunning(kMagpie) && !_vm->shouldQuit()) {
@@ -313,7 +301,7 @@ void U02::magpieSteals() {
 }
 
 void U02::magpieFlies() {
-	// The magpie waits for the player, then flies to the barrier (E-0161)
+	// The magpie waits for the player, then flies to the barrier
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	_vm->suspend(true);
@@ -329,7 +317,7 @@ void U02::magpieFlies() {
 }
 
 void U02::feedMagpie() {
-	// MarronToPie: the magpie drops the coin, the gauge starts, the clerk dozes (E-0163)
+	// MarronToPie: the magpie drops the coin, the gauge starts, the clerk dozes
 	Scene *scene = _vm->scene();
 	Interaction *interaction = _vm->interaction();
 	Player &player = _vm->player();
@@ -357,8 +345,7 @@ void U02::feedMagpie() {
 	// S'envoler at the node's own rate and loop (40 fps, not looping since PieVoleur)
 	scene->setClip(kMagpie, "Anim/U02_05/ACTION04.A3D");
 	scene->runNodeTo(kMagpie, -1, false);
-	while (scene->nodeFrame(kMagpie) < 29 && scene->nodeRunning(kMagpie) && !_vm->shouldQuit())
-		_vm->runFor(0);
+	waitNode(kMagpie, 29);
 	scene->hideObject("*U02_06a");
 	_vm->collision()->setEnabled("*U02_06a", false);
 
@@ -376,7 +363,7 @@ void U02::feedMagpie() {
 	_vm->suspend(false);
 	const Vector3d voice = player.eye - Vector3d(0, 0, 5 * scene->scale); // before the wait
 	_vm->runFor(2000, true);
-	_vm->sound()->emit(Sound::kVoiceEmitter, Common::Path(scene->dir() + "Sound/d1_24.wav"), voice, false);
+	voiceAt("d1_24", voice);
 	_gauge = true;
 	_gaugeStart = _vm->logicMs();
 	waitGroup(Sound::kEffects, true);
@@ -394,7 +381,7 @@ void U02::feedMagpie() {
 }
 
 void U02::ringBell() {
-	// Sonner: the bell wakes the clerk (E-0164)
+	// Sonner: the bell wakes the clerk
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	Sound *sound = _vm->sound();
@@ -402,14 +389,15 @@ void U02::ringBell() {
 	scene->runNodeTo(kBell, -1, false);
 	_vm->interaction()->setCursorKind(kClerk, 5);
 
-	const float eye[3] = { player.eye.x(), player.eye.y(), player.eye.z() };
-	const float yaw = player.yaw, pitch = player.pitch, fov = player.fov;
+	const Vector3d eye = player.eye;
+	const float yaw = player.yaw;
+	const float pitch = player.pitch;
+	const float fov = player.fov;
 	_vm->lookAt(500, scene->objectPosition(kBellObject));
 	sound->stopEmitter(Sound::kPhoneEmitter);
 	effect("SIREN", player.eye);
 	_vm->moveTo(2000, nullptr, kKeep, kKeep, 60);
-	while (scene->nodeRunning(kBell) && !_vm->shouldQuit())
-		_vm->runFor(0);
+	waitNode(kBell);
 
 	// He wakes, running on to the end he is heading for
 	scene->setNodeRange(kClerk, -1, -1);
@@ -427,14 +415,14 @@ void U02::ringBell() {
 	say("U02_04", "D1_31");
 	waitGroup(Sound::kVoice);
 
-	_vm->setView(eye, yaw, pitch);
+	setView(eye, yaw, pitch);
 	resetCalls();
 	_vm->interaction()->setCursorKind(kSeller, 0);
 	_vm->suspend(false);
 }
 
 void U02::buyTicket() {
-	// AcheterTicket (E-0164)
+	// AcheterTicket
 	Scene *scene = _vm->scene();
 	_vm->suspend(true);
 	const float p[3] = { 2362.52f, -93.43f, 78.9f };
@@ -463,7 +451,7 @@ void U02::takeTicket() {
 }
 
 void U02::board() {
-	// MonterDansTrain: leaving U02 for U03 (E-0164)
+	// MonterDansTrain: leaving U02 for U03
 	Scene *scene = _vm->scene();
 	Sound *sound = _vm->sound();
 	_vm->suspend(true);
@@ -480,8 +468,10 @@ void U02::board() {
 		_vm->runFor(0);
 
 	// Into the carriage: two steps up
-	const float p1[3] = { 1413.16f, 219.05f, 78.93f }, p2[3] = { 1413.16f, 219.05f, 83.93f };
-	const float p3[3] = { 1413.16f, 219.05f, 88.93f }, p4[3] = { 1404, 293, 88.036f };
+	const float p1[3] = { 1413.16f, 219.05f, 78.93f };
+	const float p2[3] = { 1413.16f, 219.05f, 83.93f };
+	const float p3[3] = { 1413.16f, 219.05f, 88.93f };
+	const float p4[3] = { 1404, 293, 88.036f };
 	_vm->moveTo(2000, p1, 4.55f, kKeep);
 	_vm->moveTo(1000, p2, 4.55f, kKeep);
 	_vm->runFor(200);
@@ -499,7 +489,6 @@ void U02::board() {
 }
 
 void U02::afterFrame() {
-	// u02.md, Every frame (E-0161)
 	Player &player = _vm->player();
 	Sound *sound = _vm->sound();
 	const uint32 now = _vm->logicMs();
@@ -520,8 +509,8 @@ void U02::afterFrame() {
 	if (!_gauge)
 		return;
 	const uint32 elapsed = now - _gaugeStart;
-	// Said once per game session (u02.md, Unit state: process-wide, never reset)
-	if (!_vm->u02Warned && elapsed > 160000 && elapsed < 170000) {
+	// Said once per game session: the flag is process-wide, never reset
+	if (!_vm->u02Warned && elapsed > kWarnFromMs && elapsed < kWarnToMs) {
 		_vm->u02Warned = true;
 		say("U02_02", "d1_26");
 	}
@@ -538,14 +527,14 @@ void U02::afterFrame() {
 }
 
 void U02::fall() {
-	// Falling into the stream (E-0161)
+	// Falling into the stream
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	const float s = scene->scale;
 	_vm->suspend(true);
 	effect("s1_19", player.eye);
 
-	// The light down in about a second: a float step, truncated after each (E-0275)
+	// The light down in about a second: a float step, truncated after each
 	const int n = X3DEngine::kStepsPerSecond;
 	const float step[3] = { (scene->ambient[0] - 90) / (float)n, (scene->ambient[1] - 90) / (float)n, (scene->ambient[2] - 90) / (float)n };
 	for (int i = 0; i < n && !_vm->shouldQuit(); i++) {
@@ -586,9 +575,10 @@ void U02::gameOver() {
 }
 
 void U02::syncState(Common::Serializer &s) {
-	// Times as ms since their start: logic time restarts with the scene (Q-0092)
+	// Times as ms since their start: logic time restarts with the scene
 	const uint32 now = _vm->logicMs();
-	uint32 call = now - _callStart, gauge = now - _gaugeStart;
+	uint32 call = now - _callStart;
+	uint32 gauge = now - _gaugeStart;
 	s.syncAsUint32LE(call);
 	s.syncAsUint32LE(_callPeriod);
 	s.syncAsByte(_callOff);

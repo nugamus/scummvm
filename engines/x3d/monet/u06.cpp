@@ -24,8 +24,8 @@
 #include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
-#include "x3d/monet/u06.h"
 #include "x3d/x3d.h"
+#include "x3d/monet/u06.h"
 
 namespace X3D {
 
@@ -34,13 +34,9 @@ using Math::Vector3d;
 static const float kKeep = X3DEngine::kKeep;
 static const char *const kClown = "*U03_02";
 static const char *const kCan = "*U06_17";
-
-void U06::effect(const char *name, const Vector3d &position) {
-	_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(_vm->scene()->dir() + "Sound/" + name + ".wav"), position, false);
-}
+static const float kRange = 330; // the clown shoots within this distance
 
 void U06::start(bool newGame, bool video) {
-	// u06.md, Entry (E-0390)
 	Scene *scene = _vm->scene();
 	_vm->sound()->play(Common::Path(scene->dir() + "Sound/s4_11.wav"), Sound::kAmbient, 85, true);
 	_vm->talk()->addTalker("U06_18", "$$$DUMMY.*visage");
@@ -48,12 +44,12 @@ void U06::start(bool newGame, bool video) {
 	_shots = 0;
 	scene->setNodeLoop(kClown, false);
 	_clownYaw = 3 * (float)M_PI / 2;
-	_vm->player().sphereOffset = 5;
+	_vm->player().sphereOffset = 5; // the offset only: setSphere would set the radius too
 	if (!newGame)
 		return;
 	const float p[3] = { -673.3f, 475, 25.4f };
 	_vm->setView(p, 2.16f, kHalfPi);
-	_vm->saveGameState(_vm->getAutosaveSlot(), "Automatic save", true);
+	_vm->autosave();
 }
 
 void U06::startShooting() {
@@ -70,16 +66,16 @@ void U06::stopShooting() {
 }
 
 void U06::afterFrame() {
-	// u06.md, Every frame (E-0391): three shots in range are fatal
+	// Three shots in range are fatal
 	const Vector3d &eye = _vm->player().eye;
 	const bool safe = eye.y() > 280 || (eye.x() > -800 && eye.y() < 230);
 	if (safe) {
 		stopShooting();
 	} else {
 		const float d = (eye - _vm->scene()->objectPosition(kClown)).getMagnitude();
-		if (!_shooting && d <= 330)
+		if (!_shooting && d <= kRange)
 			startShooting();
-		else if (_shooting && d > 330)
+		else if (_shooting && d > kRange)
 			stopShooting();
 	}
 	Scene *scene = _vm->scene();
@@ -94,7 +90,7 @@ void U06::afterFrame() {
 
 bool U06::input(float dt) {
 	// The generic input first, then, while the player walks, the clown turns toward the
-	// new eye (Hotspot_TurnToYaw; movement.md, Unit input hooks)
+	// new eye (Hotspot_TurnToYaw)
 	const Keys &keys = _vm->keys();
 	if (_vm->player().tick(dt, keys, *_vm->collision()))
 		_vm->sound()->emit(Sound::kEffectsEmitter, "SAUT.WAV", _vm->player().eye, false);
@@ -108,13 +104,15 @@ bool U06::input(float dt) {
 
 void U06::afterAnimate() {
 	// Each tick after the pose: the clown's local matrix times Rz(3pi/2 - yaw); the
-	// hotspot's load-time matrix is the identity (E-0533)
+	// hotspot's load-time matrix is the identity
 	if (!_turned)
 		return;
 	O3DObject *clown = _vm->scene()->object(kClown);
 	if (!clown)
 		return;
-	const float a = 3 * (float)M_PI / 2 - _clownYaw, c = cosf(a), s = sinf(a);
+	const float a = 3 * (float)M_PI / 2 - _clownYaw;
+	const float c = cosf(a);
+	const float s = sinf(a);
 	const float rz[9] = { c, s, 0, -s, c, 0, 0, 0, 1 };
 	float out[9];
 	for (int i = 0; i < 3; i++)
@@ -144,7 +142,7 @@ void U06::shotDown() {
 }
 
 void U06::wakeMan() {
-	// UseArrosoir (u06.md): the watering can wakes the sleeping man
+	// UseArrosoir: the watering can wakes the sleeping man
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	_vm->suspend(true);
@@ -156,9 +154,8 @@ void U06::wakeMan() {
 	const float half = (scene->nodeLastFrame(kCan) - 1) * 0.5f;
 	bool splashed = false;
 	while (scene->nodeRunning(kCan) && !_vm->enterHeld() && !_vm->shouldQuit()) {
-		const Vector3d g = scene->objectPosition(kCan);
-		const float eye[3] = { g.x() - 3.09f, g.y() - 8.542f, player.eye.z() };
-		_vm->setView(eye, player.yaw, player.pitch);
+		const Vector3d g = at(kCan);
+		setView(Vector3d(g.x() - 3.09f, g.y() - 8.542f, player.eye.z()), player.yaw, player.pitch);
 		_vm->lookAt(0, Vector3d(-1058.87f, 406.222f, 15.2054f));
 		const float f = scene->nodeFrame(kCan);
 		if (!splashed && f > half - 15) {
@@ -192,17 +189,16 @@ void U06::drain() {
 	scene->setNodeLoop("*U06_21", false);
 	scene->runNodeTo("*U06_21", -1, false);
 	effect("s4_15", player.eye);
-	while (scene->nodeRunning("*U06_21") && !_vm->shouldQuit())
-		_vm->runFor(0);
-	const float p1[3] = { -685.55f, -1224.05f, 25 }, p2[3] = { -685.295f, -1224.03f, -7.15f };
+	waitNode("*U06_21");
+	const float p1[3] = { -685.55f, -1224.05f, 25 };
+	const float p2[3] = { -685.295f, -1224.03f, -7.15f };
 	_vm->moveTo(1000, p1, kKeep, kKeep);
 	_vm->moveTo(1000, p2, 4.28f, kKeep);
 	_vm->runFor(1000);
 	_vm->moveTo(800, nullptr, 4.11f, 2.777f);
 	scene->runNodeTo("*U06_21", -1, true); // the cover closes over the player
 	effect("s4_15", player.eye);
-	while (scene->nodeRunning("*U06_21") && !_vm->shouldQuit())
-		_vm->runFor(0);
+	waitNode("*U06_21");
 	_vm->suspend(false);
 	_vm->gotoScene("U07.x3d");
 }

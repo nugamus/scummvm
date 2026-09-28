@@ -19,13 +19,16 @@
  *
  */
 
+#include "common/textconsole.h"
+
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
 #include "x3d/inventory.h"
+#include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
-#include "x3d/monet/u03.h"
 #include "x3d/x3d.h"
+#include "x3d/monet/u03.h"
 
 namespace X3D {
 
@@ -34,8 +37,13 @@ using Math::Vector3d;
 static const char *const kClown = "*U03_02";
 static const char *const kFlic = "*U03_09";
 
+// Action ids
+enum {
+	kActionClownTrick = 10 // M10 AnimeSpeakClown
+};
+
 void U03::afterLoad() {
-	// u03.md, Entry 1-3: before the hotspots
+	// Before the hotspots
 	Scene *scene = _vm->scene();
 	scene->hideObject("$$$DUMMY.Dummycolis");
 	scene->renameObject("Box121", "*U03_22");
@@ -44,17 +52,9 @@ void U03::afterLoad() {
 	scene->hideObject("pedaledrt");
 }
 
-Vector3d U03::at(const char *object) const {
-	return _vm->scene()->objectPosition(object);
-}
-
-float U03::facing(const Vector3d &target, const Vector3d &from) const {
-	const Vector3d d = target - from;
-	return atan2f(-d.y(), d.x());
-}
-
 Vector3d U03::ground(float x, float y, float z) {
-	// Cast down, then eye height h = 1.5 s above the ground (U03::SnapToGround)
+	// Cast down, then eye height h = 1.5 s above the ground (U03::SnapToGround); U33's
+	// uses the player's eye height instead
 	const Vector3d from(x, y, z);
 	float t;
 	if (!_vm->collision()->cast(from, from - Vector3d(0, 0, 10000), t))
@@ -62,20 +62,7 @@ Vector3d U03::ground(float x, float y, float z) {
 	return Vector3d(x, y, z - 10000 * t + 1.5f * _vm->scene()->scale);
 }
 
-void U03::run(uint32 id) {
-	Common::StringArray actions;
-	_vm->interaction()->runAction(id, actions);
-	for (const Common::String &a : actions)
-		_vm->addUnitAction(a);
-}
-
-void U03::waitVoice(bool enterSkips) {
-	while (_vm->sound()->isGroupPlaying(Sound::kVoice) && !(enterSkips && _vm->enterHeld()) && !_vm->shouldQuit())
-		_vm->runFor(0);
-}
-
 void U03::start(bool newGame, bool video) {
-	// u03.md, Entry (E-0301)
 	Scene *scene = _vm->scene();
 	Interaction *interaction = _vm->interaction();
 	Collision *collision = _vm->collision();
@@ -88,8 +75,8 @@ void U03::start(bool newGame, bool video) {
 	scene->setNodeLoop("*path", false);
 	scene->setNodePingPong("*path", false);
 	scene->setNodeFps("*path", 4);
-	// u03.md Entry 7: *path's parent $$$DUMMY.Dummy01 hidden with its subtree (*path and
-	// the route plane 0000aaaaaa) and out of collision (E-0531)
+	// *path's parent $$$DUMMY.Dummy01 hidden with its subtree (*path and the route plane
+	// 0000aaaaaa) and out of collision
 	Scene::Model *m;
 	uint o;
 	if (scene->findObject("*path", m, o)) {
@@ -97,18 +84,15 @@ void U03::start(bool newGame, bool video) {
 		for (const O3DObject &obj : m->file.objects)
 			collision->setEnabled(obj.name, false);
 	}
-	if (!interaction->exhausted(10))
-		collision->setEnabled(kFlic, false, true); // he walks through the player
-	else
-		collision->setEnabled("ColClown", false, true);
-
 	// The cafe and the clown's music: extra looping emitters on groups 5 and 6
 	sound->setEmitter(Sound::kUnitEmitter1, 5, 1000);
-	sound->emit(Sound::kUnitEmitter1, Common::Path(scene->dir() + "Sound/s2_03.wav"), at("*U03_01"), true);
-	if (!interaction->exhausted(10)) {
+	sound->emit(Sound::kUnitEmitter1, soundPath("s2_03"), at("*U03_01"), true);
+	if (!interaction->exhausted(kActionClownTrick)) {
+		collision->setEnabled(kFlic, false, true); // he walks through the player
 		sound->setEmitter(Sound::kUnitEmitter2, 6, 1000);
-		sound->emit(Sound::kUnitEmitter2, Common::Path(scene->dir() + "Sound/s2_04.wav"), at(kClown), true);
+		sound->emit(Sound::kUnitEmitter2, soundPath("s2_04"), at(kClown), true);
 	} else {
+		collision->setEnabled("ColClown", false, true);
 		_follow = false;
 	}
 	_vm->talk()->addTalker("U03_01", "$$$DUMMY.*visage");
@@ -117,10 +101,8 @@ void U03::start(bool newGame, bool video) {
 
 	if (newGame) {
 		run(1); // the policeman's greeting, ignoring its condition
-		const Vector3d p = ground(-132.19f, -463.89f, 70);
-		const float eye[3] = { p.x(), p.y(), p.z() };
-		_vm->setView(eye, -1.28f, kHalfPi);
-		_vm->saveGameState(_vm->getAutosaveSlot(), "Automatic save", true);
+		setView(ground(-132.19f, -463.89f, 70), -1.28f, kHalfPi);
+		_vm->autosave();
 	}
 	if (!_vm->inventory()->has("U01_19P"))
 		_vm->inventory()->add("U01_19P"); // the clock card from U01
@@ -129,24 +111,22 @@ void U03::start(bool newGame, bool video) {
 
 void U03::afterAnimate() {
 	// The policeman walks the recorded route turned by 180 degrees, the walk cycle on top
-	// (U03::FlicFollowPath, E-0302)
+	// (U03::FlicFollowPath)
 	Scene *scene = _vm->scene();
-	// Not in scripted waits: the hook belongs to the unit's own frames (u03.md)
+	// Not in scripted waits: the hook belongs to the unit's own frames
 	if (!_follow || _vm->suspended() || !scene->nodeRunning(kFlic))
 		return;
-	O3DObject *flic = scene->object(kFlic), *path = scene->object("*path");
+	O3DObject *flic = scene->object(kFlic);
+	O3DObject *path = scene->object("*path");
 	if (!flic || !path)
 		return;
-	// Rotation: L := L * Rz(pi) * path (row vectors, 3x3 parts)
-	float r[9], out[9];
+	// Rotation: L := L * Rz(pi) * path (row vectors, 3x3 parts); Rz(pi) * path is the
+	// path with its first two rows negated
+	float r[9];
 	for (int i = 0; i < 3; i++)
-		for (int j = 0; j < 3; j++) {
-			r[i * 3 + j] = 0;
-			for (int k = 0; k < 3; k++) {
-				const float rz = k == 2 ? path->matrix[k * 4 + j] : -path->matrix[k * 4 + j];
-				r[i * 3 + j] += (i == k ? 1.0f : 0.0f) * rz;
-			}
-		}
+		for (int j = 0; j < 3; j++)
+			r[i * 3 + j] = i == 2 ? path->matrix[i * 4 + j] : -path->matrix[i * 4 + j];
+	float out[9];
 	for (int i = 0; i < 3; i++)
 		for (int j = 0; j < 3; j++) {
 			out[i * 3 + j] = 0;
@@ -170,7 +150,7 @@ void U03::afterAnimate() {
 }
 
 void U03::clownTrick() {
-	// AnimeSpeakClown (E-0303)
+	// AnimeSpeakClown
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	Interaction *interaction = _vm->interaction();
@@ -180,12 +160,13 @@ void U03::clownTrick() {
 	_vm->collision()->setEnabled("ColClown", false, true);
 	_vm->talk()->say("U03_02", "U03_01_04");
 	interaction->setCursorKind(kClown, 0);
-	const float p1[3] = { -126, -581, player.eye.z() };
-	_vm->moveTo(6000, p1, facing(at(kClown), Vector3d(p1[0], p1[1], p1[2])), kHalfPi);
-	waitVoice();
+	const Vector3d p1(-126, -581, player.eye.z());
+	moveTo(6000, p1, facing(at(kClown), p1), kHalfPi);
+	waitVoice(true);
 
-	const float eye[3] = { player.eye.x(), player.eye.y(), player.eye.z() };
-	const float yaw = player.yaw, pitch = player.pitch;
+	const Vector3d eye = player.eye;
+	const float yaw = player.yaw;
+	const float pitch = player.pitch;
 	const float p2[3] = { -118, -644, 71 };
 	_vm->moveTo(3000, p2, 1.62f, 1.6f, 43);
 
@@ -205,11 +186,11 @@ void U03::clownTrick() {
 
 	_vm->talk()->say("U03_02", "U03_01_04B");
 	const uint32 t0 = _vm->logicMs();
-	_vm->moveTo(3000, eye, yaw, pitch, 90);
+	moveTo(3000, eye, yaw, pitch, 90);
 	while (sound->isGroupPlaying(Sound::kVoice) && _vm->logicMs() < t0 + 9000 && !_vm->enterHeld() && !_vm->shouldQuit())
 		_vm->runFor(0);
 	scene->runNodeTo(kClown, -1, false);
-	// U03::GiveCartePostale: at magie frame > 48 or Enter while the voice plays (E-0538)
+	// U03::GiveCartePostale: at magie frame > 48 or Enter while the voice plays
 	auto giveCard = [&]() {
 		scene->hideObjectOnly("*U03_03");
 		if (!_vm->inventory()->has("U03_06P"))
@@ -252,9 +233,7 @@ void U03::clownTrick() {
 	while (scene->nodeRunning(kClown) && !_vm->shouldQuit()) {
 		// One extra frame per logic step, on top of the clip's own advance
 		scene->setNodeFrame(kClown, scene->nodeFrame(kClown) + 1);
-		const uint32 t = _vm->logicMs();
-		while (_vm->logicMs() == t && !_vm->shouldQuit())
-			_vm->runFor(0);
+		waitStep();
 	}
 	scene->hideObject(kClown);
 	_vm->collision()->setEnabled(kClown, false);
@@ -262,26 +241,23 @@ void U03::clownTrick() {
 }
 
 void U03::transition(int n) {
-	// U03::AnimateTransition as the player sees it (E-0501): n frames of one extra
+	// U03::AnimateTransition as the player sees it: n frames of one extra
 	// animation tick, then a tick and a render; the blended pose is never drawn
 	const float dt = 1.0f / X3DEngine::kStepsPerSecond;
 	for (int i = 0; i < n && !_vm->shouldQuit(); i++) {
 		_vm->scene()->advance(dt);
-		const uint32 t = _vm->logicMs();
-		while (_vm->logicMs() == t && !_vm->shouldQuit())
-			_vm->runFor(0);
+		waitStep();
 	}
 }
 
 void U03::salute() {
-	// FlicSalut (E-0304)
+	// FlicSalut
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	_vm->suspend(true);
 	const Vector3d p = ground(-489, -464, player.eye.z());
 	scene->setNodeLoop(kFlic, false);
-	const float to[3] = { p.x(), p.y(), p.z() };
-	_vm->moveTo(2000, to, facing(at(kFlic), p), kHalfPi);
+	moveTo(2000, p, facing(at(kFlic), p), kHalfPi);
 	scene->setClip(kFlic, "Anim/U03_09/salut.A3D", "", 2, false);
 	transition(10); // AttenteHorloge to salut
 	scene->activateSlot(kFlic, 2);
@@ -309,16 +285,14 @@ void U03::aimAtTarget() {
 }
 
 void U03::cut() {
-	// The eye jumps to *camera, facing *Target (FUN_00419580)
-	const Vector3d c = at("*camera");
-	const float eye[3] = { c.x(), c.y(), c.z() };
-	_vm->setView(eye, _vm->player().yaw, _vm->player().pitch);
+	// The eye jumps to *camera, facing *Target
+	setView(at("*camera"), _vm->player().yaw, _vm->player().pitch);
 	aimAtTarget();
 	_vm->setView(nullptr, _vm->player().yaw, _vm->player().pitch);
 }
 
 void U03::cutscene() {
-	// DoCinematiqueFlic (E-0305)
+	// DoCinematiqueFlic
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	Interaction *interaction = _vm->interaction();
@@ -328,30 +302,31 @@ void U03::cutscene() {
 	_vm->inventory()->hide();
 
 	// The camera rig and the policeman at the door (U03::LoadCinematique)
-	_camera = scene->addModel("cinematiques/Coordcam.o3d", "cinematiques/Coordcam.a3d", 15);
-	_cine = scene->addModel("cinematiques/Cine01.o3d", "cinematiques/Cine01.a3d", 15);
-	if (!_camera || !_cine) {
+	Scene::Model *camera = scene->addModel("cinematiques/Coordcam.o3d", "cinematiques/Coordcam.a3d", 15);
+	Scene::Model *cine = scene->addModel("cinematiques/Cine01.o3d", "cinematiques/Cine01.a3d", 15);
+	if (!camera || !cine) {
 		warning("U03: the cutscene's models are missing");
 		_vm->suspend(false);
 		_vm->gotoScene("U33.X3D");
 		return;
 	}
 	// Both roots are $$$DUMMY.Dummy01, as elsewhere in the scene: name their nodes
-	const Common::String camNode = "Coordcam", cineNode = "Cine01";
-	scene->nameNodes(_camera, camNode);
-	scene->nameNodes(_cine, cineNode);
+	const Common::String camNode = "Coordcam";
+	const Common::String cineNode = "Cine01";
+	scene->nameNodes(camera, camNode);
+	scene->nameNodes(cine, cineNode);
 	for (const Common::String &n : { camNode, cineNode }) {
 		scene->setNodeLoop(n, false);
 		scene->setNodeFrame(n, 1);
 		scene->pauseNode(n);
 	}
-	_camera->hidden = _cine->hidden = true;
+	camera->hidden = true;
+	cine->hidden = true;
 	_vm->runFor(0);
 
 	const Vector3d p = ground(-489, -464, player.eye.z());
 	scene->setNodeLoop(kFlic, false);
-	const float to[3] = { p.x(), p.y(), p.z() };
-	_vm->moveTo(800, to, facing(at(kFlic), p), kHalfPi);
+	moveTo(800, p, facing(at(kFlic), p), kHalfPi);
 	run(31);
 
 	scene->setClip(kFlic, "Anim/U03_09/REFLECTION.A3D", "", 3); // refelction
@@ -372,7 +347,8 @@ void U03::cutscene() {
 	scene->hideObject(kFlic);
 
 	// The walk to the clockmaker's, the view on *Target (the WalkPath callback)
-	const Vector3d start = player.eye, target(-871.48f, -584.464f, at("*camera").z());
+	const Vector3d start = player.eye;
+	const Vector3d target(-871.48f, -584.464f, at("*camera").z());
 	const uint n = 10000 * X3DEngine::kStepsPerSecond / 1000;
 	for (uint i = 1; i <= n && !_vm->shouldQuit(); i++) {
 		player.eye = start + (target - start) * ((float)i / n);
@@ -385,19 +361,16 @@ void U03::cutscene() {
 			pending = false;
 		}
 		aimAtTarget();
-		const uint32 t = _vm->logicMs();
-		while (_vm->logicMs() == t && !_vm->shouldQuit())
-			_vm->runFor(0);
+		waitStep();
 	}
 	player.eye = target;
 	if (pending)
 		run(33);
 	aimAtTarget();
-	while (scene->clipPlaying(kFlic) && !_vm->shouldQuit())
-		_vm->runFor(0);
+	waitClip(kFlic);
 
 	// The cinematic: cuts on the Coordcam frame, the FOV closing to 50
-	_cine->hidden = false;
+	cine->hidden = false;
 	scene->hideObject(kFlic);
 	scene->runNodeTo(camNode, -1, false);
 	scene->runNodeTo(cineNode, -1, false);
@@ -417,9 +390,7 @@ void U03::cutscene() {
 		} else if (f > 20 && k == 1) {
 			k = 2;
 		}
-		const uint32 t = _vm->logicMs();
-		while (_vm->logicMs() == t && !_vm->shouldQuit())
-			_vm->runFor(0);
+		waitStep();
 		if (player.fov > 50)
 			player.fov += fovStep; // one step per logic tick
 	}
@@ -437,9 +408,8 @@ void U03::cutscene() {
 	}
 	waitVoice(false);
 	_vm->gotoScene("U33.X3D");
-	scene->removeModel(_camera);
-	scene->removeModel(_cine);
-	_camera = _cine = nullptr;
+	scene->removeModel(camera);
+	scene->removeModel(cine);
 	_vm->suspend(false);
 }
 

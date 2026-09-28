@@ -19,14 +19,15 @@
  *
  */
 
+#include "common/serializer.h"
+
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
-#include "x3d/inventory.h"
 #include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
-#include "x3d/monet/u33.h"
 #include "x3d/x3d.h"
+#include "x3d/monet/u33.h"
 
 namespace X3D {
 
@@ -38,11 +39,33 @@ static const char *const kDoor = "*U03_16";
 static const char *const kCurtain = "*U03_18";
 static const char *const kShutter = "*U03_15";
 
+static const uint32 kNagMs = 25000;    // the projectionist's nag
+static const uint32 kSearchMs = 7000;  // the clown's search behind the curtain
+static const uint32 kHideMs = 20000;   // the gauge to hide in the caravan
+static const uint32 kBikeMs = 15000;   // the gauge to take the bike
+
+// Action ids
+enum {
+	kActionWhere = 2,        // M02: its run count is 1 outside the caravan, 0 inside
+	kActionNag = 6,          // M06: the projectionist's nag
+	kActionHide = 58,        // M58 CacheDerriereRideau
+	kActionCaught = 61,      // M61: the clown catches the player
+	kActionClownEnters = 62, // M62: the clown comes in
+	kActionSearch = 63,      // M63: the clown's search
+	kActionSearchOver = 64,  // M64, exhausted by code
+	kActionLateLine1 = 76,   // the projectionist's lines once M71 is exhausted
+	kActionLateLine2 = 77,
+	kActionEarlyLine1 = 78,  // and before
+	kActionEarlyLine2 = 79,
+	kActionCaravan = 92      // M92 TransitionInterieurRoulotte
+};
+
 void U33::afterLoad() {
-	// u33.md, Entry 1: before the hotspots
+	// Before the hotspots
 	Scene *scene = _vm->scene();
 	for (int i = 0; i < 3; i++) {
-		const Common::String from = Common::String::format("GeoSphere%d", i), to = Common::String::format("*U03_3%d", i);
+		const Common::String from = Common::String::format("GeoSphere%d", i);
+		const Common::String to = Common::String::format("*U03_3%d", i);
 		scene->renameObject(from, to);
 		scene->renameNode(from, to);
 	}
@@ -62,15 +85,7 @@ void U33::afterLoad() {
 	scene->renameObject("pedaledrt", "ZZpedale");
 }
 
-Vector3d U33::at(const char *object) const {
-	return _vm->scene()->objectPosition(object);
-}
-
-float U33::facing(const Vector3d &target, const Vector3d &from) const {
-	const Vector3d d = target - from;
-	return atan2f(-d.y(), d.x());
-}
-
+// Cast down, then the player's eye height above the ground (U03's uses 1.5 s)
 Vector3d U33::ground(float x, float y, float z) {
 	const Vector3d from(x, y, z);
 	float t;
@@ -80,31 +95,14 @@ Vector3d U33::ground(float x, float y, float z) {
 }
 
 void U33::walk(uint32 ms, const Vector3d &to, float yaw) {
-	const float p[3] = { to.x(), to.y(), to.z() };
-	_vm->moveTo(ms, p, yaw, kHalfPi);
+	moveTo(ms, to, yaw, kHalfPi);
 }
 
 void U33::walkG(uint32 ms, float x, float y, float z, float yaw) {
 	walk(ms, ground(x, y, z), yaw);
 }
 
-void U33::run(uint32 id) {
-	Common::StringArray actions;
-	_vm->interaction()->runAction(id, actions);
-	for (const Common::String &a : actions)
-		_vm->addUnitAction(a);
-}
-
-void U33::effect(const char *name, const Vector3d &position) {
-	_vm->sound()->emit(Sound::kEffectsEmitter, Common::Path(_vm->scene()->dir() + "Sound/" + name + ".wav"), position, false);
-}
-
-void U33::waitNode(const char *node, float frame) {
-	Scene *scene = _vm->scene();
-	while (scene->nodeRunning(node) && (frame < 0 || scene->nodeFrame(node) < frame) && !_vm->shouldQuit())
-		_vm->runFor(0);
-}
-
+// Like waitVoice, but Enter also stops the voice
 void U33::voiceWait(bool enterStops) {
 	while (_vm->sound()->isGroupPlaying(Sound::kVoice) && !_vm->shouldQuit()) {
 		if (enterStops && _vm->enterHeld()) {
@@ -116,7 +114,6 @@ void U33::voiceWait(bool enterStops) {
 }
 
 void U33::start(bool newGame, bool video) {
-	// u33.md, Entry (E-0421)
 	Scene *scene = _vm->scene();
 	Collision *collision = _vm->collision();
 	collision->setEnabled(kClown, false, true);
@@ -131,46 +128,44 @@ void U33::start(bool newGame, bool video) {
 	// A restore inside the caravan (entered once: M92; M02's count 0) keeps run and jump off;
 	// the eye height and sphere come back with the camera
 	Interaction *interaction = _vm->interaction();
-	if (!newGame && interaction->exhausted(92) && interaction->runs(2) == 0)
+	if (!newGame && interaction->exhausted(kActionCaravan) && interaction->runs(kActionWhere) == 0)
 		_vm->player().runAllowed = _vm->player().jumpAllowed = false;
 	if (newGame) {
 		_vm->player().setSphere(38.5f, 19);
-		const Vector3d p = ground(-132.19f, -463.89f, 70);
-		const float eye[3] = { p.x(), p.y(), p.z() };
-		_vm->setView(eye, -1.28f, kHalfPi);
-		_vm->saveGameState(_vm->getAutosaveSlot(), "Automatic save", true);
+		setView(ground(-132.19f, -463.89f, 70), -1.28f, kHalfPi);
+		_vm->autosave();
 	}
 	_vm->sound()->play(Common::Path(scene->dir() + "Sound/s2_01.wav"), Sound::kAmbient, 85, true);
 }
 
 void U33::afterFrame() {
-	// u33.md, Every frame (E-0422). Run after rendering, not before as in the original
+	// Run after rendering, not before as in the original
 	Interaction *interaction = _vm->interaction();
 	Sound *sound = _vm->sound();
 	const bool voice = sound->isGroupPlaying(Sound::kVoice);
-	if (interaction->exhausted(92) && !interaction->exhausted(58) && _vm->gaugeExpired()) {
+	if (interaction->exhausted(kActionCaravan) && !interaction->exhausted(kActionHide) && _vm->gaugeExpired()) {
 		gameOverClown();
 		return;
 	}
-	if (interaction->exhausted(5) && !interaction->exhausted(6)) {
+	if (interaction->exhausted(5) && !interaction->exhausted(kActionNag)) {
 		if (!_timer)
 			_timer = _vm->logicMs();
-		if (_vm->logicMs() - _timer > 25000 && !voice) {
-			run(6); // the projectionist's nag
+		if (_vm->logicMs() - _timer > kNagMs && !voice) {
+			run(kActionNag);
 			_timer = 0;
 		}
 	}
-	if (interaction->exhausted(8) && !interaction->exhausted(6))
-		interaction->exhaust(6);
-	if (interaction->exhausted(62) && !interaction->exhausted(64) && !interaction->exhausted(63) && !voice) {
-		// The shared clock is not reset here: the nag's old start may still stand (E-0422)
+	if (interaction->exhausted(8) && !interaction->exhausted(kActionNag))
+		interaction->exhaust(kActionNag);
+	if (interaction->exhausted(kActionClownEnters) && !interaction->exhausted(kActionSearchOver) && !interaction->exhausted(kActionSearch) && !voice) {
+		// The shared clock is not reset here: the nag's old start may still stand
 		if (!_timer)
 			_timer = _vm->logicMs();
-		if (_vm->logicMs() - _timer > 7000)
-			run(63);
+		if (_vm->logicMs() - _timer > kSearchMs)
+			run(kActionSearch);
 	}
-	if (interaction->exhausted(62) && interaction->exhausted(63) && !interaction->exhausted(64) && !voice)
-		interaction->exhaust(64); // the search is over
+	if (interaction->exhausted(kActionClownEnters) && interaction->exhausted(kActionSearch) && !interaction->exhausted(kActionSearchOver) && !voice)
+		interaction->exhaust(kActionSearchOver); // the search is over
 	if (interaction->exhausted(85) && _vm->gaugeExpired()) {
 		_vm->sound()->stopAll();
 		_vm->gameOver(); // the bike left behind
@@ -178,9 +173,9 @@ void U33::afterFrame() {
 }
 
 bool U33::beforeClick() {
-	// Any click while the clown searches behind the curtain gives the player away (E-0423)
+	// Any click while the clown searches behind the curtain gives the player away
 	Interaction *interaction = _vm->interaction();
-	if (!interaction->exhausted(62) || interaction->exhausted(64))
+	if (!interaction->exhausted(kActionClownEnters) || interaction->exhausted(kActionSearchOver))
 		return false;
 	caughtBehindCurtain();
 	return true;
@@ -195,7 +190,8 @@ void U33::walkToScreen() {
 	_vm->suspend(true);
 	const float z0 = player.eye.z();
 	walkG(6000, 699, 61, z0, 0);
-	const Vector3d start = player.eye, to(825.89f, 60.1939f, 62);
+	const Vector3d start = player.eye;
+	const Vector3d to(825.89f, 60.1939f, 62);
 	// Yaw to 0 the short way round (WalkPath)
 	float yaw0 = fmodf(player.yaw, 2 * (float)M_PI);
 	if (yaw0 > M_PI)
@@ -218,27 +214,21 @@ void U33::walkToScreen() {
 				scene->hideObject(t == 10 ? Common::String("*Ecran10") : Common::String::format("*Ecran0%d", t), false);
 			}
 		}
-		const uint32 now = _vm->logicMs();
-		while (_vm->logicMs() == now && !_vm->shouldQuit())
-			_vm->runFor(0);
+		waitStep();
 	}
 	scene->hideObject("Box186", false);
-	const Vector3d back = ground(699, 61, z0);
-	const float eye[3] = { back.x(), back.y(), back.z() };
-	_vm->setView(eye, player.yaw, player.pitch);
+	setView(ground(699, 61, z0), player.yaw, player.pitch);
 	_vm->suspend(false);
 }
 
 void U33::afterFilm() {
 	_vm->sound()->stopEmitter(Sound::kEffectsEmitter);
-	const Vector3d p = ground(686, 90, 68);
-	const float eye[3] = { p.x(), p.y(), p.z() };
-	_vm->setView(eye, 2.16f, kHalfPi);
+	setView(ground(686, 90, 68), 2.16f, kHalfPi);
 	_vm->runFor(0);
 }
 
 void U33::firstFilm() {
-	// DoCinemaA (E-0425): the film with the projectionist's speech over it
+	// DoCinemaA: the film with the projectionist's speech over it
 	Scene *scene = _vm->scene();
 	scene->hideObject("*U03_37", false);
 	effect("s2_12", _vm->player().eye + Vector3d(0, 0, 3 * scene->scale));
@@ -249,7 +239,7 @@ void U33::firstFilm() {
 }
 
 void U33::secondFilm() {
-	// DoCinema (E-0425)
+	// DoCinema
 	Scene *scene = _vm->scene();
 	_vm->interaction()->setCursorKind("*U03_10", 0);
 	effect("s2_12", _vm->player().eye + Vector3d(0, 0, 3 * scene->scale));
@@ -260,7 +250,7 @@ void U33::secondFilm() {
 }
 
 void U33::shutter() {
-	// OuvreVolet: Ernest at the window, then the key (E-0426)
+	// OuvreVolet: Ernest at the window, then the key
 	Scene *scene = _vm->scene();
 	_vm->suspend(true);
 	_vm->interaction()->setCursorKind("*U03_09", 5);
@@ -281,8 +271,7 @@ void U33::shutter() {
 	waitNode(kShutter, -1);
 	const float p[3] = { -450.2f, 214.38f, 68.82f };
 	_vm->moveTo(800, p, 4.02f, kKeep);
-	while (_vm->sound()->isGroupPlaying(Sound::kEffects) && !_vm->shouldQuit())
-		_vm->runFor(0);
+	waitGroup(Sound::kEffects);
 	scene->hideObject("*Ernest");
 	scene->hideObject("*fenetrero", false);
 	scene->hideObject("*U03_36", false);
@@ -291,7 +280,7 @@ void U33::shutter() {
 }
 
 void U33::enterCaravan() {
-	// EnterCaravan (E-0427)
+	// EnterCaravan
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	_vm->suspend(true);
@@ -306,7 +295,7 @@ void U33::enterCaravan() {
 	const Vector3d p = ground(-358, 265, 100);
 	scene->runNodeTo(kDoor, -1, true); // it closes behind the player
 	walk(2000, p, facing(p, player.eye));
-	_vm->interaction()->setRuns(2, 0); // inside
+	_vm->interaction()->setRuns(kActionWhere, 0); // inside
 	_vm->interaction()->exhaust(42);
 	player.runAllowed = player.jumpAllowed = false;
 	_vm->suspend(false);
@@ -326,13 +315,13 @@ void U33::leaveCaravan() {
 	scene->setNodeFrame(kDoor, 60);
 	scene->runNodeTo(kDoor, -1, true);
 	walkG(2000, -216, 215, 100, 0.08f);
-	_vm->interaction()->setRuns(2, 1); // outside
-	player.runAllowed = player.jumpAllowed = true; // movement.md Ctrl run and Shift jump
+	_vm->interaction()->setRuns(kActionWhere, 1); // outside
+	player.runAllowed = player.jumpAllowed = true; // Ctrl runs and Shift jumps again
 	_vm->suspend(false);
 }
 
 void U33::hide() {
-	// CacheDerriereRideau (E-0428)
+	// CacheDerriereRideau
 	Scene *scene = _vm->scene();
 	Player &player = _vm->player();
 	_vm->suspend(true);
@@ -346,7 +335,7 @@ void U33::hide() {
 	scene->runNodeTo(kCurtain, -1, true);
 	waitNode(kCurtain, -1);
 	_vm->stopGauge();
-	run(62); // the clown comes in
+	run(kActionClownEnters);
 	player.canMove = false;
 	_vm->suspend(false);
 }
@@ -374,7 +363,7 @@ void U33::caughtBehindCurtain() {
 	scene->setNodeFps(kClown, 15);
 	scene->runNodeTo(kClown, -1, false);
 	scene->hideObject(kClown, false);
-	run(61);
+	run(kActionCaught);
 	voiceWait(false);
 	_vm->suspend(false);
 	_vm->gameOver();
@@ -390,7 +379,7 @@ void U33::gameOverClown() {
 	scene->setNodeLoop(kClown, false);
 	scene->runNodeTo(kClown, -1, false);
 	scene->hideObject(kClown, false);
-	run(61);
+	run(kActionCaught);
 	walkG(2000, -362, 263, 100, 6.56f);
 	voiceWait(false);
 	_vm->runFor(1000);
@@ -402,31 +391,31 @@ void U33::talkProjectionist() {
 	// DoParleProjectionniste: four lines, then nothing
 	Interaction *interaction = _vm->interaction();
 	if (interaction->exhausted(71)) {
-		if (!interaction->exhausted(76))
-			run(76);
-		else if (!interaction->exhausted(77))
-			run(77);
-	} else if (!interaction->exhausted(78)) {
-		run(78);
-	} else if (!interaction->exhausted(79)) {
-		run(79);
+		if (!interaction->exhausted(kActionLateLine1))
+			run(kActionLateLine1);
+		else if (!interaction->exhausted(kActionLateLine2))
+			run(kActionLateLine2);
+	} else if (!interaction->exhausted(kActionEarlyLine1)) {
+		run(kActionEarlyLine1);
+	} else if (!interaction->exhausted(kActionEarlyLine2)) {
+		run(kActionEarlyLine2);
 	}
 }
 
 void U33::policeman() {
-	// AttenteFinFlicParle (E-0429)
+	// AttenteFinFlicParle
 	Player &player = _vm->player();
 	_vm->suspend(true);
 	const Vector3d p = ground(-489, -464, player.eye.z());
 	walk(6000, p, facing(at("*U03_09"), p));
 	_vm->runFor(27000);
-	_vm->startGauge(15000);
+	_vm->startGauge(kBikeMs);
 	_vm->scene()->hideObject("*U03_35", false);
 	_vm->suspend(false);
 }
 
 void U33::ride() {
-	// TransitionVelo: on the bike to U04 (E-0430)
+	// TransitionVelo: on the bike to U04
 	Scene *scene = _vm->scene();
 	Sound *sound = _vm->sound();
 	_vm->suspend(true);
@@ -482,7 +471,7 @@ void U33::afterStep() {
 }
 
 void U33::syncState(Common::Serializer &s) {
-	// The original saves no chunk for this unit (save.md), so its clock restarted on every
+	// The original saves no chunk for this unit, so its clock restarted on every
 	// load; kept here as the time since it started (save version 5)
 	uint32 since = _timer ? _vm->logicMs() - _timer : 0;
 	s.syncAsUint32LE(since, 5);
@@ -491,13 +480,12 @@ void U33::syncState(Common::Serializer &s) {
 }
 
 bool U33::handle(const Common::String &action) {
-	// u33.md, Clicks (E-0423)
 	Scene *scene = _vm->scene();
 	Interaction *interaction = _vm->interaction();
 	if (action.equalsIgnoreCase("FinActionM01")) {
-		// M44 names it; the original has no handler (u33.md)
+		// M44 names it; the original has no handler
 	} else if (action.equalsIgnoreCase("FinTestM06")) {
-		interaction->exhaust(6);
+		interaction->exhaust(kActionNag);
 	} else if (action.equalsIgnoreCase("MaskBoiteAllu")) {
 		scene->hideObject("*U03_14");
 	} else if (action.equalsIgnoreCase("DoCinema")) {
@@ -508,7 +496,7 @@ bool U33::handle(const Common::String &action) {
 		enterCaravan();
 		_vm->runFor(3000, true);
 		run(51);
-		_vm->startGauge(20000); // 20 s to hide
+		_vm->startGauge(kHideMs);
 	} else if (action.equalsIgnoreCase("OuvreTiroirFond")) {
 		for (const char *n : { "*U03_17", "*U03_30", "*U03_31", "*U03_32" }) {
 			scene->setNodeLoop(n, false);
@@ -535,10 +523,10 @@ bool U33::handle(const Common::String &action) {
 		scene->hideObject("*U03_33", false);
 		scene->hideObject("*U03_22", false);
 	} else if (action.equalsIgnoreCase("OuvrePorte")) {
-		// M02's run count says where the player is: 1 outside, 0 inside (E-0427)
-		if (interaction->runs(2) != 0)
+		// M02's run count says where the player is: 1 outside, 0 inside
+		if (interaction->runs(kActionWhere) != 0)
 			enterCaravan();
-		else if (interaction->exhausted(58))
+		else if (interaction->exhausted(kActionHide))
 			leaveCaravan();
 	} else if (action.equalsIgnoreCase("DoParleProjectionniste")) {
 		talkProjectionist();

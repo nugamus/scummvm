@@ -19,24 +19,25 @@
  *
  */
 
-#include "common/system.h"
-
 #include "x3d/collision.h"
 #include "x3d/interaction.h"
 #include "x3d/scene.h"
 #include "x3d/sound.h"
 #include "x3d/talk.h"
-#include "x3d/monet/u00.h"
 #include "x3d/x3d.h"
+#include "x3d/monet/u00.h"
 
 namespace X3D {
 
 using Math::Vector3d;
 
 static const float kStart[3] = { 81.1334f, 265.81f, 15.0f };
-static const float kStartYaw = 4.67f, kStartPitch = 1.47f;
+static const float kStartYaw = 4.67f;
+static const float kStartPitch = 1.47f;
+static const uint32 kGaugeMs = 10000; // every hint gauge runs 10 s
+static const char *const kMonet = "*U04_03";
 
-// U04's name fix-ups, shared by U00 (u00.md Start step 0, E-0230)
+// U04's collision exclusions, shared by U00
 static const char *const kNoCollision[] = {
 	"Box368", "Box366", "Box373", "Box430", "Box431", "Box435", "Box436", "Box437", "Box682",
 	"Box686", "Box687", "Box690", "Box691", "Box708", "Box198", "Box199", "Box429", "Box619",
@@ -82,8 +83,7 @@ void fixU04Names(Scene *scene) {
 }
 
 void U00::afterLoad() {
-	// u00.md, Start 0-2: U04's fix-ups, the glasses Monet will wear, the glasses to take,
-	// U04 extras
+	// U04's fix-ups, the glasses Monet will wear, the glasses to take, U04 extras
 	Scene *scene = _vm->scene();
 	fixU04Names(scene);
 	scene->renameObject("*Lunettes0", "*U04_81");
@@ -98,26 +98,26 @@ void U00::start(bool newGame, bool video) {
 	_vm->sound()->play(Common::Path("U04/Sound/s3_01.wav"), Sound::kAmbient, 85, true);
 	player.setSphere(3.0f, 1.0f);
 	disableU04Boxes(_vm->collision());
-	// Distances use the hotspots' positions from when they were created (E-0231)
-	_monet = _vm->scene()->objectPosition("*U04_03");
-	_boat = _vm->scene()->objectPosition("*U04_32");
+	// Distances use the hotspots' positions from when they were created
+	_monet = at(kMonet);
+	_boat = at("*U04_32");
 	_vm->talk()->addTalker("U04_03", "$$$DUMMY.*visage", "Anim/U04_03_Lunettes/");
-	_vm->scene()->startAnimation("*U04_03"); // Monet's node runs after the registration
+	_vm->scene()->startAnimation(kMonet); // Monet's node runs after the registration
 	_vm->setView(kStart, kStartYaw, kStartPitch);
 	if (_practice)
 		return;
 
-	// Monet's first line, then the players screen over the paused scene (ui.md)
+	// Monet's first line, then the players screen over the paused scene
 	_vm->runFor(0);
 	say("sb01", false);
-	// The edit starts with the current player's name, or Message.txt line 301 (ui.md)
+	// The edit starts with the current player's name, or Message.txt line 301
 	X3DEngine::MenuList list;
 	Common::String current;
 	list.names = _vm->players(&current);
 	for (uint i = 0; i < list.names.size(); i++)
 		list.rows.push_back(Common::String::format("%d - %s", i + 1, list.names[i].c_str()));
 	if (current.empty())
-		current = list.names.empty() ? "Player's name" : list.names[0];
+		current = list.names.empty() ? _vm->message(301) : list.names[0];
 	for (;;) {
 		const Common::String c = _vm->runMenu("OptionUser", &list, current);
 		if (_vm->shouldQuit() || c == "escape") {
@@ -136,15 +136,17 @@ void U00::start(bool newGame, bool video) {
 }
 
 void U00::say(const char *line, bool cut) {
-	// Blocking, no skip key (u00.md, Monet's lines)
+	// Blocking, no skip key
 	Player &player = _vm->player();
 	const Vector3d eye = player.eye;
-	const float yaw = player.yaw, pitch = player.pitch, fov = player.fov;
+	const float yaw = player.yaw;
+	const float pitch = player.pitch;
+	const float fov = player.fov;
 	if (cut) {
 		_vm->setView(kStart, kStartYaw, kStartPitch);
 		player.fov = 90;
 	}
-	_vm->scene()->startAnimation("*U04_03");
+	_vm->scene()->startAnimation(kMonet);
 	// One tick first: the voice starts at Monet's face, which must be posed (the first
 	// frame of Practice has run no logic step yet)
 	_vm->runFor(0);
@@ -153,8 +155,7 @@ void U00::say(const char *line, bool cut) {
 		_vm->runFor(0);
 	while (_vm->sound()->isGroupPlaying(Sound::kVoice) && !_vm->shouldQuit());
 	if (cut) {
-		const float p[3] = { eye.x(), eye.y(), eye.z() };
-		_vm->setView(p, yaw, pitch);
+		setView(eye, yaw, pitch);
 		player.fov = fov;
 	}
 }
@@ -171,16 +172,15 @@ void U00::startGauge(int state) {
 }
 
 bool U00::fired() const {
-	return _gaugeStart && _vm->logicMs() - _gaugeStart >= 10000;
+	return _gaugeStart && _vm->logicMs() - _gaugeStart >= kGaugeMs;
 }
 
 bool U00::onStone(const Common::String &ground) {
-	// The ground object's own name, no parents (E-0231)
+	// The ground object's own name, no parents
 	return ground.equalsIgnoreCase("*U04_32");
 }
 
 void U00::afterFrame() {
-	// u00.md, Every frame
 	if (!_started) {
 		_started = true;
 		say(_practice ? "sb03_bis" : "sb03", false);
@@ -245,7 +245,6 @@ void U00::afterFrame() {
 }
 
 bool U00::input(float dt) {
-	// u00.md, Input hook
 	Player &player = _vm->player();
 	const Keys &keys = _vm->keys();
 	if (_state == 1 && (keys.up || keys.down)) {
@@ -259,7 +258,7 @@ bool U00::input(float dt) {
 	if (_onStone && _turned && !_glassesTaken && _state != 4)
 		startGauge(4);
 	if (keys.shift && _onStone) {
-		// Jump off: a scripted move, not the jump of movement.md
+		// Jump off: a scripted move, not the player's jump
 		_onStone = false;
 		const float p[3] = { 149.87f, 60.56f, -9.0f };
 		_vm->moveTo(2000, p, 0.427f, (float)M_PI / 2);
@@ -271,9 +270,9 @@ bool U00::input(float dt) {
 			stopGauge();
 		return true;
 	}
-	// Space never reaches the tutorial: the bar's frame takes it (E-0214)
+	// Space never reaches the tutorial: the bar's frame takes it
 
-	// The ground object changes only in the walking step (E-0231)
+	// The ground object changes only in the walking step
 	if (player.tick(dt, keys, *_vm->collision()))
 		_vm->sound()->emit(Sound::kEffectsEmitter, "SAUT.WAV", player.eye, false);
 
@@ -297,16 +296,10 @@ bool U00::input(float dt) {
 	return true;
 }
 
-void U00::waitClip() {
-	while (_vm->scene()->clipPlaying("*U04_03") && !_vm->shouldQuit())
-		_vm->runFor(0);
-}
-
 bool U00::handle(const Common::String &action) {
-	// u00.md, The glasses (E-0202)
+	// The glasses
 	Scene *scene = _vm->scene();
 	if (action.equalsIgnoreCase("TakeLunettes")) {
-		stopGauge();
 		startGauge(7);
 		_glassesTaken = true;
 		return true;
@@ -318,16 +311,16 @@ bool U00::handle(const Common::String &action) {
 	_vm->suspend(true);
 	_spaceSeen = true;
 	stopGauge();
-	scene->playClip("*U04_03", "Anim/U04_03_Lunettes/prend.A3D");
+	scene->playClip(kMonet, "Anim/U04_03_Lunettes/prend.A3D");
 	_vm->moveTo(1000, kStart, kStartYaw, kStartPitch, 90);
-	waitClip();
+	waitClip(kMonet);
 	scene->hideObject("*U04_81", false);
-	scene->playClip("*U04_03", "Anim/U04_03_Lunettes/MET.A3D");
+	scene->playClip(kMonet, "Anim/U04_03_Lunettes/MET.A3D");
 	say("sb14", false);
-	while (scene->clipPlaying("*U04_03") && scene->nodeFrame("*U04_03") < 50 && !_vm->shouldQuit())
+	while (scene->clipPlaying(kMonet) && scene->nodeFrame(kMonet) < 50 && !_vm->shouldQuit())
 		_vm->runFor(0);
 	scene->hideObject("*U04_81", false);
-	waitClip();
+	waitClip(kMonet);
 	_vm->runFor(2000);
 	_vm->suspend(false);
 	_vm->afterOptionMenu(_vm->optionMenu());

@@ -30,16 +30,15 @@ namespace X3D {
 
 class Collision;
 class Scene;
-class X3DEngine;
 
-// U04's name fix-ups and collision exclusions, shared by U00 and U04 (u00.md Start 0)
+// U04's name fix-ups and collision exclusions, shared by U00 and U04
 void fixU04Names(Scene *scene);
 void disableU04Boxes(Collision *collision);
 
-// U00, the garden with Monet: players screen and tutorial (games/monet/docs/u00.md)
+// U00, the garden with Monet: players screen and tutorial
 class U00 : public Unit {
 public:
-	U00(X3DEngine *vm, bool practice) : _vm(vm), _practice(practice) {}
+	U00(X3DEngine *vm, bool practice) : Unit(vm), _practice(practice) {}
 
 	void afterLoad() override;
 	void start(bool newGame, bool video) override;
@@ -54,16 +53,20 @@ private:
 	void startGauge(int state);
 	void stopGauge() { _state = 0; _gaugeStart = 0; }
 	bool fired() const;
-	void waitClip();
 	bool onStone(const Common::String &ground);
 
-	X3DEngine *_vm;
 	bool _practice;
-	bool _started = false, _onStone = false, _moved = false, _turned = false;
-	bool _glassesTaken = false, _nearMonet = false, _spaceSeen = false;
-	int _state = 0;          // the hidden gauge's state (u00.md, Unit state)
-	uint32 _gaugeStart = 0;  // 0: stopped
-	Math::Vector3d _monet, _boat; // hotspot positions at creation
+	bool _started = false;
+	bool _onStone = false;
+	bool _moved = false;
+	bool _turned = false;
+	bool _glassesTaken = false;
+	bool _nearMonet = false;
+	bool _spaceSeen = false;
+	int _state = 0;         // the hidden gauge's state
+	uint32 _gaugeStart = 0; // 0: stopped
+	Math::Vector3d _monet;  // hotspot positions at creation
+	Math::Vector3d _boat;
 };
 
 } // End of namespace X3D
