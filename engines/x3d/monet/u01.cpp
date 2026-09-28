@@ -193,6 +193,7 @@ bool U01::handle(const Common::String &action) {
 		scene->rewindClip("*U01_02");
 		while (scene->clipPlaying("*U01_02") && !_vm->shouldQuit())
 			_vm->runFor(0);
+		scene->backToBase("*U01_02");
 		_vm->player().canMove = _vm->player().canTurn = true;
 		interaction->setCursorKind("*U01_02", 3);
 	} else if (action.equalsIgnoreCase("ClickMaire")) {

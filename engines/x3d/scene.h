@@ -139,6 +139,7 @@ public:
 	void playClip(const Common::String &objectName, const Common::String &path);
 	// Plays the clip backward to frame 1, then returns to the node's own animation at frame 1
 	void rewindClip(const Common::String &objectName);
+	void backToBase(const Common::String &objectName); // slot 0 active, running, frame 1
 	bool clipPlaying(const Common::String &objectName);
 
 	// Mouth clips for talk (sound.md, Talkers): a node that plays the sub-animation named
@@ -229,7 +230,6 @@ private:
 		float fps = 30, frame = 0;
 		bool loop = true, running = true, backward = false;
 		bool pingPong = false; // not looping: turns round at both ends instead of stopping
-		bool rewound = false;  // stopped running backward (not paused by the unit)
 		float stopAt = -1; // stop target, < 0 for none
 		float first = -1, last = -1; // range override, < 0: the animation's
 		int object = -1;             // the object it drives, < 0: the node's
