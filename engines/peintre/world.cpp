@@ -1202,11 +1202,16 @@ void World::move() {
 	_cam.roll &= 0xFFF;
 	int32 m[9];
 	cameraMatrix(_cam.pitch, _cam.yaw, _cam.roll, m);
-	_cam.x += (int32)(((int64)m[2] * _v) / 32768);
-	_cam.z += (int32)(((int64)m[8] * _v) / 32768);
-	if (_s) {
-		_cam.x += (int32)(((int64)m[0] * _s) / 32768);
-		_cam.z += (int32)(((int64)m[6] * _s) / 32768);
+	if (!_s) {
+		_cam.x += (int32)(((int64)m[2] * _v) / 32768);
+		_cam.z += (int32)(((int64)m[8] * _v) / 32768);
+	} else {
+		// Walking and strafing together go no faster than either: the collision is built
+		// for steps of 120 (a diagonal 170 slips through the museum's closed doorways).
+		const double len = sqrt((double)_v * _v + (double)_s * _s);
+		const double k = MAX(ABS(_v), ABS(_s)) / len / 32768;
+		_cam.x += (int32)(((double)m[2] * _v + (double)m[0] * _s) * k);
+		_cam.z += (int32)(((double)m[8] * _v + (double)m[6] * _s) * k);
 	}
 	_cam.y += _vy;
 }
@@ -1224,6 +1229,12 @@ Vec3d closestOnSegment(const Vec3d &p, const Vec3d &a, const Vec3d &b) {
 	t = CLIP(t, 0.0, 1.0);
 	const Vec3d r = { a.x + ab.x * t, a.y + ab.y * t, a.z + ab.z * t };
 	return r;
+}
+
+/** n . c / 32768 as the original computes it: each product rounded toward zero. */
+int32 dot15(int32 nx, int32 ny, int32 nz, const Vec3i &c) {
+	return (int32)(((int64)nx * c.x) / 32768) + (int32)(((int64)ny * c.y) / 32768) +
+	       (int32)(((int64)nz * c.z) / 32768);
 }
 
 /** A .3DI face resolved: its vertices and normal (movement.md "Collision"). */
@@ -1247,15 +1258,17 @@ bool faceData(const Boxes3D &bs, const Boxes3D::Face &f, Vec3d v[3], Vec3i &n) {
 
 void World::collide() {
 	// movement.md "Collision": a sphere of radius 250 against BOX.3DI and the current extra
-	// set; one push-out pass per frame.
+	// set; one push-out pass per frame. The plane and edge tests are the original's integer
+	// dot products: a camera exactly on a wall's plane (d = 0) still counts as in front,
+	// which keeps a step of 120 from ending behind a wall it was pushed 120 from.
 	Common::Array<const Boxes3D *> sets;
 	if (!_boxLoaded.empty() && _boxLoaded[0])
 		sets.push_back(&_boxSets[0]);
 	if (_extraBox > 0 && (uint)_extraBox < _boxSets.size() && _boxLoaded[_extraBox])
 		sets.push_back(&_boxSets[_extraBox]);
 
-	const Vec3d c = { (double)_cam.x, (double)_cam.y, (double)_cam.z };
-	double F[3] = { 0, 0, 0 }, N[3] = { 0, 0, 0 }, E[3] = { 0, 0, 0 };
+	const Vec3i c = { _cam.x, _cam.y, _cam.z };
+	float F[3] = { 0, 0, 0 }, N[3] = { 0, 0, 0 }, E[3] = { 0, 0, 0 };
 	int nf = 0, ne = 0;
 	for (const Boxes3D *bs : sets) {
 		for (const Boxes3D::Face &f : bs->faces) {
@@ -1268,107 +1281,144 @@ void World::collide() {
 			Vec3i n;
 			if (!faceData(*bs, f, v, n))
 				continue;
-			const double D = READ_LE_INT32(r + 0x10);
-			const double d = (n.x * c.x + n.y * c.y + n.z * c.z) / 32768.0 - D;
-			if (!(d > -kRadius && d < kRadius) || d < 0)
+			const int32 d = dot15(n.x, n.y, n.z, c) - READ_LE_INT32(r + 0x10);
+			if (d <= -kRadius || d >= kRadius || d < 0)
 				continue; // no contact, or behind the face (ignored)
-			double e[3];
+			int outside = 0;
 			bool far = false;
 			for (int k = 0; k < 3; k++) {
-				e[k] = (READ_LE_INT32(r + 0x14 + 12 * k) * c.x + READ_LE_INT32(r + 0x18 + 12 * k) * c.y +
-						READ_LE_INT32(r + 0x1C + 12 * k) * c.z) / 32768.0 - READ_LE_INT32(r + 0x38 + 4 * k);
-				if (e[k] < -kRadius)
+				const int32 e = dot15(READ_LE_INT32(r + 0x14 + 12 * k), READ_LE_INT32(r + 0x18 + 12 * k),
+				                      READ_LE_INT32(r + 0x1C + 12 * k), c) - READ_LE_INT32(r + 0x38 + 4 * k);
+				if (e < -kRadius)
 					far = true;
+				if (e < 0)
+					outside |= 1 << k;
 			}
-			if (far)
-				continue;
-			const bool inside = e[0] >= 0 && e[1] >= 0 && e[2] >= 0;
-			Vec3d p = c;
-			if (inside) {
-				p.x = c.x - n.x / 32768.0 * d;
-				p.y = c.y - n.y / 32768.0 * d;
-				p.z = c.z - n.z / 32768.0 * d;
-			} else {
-				double best = 1e30;
-				for (int k = 0; k < 3; k++) {
-					const Vec3d q = closestOnSegment(c, v[k], v[(k + 1) % 3]);
-					const double dd = (q.x - c.x) * (q.x - c.x) + (q.y - c.y) * (q.y - c.y) + (q.z - c.z) * (q.z - c.z);
-					if (dd < best) {
-						best = dd;
-						p = q;
-					}
+			if (far || outside == 7)
+				continue; // ponytail: outside all three edges the original reuses a stale point
+			// The closest point, truncated: the plane projection inside, else the edge
+			// outside (edge k runs from vertex k to k + 1) or the vertex two outside edges share.
+			const Vec3d cd = { (double)c.x, (double)c.y, (double)c.z };
+			Vec3d q;
+			switch (outside) {
+			case 0: {
+				const double t = (n.x * (cd.x - v[0].x) + n.y * (cd.y - v[0].y) + n.z * (cd.z - v[0].z)) /
+				                 ((double)n.x * n.x + (double)n.y * n.y + (double)n.z * n.z);
+				q = { cd.x - n.x * t, cd.y - n.y * t, cd.z - n.z * t };
+				break;
+			}
+			case 1: q = closestOnSegment(cd, v[0], v[1]); break;
+			case 2: q = closestOnSegment(cd, v[1], v[2]); break;
+			case 4: q = closestOnSegment(cd, v[2], v[0]); break;
+			case 3: q = v[1]; break;
+			case 5: q = v[0]; break;
+			default: q = v[2]; break;
+			}
+			const int32 p[3] = { (int32)q.x, (int32)q.y, (int32)q.z };
+			if (outside) {
+				const int32 dx = p[0] - c.x, dy = p[1] - c.y, dz = p[2] - c.z;
+				if (dx * dx + dy * dy + dz * dz >= kRadius * kRadius)
+					continue;
+				if (nf == 0) {
+					for (int k = 0; k < 3; k++)
+						E[k] += (float)p[k];
+					ne++;
 				}
-			}
-			const double dist2 = (p.x - c.x) * (p.x - c.x) + (p.y - c.y) * (p.y - c.y) + (p.z - c.z) * (p.z - c.z);
-			if (dist2 >= (double)kRadius * kRadius)
-				continue;
-			if (inside) {
-				F[0] += p.x;
-				F[1] += p.y;
-				F[2] += p.z;
-				N[0] += n.x;
-				N[1] += n.y;
-				N[2] += n.z;
+			} else {
+				for (int k = 0; k < 3; k++)
+					F[k] += (float)p[k];
+				N[0] += (float)n.x;
+				N[1] += (float)n.y;
+				N[2] += (float)n.z;
 				nf++;
-			} else if (nf == 0) {
-				E[0] += p.x;
-				E[1] += p.y;
-				E[2] += p.z;
-				ne++;
 			}
 		}
 	}
+	int32 *out[3] = { &_cam.x, &_cam.y, &_cam.z };
 	if (nf > 0) {
-		double o[3];
-		for (int k = 0; k < 3; k++)
-			o[k] = trunc(trunc(trunc(N[k] / nf) * kRadius / 32768.0) + F[k] / nf);
-		_cam.x = (int32)o[0];
-		_cam.y = (int32)o[1];
-		_cam.z = (int32)o[2];
-	} else if (ne > 0) {
-		const double e[3] = { E[0] / ne, E[1] / ne, E[2] / ne };
-		const double d[3] = { trunc(c.x - e[0]), trunc(c.y - e[1]), trunc(c.z - e[2]) };
-		const double len = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-		if (len > 0) {
-			_cam.x = (int32)trunc(trunc(d[0] * kRadius / len) + e[0]);
-			_cam.y = (int32)trunc(trunc(d[1] * kRadius / len) + e[1]);
-			_cam.z = (int32)trunc(trunc(d[2] * kRadius / len) + e[2]);
+		// 250 out from the average face point along the average normal (0x4216b6).
+		const float inv = (float)(1.0 / nf), scale = (float)(kRadius / 32768.0);
+		for (int k = 0; k < 3; k++) {
+			const int32 nk = (int32)(N[k] * inv);
+			*out[k] = (int32)((float)(int32)(nk * scale) + F[k] * inv);
 		}
+	} else if (ne > 0) {
+		const float inv = (float)(1.0 / ne);
+		const int32 cc[3] = { c.x, c.y, c.z };
+		float e[3];
+		int32 d[3];
+		for (int k = 0; k < 3; k++) {
+			e[k] = E[k] * inv;
+			d[k] = (int32)((float)cc[k] - e[k]);
+		}
+		const float len = (float)sqrt((double)(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]));
+		if (len > 0)
+			for (int k = 0; k < 3; k++)
+				*out[k] = (int32)((float)(int32)(d[k] * kRadius / len) + e[k]);
 	}
 
-	// movement.md "Floor": the eye 700 above the nearest floor below.
-	const double cx = _cam.x, cy = _cam.y, cz = _cam.z;
-	bool found = false;
-	double floorY = 0;
+	// movement.md "Floor": the eye 700 above the nearest floor below (0x431f90).
+	const Vec3i f0 = { _cam.x, _cam.y, _cam.z };
+	int32 floorY = 9999999;
 	for (const Boxes3D *bs : sets) {
 		for (const Boxes3D::Face &f : bs->faces) {
 			const byte *r = f.raw;
-			if (cx + kRadius < READ_LE_INT32(r + 0x48) || cx - kRadius > READ_LE_INT32(r + 0x54) ||
-				cz + kRadius < READ_LE_INT32(r + 0x50) || cz - kRadius > READ_LE_INT32(r + 0x5C))
+			if (f0.x + kRadius < READ_LE_INT32(r + 0x48) || f0.x - kRadius > READ_LE_INT32(r + 0x54) ||
+				f0.z + kRadius < READ_LE_INT32(r + 0x50) || f0.z - kRadius > READ_LE_INT32(r + 0x5C))
 				continue;
 			Vec3d v[3];
 			Vec3i n;
 			if (!faceData(*bs, f, v, n) || n.y == 0)
 				continue;
+			if (dot15(n.x, n.y, n.z, f0) - READ_LE_INT32(r + 0x10) < 0)
+				continue; // behind: counted only from the front
 			double s[3];
 			for (int k = 0; k < 3; k++) {
 				const Vec3d &a = v[k], &b = v[(k + 1) % 3];
-				s[k] = (b.x - a.x) * (cz - a.z) - (b.z - a.z) * (cx - a.x);
+				s[k] = (b.x - a.x) * (f0.z - a.z) - (b.z - a.z) * (f0.x - a.x);
 			}
 			if (!((s[0] >= 0 && s[1] >= 0 && s[2] >= 0) || (s[0] <= 0 && s[1] <= 0 && s[2] <= 0)))
 				continue;
 			const double D = READ_LE_INT32(r + 0x10);
-			if ((n.x * cx + n.y * cy + n.z * cz) / 32768.0 - D < 0)
-				continue;
-			const double yf = (D * 32768.0 - n.x * cx - n.z * cz) / n.y;
-			if (yf > cy && (!found || yf < floorY)) {
+			const int32 yf = (int32)((D * 32768.0 - (double)n.x * f0.x - (double)n.z * f0.z) / n.y);
+			if (yf < floorY && f0.y < yf)
 				floorY = yf;
-				found = true;
-			}
 		}
 	}
-	if (found)
-		_cam.y = (int32)(floorY - kEyeAboveFloor);
+	if (floorY != 9999999)
+		_cam.y = floorY - kEyeAboveFloor;
+}
+
+bool World::crossedWall(const Vec3i &a) const {
+	const Vec3i b = { _cam.x, _cam.y, _cam.z };
+	for (uint set = 0; set < _boxSets.size(); set++) {
+		if (!_boxLoaded[set] || (set != 0 && (int)set != _extraBox))
+			continue;
+		const Boxes3D &bs = _boxSets[set];
+		for (const Boxes3D::Face &f : bs.faces) {
+			const byte *r = f.raw;
+			if (MAX(a.x, b.x) + kRadius < READ_LE_INT32(r + 0x48) || MIN(a.x, b.x) - kRadius > READ_LE_INT32(r + 0x54) ||
+				MAX(a.z, b.z) + kRadius < READ_LE_INT32(r + 0x50) || MIN(a.z, b.z) - kRadius > READ_LE_INT32(r + 0x5C))
+				continue;
+			Vec3d v[3];
+			Vec3i n;
+			if (!faceData(bs, f, v, n) || ABS(n.y) > 16384)
+				continue; // floors and slopes
+			const int32 D = READ_LE_INT32(r + 0x10);
+			const int32 da = dot15(n.x, n.y, n.z, a) - D, db = dot15(n.x, n.y, n.z, b) - D;
+			if (!(da >= 0 && db < 0))
+				continue;
+			const double t = (double)da / (da - db);
+			const Vec3i q = { (int32)(a.x + (b.x - a.x) * t), (int32)(a.y + (b.y - a.y) * t), (int32)(a.z + (b.z - a.z) * t) };
+			bool inside = true;
+			for (int k = 0; k < 3 && inside; k++)
+				inside = dot15(READ_LE_INT32(r + 0x14 + 12 * k), READ_LE_INT32(r + 0x18 + 12 * k),
+				               READ_LE_INT32(r + 0x1C + 12 * k), q) - READ_LE_INT32(r + 0x38 + 4 * k) >= 0;
+			if (inside)
+				return true;
+		}
+	}
+	return false;
 }
 
 WorldExit World::tick() {
@@ -1387,8 +1437,15 @@ WorldExit World::tick() {
 		return _exit;
 	}
 	// One frame (movement.md, 0x4223e8).
+	const Vec3i before = { _cam.x, _cam.y, _cam.z };
 	move();
 	collide();
+	// Bug fix (not in the original): the single averaged push-out lets the viewer creep
+	// into an inside corner and step behind a one-sided wall (the museum's closed left
+	// doorway, the galleries' back walls). A tick that ends behind a wall it started in
+	// front of, through the wall, is undone.
+	if (crossedWall(before))
+		_cam.x = before.x, _cam.y = before.y, _cam.z = before.z;
 	mouse();
 	frameLogic(false);
 	if (_vm->keyFired(Common::KEYCODE_BACKSPACE) && _scene != kSceneMusee)

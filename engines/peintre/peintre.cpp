@@ -224,6 +224,11 @@ void PeintreEngine::devStep() {
 			if (out.open(Common::Path(w[1], '/')))
 				Image::writePNG(out, _display->snapshot(frame) ? frame : _screen);
 			frame.free();
+		} else if (w[0] == "where") {
+			if (_world) {
+				const Camera &cam = _world->camera();
+				debug("where: %d, %d, %d pitch %d yaw %d", cam.x, cam.y, cam.z, cam.pitch, cam.yaw);
+			}
 		} else if (w[0] == "quit") {
 			quitGame();
 		}
