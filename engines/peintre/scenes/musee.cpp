@@ -225,8 +225,7 @@ void Musee::dialogue(World &w) {
 	} else if (_line == 2) {
 		w.retexture(node(w, kEcran), "ROBI3", "ROBI3N");
 		_scroll = false;
-		const AnimRecord &star = w.anims[kAnimEtoile];
-		if (!w.var(kStarTaken) && !(star.playing && star.frame == 52)) {
+		if (!w.var(kStarTaken) && w.anims[kAnimEtoile].frame != 52) {
 			w.anims[kAnimEtoile].playing = true;
 			startSound(w, "etoile");
 		}
@@ -269,11 +268,13 @@ void Musee::animate(World &w) {
 	const int32 e = w.elapsed();
 	AnimRecord &star = w.anims[kAnimEtoile];
 	if (star.playing) {
+		// Before it is taken the track stops at frame 52 (the star on the stand); either
+		// stop still poses that tick's frame.
 		star.frame += e;
-		if (star.frame >= 52 && !_starRuns)
+		if (star.frame >= 52 && !_starRuns) {
 			star.frame = 52;
-		if (star.frame >= star.length) {
-			star.frame = star.length;
+			star.playing = false;
+		} else if (star.frame >= star.length) {
 			star.playing = false;
 		}
 		w.pose(kAnimEtoile, star.frame);
@@ -282,8 +283,7 @@ void Musee::animate(World &w) {
 		w.anims[kAnimRobot01].playing = false;
 		w.anims[kAnimRobot02].playing = true;
 	}
-	if (stepAnim(w, kAnimRobot02, e))
-		w.anims[kAnimRobot02].frame = 1;
+	loopAnim(w, kAnimRobot02, e);
 	if (stepAnim(w, kAnimRobot03, e)) {
 		w.setHidden(node(w, kRobot), true);
 		for (int i = kAnimRobot01; i <= kAnimRobot03; i++)

@@ -269,8 +269,8 @@ private:
 			w.anims[kAnimChair].playing = false;
 		}
 		_toggle = !_toggle;
-		if (_toggle && stepAnim(w, kAnimShoes, 1))
-			w.anims[kAnimShoes].frame = 1;
+		if (_toggle)
+			loopAnim(w, kAnimShoes, 1);
 		if (stepAnim(w, kAnimMirror, 1)) {
 			w.setHidden(node(w, kMirroirmor), false);
 			w.anims[kAnimMirror].playing = false;

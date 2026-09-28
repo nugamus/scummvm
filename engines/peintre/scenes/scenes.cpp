@@ -346,9 +346,22 @@ bool stepAnim(World &w, uint rec, int32 step, int32 end) {
 	if (ended) {
 		a.frame = end;
 		debugC(2, kDebugScript, "Track %s at its end (%d)", a.anim.c_str(), end);
+		return true;
 	}
 	w.pose(rec, a.frame);
-	return ended;
+	return false;
+}
+
+bool loopAnim(World &w, uint rec, int32 step) {
+	AnimRecord &a = w.anims[rec];
+	if (!a.playing)
+		return false;
+	a.frame += step;
+	const bool wrapped = a.frame >= a.length;
+	if (wrapped)
+		a.frame = 1;
+	w.pose(rec, a.frame);
+	return wrapped;
 }
 
 void poseAt(World &w, uint rec, int32 frame) {

@@ -138,8 +138,7 @@ public:
 		}
 		if (stepAnim(w, kAnimKite, e))
 			w.anims[kAnimKite].playing = false;
-		if (stepAnim(w, kAnimFly, e))
-			w.anims[kAnimFly].frame = 1;
+		loopAnim(w, kAnimFly, e);
 		if (stepAnim(w, kAnimFlyOff, e)) {
 			w.anims[kAnimFlyOff].playing = false;
 			w.anims[kAnimFlyOff].frame = 1; // Q-0402

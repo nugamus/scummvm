@@ -154,8 +154,7 @@ public:
 		w.clearClick();
 
 		const int32 e = w.elapsed();
-		if (stepAnim(w, kAnimSnail, e))
-			w.anims[kAnimSnail].frame = 1;
+		loopAnim(w, kAnimSnail, e);
 		if (stepAnim(w, kAnimClouds, e))
 			w.anims[kAnimClouds].playing = false;
 		if (stepAnim(w, kAnimGate, e)) {

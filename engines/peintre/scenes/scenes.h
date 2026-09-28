@@ -55,12 +55,15 @@ int clickedObject(World &w, int idx);
 
 /**
  * Advances a playing record by `step` and poses it. Returns true on the frame it reaches
- * `end` (the frame is then held at `end`); the caller applies the scene's end rule.
+ * `end` (the frame is then held at `end`) without posing it: the scenes' step functions
+ * apply their end rule and return, so the node keeps the previous frame (0x42b5fe, 0x41a2ab).
  */
 bool stepAnim(World &w, uint rec, int32 step, int32 end);
 inline bool stepAnim(World &w, uint rec, int32 step) {
 	return stepAnim(w, rec, step, w.anims[rec].length);
 }
+/** A looping record: past its end it restarts at frame 1, posed the same tick. */
+bool loopAnim(World &w, uint rec, int32 step);
 /** Sets a record's frame and poses it there. */
 void poseAt(World &w, uint rec, int32 frame);
 
