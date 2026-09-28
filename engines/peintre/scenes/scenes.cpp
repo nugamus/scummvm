@@ -295,6 +295,11 @@ void setObjects(World &w, const ObjectDef *defs, uint count) {
 		o.node = -1;
 		w.objects.push_back(o);
 	}
+	// The table is static data in the original: cursor types changed on an earlier visit stay.
+	const SceneSession *last = w.lastVisit();
+	if (last && last->cursorTypes.size() == w.objects.size())
+		for (uint i = 0; i < count; i++)
+			w.objects[i].cursorType = last->cursorTypes[i];
 	w.resolveObjects();
 	for (const SceneObject &o : w.objects)
 		if (o.node < 0)
@@ -310,6 +315,11 @@ void setAnims(World &w, const AnimDef *defs, uint count) {
 		a.playing = defs[i].playing;
 		w.anims.push_back(a);
 	}
+	// LoadAnims<scene> resets the frames; the playing flags are static data and stay.
+	const SceneSession *last = w.lastVisit();
+	if (last && last->playing.size() == w.anims.size())
+		for (uint i = 0; i < count; i++)
+			w.anims[i].playing = last->playing[i];
 	w.loadAnims();
 	for (AnimRecord &a : w.anims) {
 		a.frame = 1;

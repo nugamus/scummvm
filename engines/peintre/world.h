@@ -38,6 +38,7 @@ namespace Peintre {
 
 class PeintreEngine;
 class World;
+struct SceneSession;
 
 /** Scenes by number (scene.md "The scene table"). */
 enum {
@@ -169,6 +170,8 @@ public:
 	 * the whole run, not saved, 0 until set.
 	 */
 	uint32 &localVar(uint32 address) { return _locals[address]; }
+	/** The scene's tables as the last visit this run left them, or null (SceneSession). */
+	const SceneSession *lastVisit() const;
 	bool zoneSolved(int zone) { return var(0x4abb0c + 4 * zone) != 0; }
 	byte &sunflowers() { return varByte(0x4abbd4); }
 	bool sceneComplete(int scene);
@@ -270,7 +273,8 @@ private:
 	Common::Array<Boxes3D> _boxSets;                ///< slot -> set
 	Common::Array<bool> _boxLoaded;
 	int _extraBox = 0;
-	Common::ScopedPtr<SceneScript> _script;
+	SceneScript *_script = nullptr;  ///< owned by the engine's SceneSession
+	Common::String _bundle;          ///< the loaded scene's bundle, its SceneSession key
 	Graphics::Surface _cursors[kNumCursors];
 	Graphics::Surface _bar;
 
