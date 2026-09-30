@@ -70,8 +70,9 @@ public:
 		return Keymap::arrayOf(keymap);
 	}
 
+	// ScummVM's slots 0..49 are the game's slots 1..50.
 	int getMaximumSaveSlot() const override {
-		return 50;
+		return 49;
 	}
 
 	/**
@@ -93,7 +94,7 @@ public:
 			if (!ini.getKey("file", section, file) || file.empty())
 				continue;
 			ini.getKey("name", section, name);
-			list.push_back(SaveStateDescriptor(this, n, Common::U32String(name, Common::kWindows1252)));
+			list.push_back(SaveStateDescriptor(this, n - 1, Common::U32String(name, Common::kWindows1252)));
 		}
 		return list;
 	}
@@ -107,7 +108,7 @@ public:
 			if (!in || !ini.loadFromStream(*in))
 				return false;
 		}
-		const Common::String section = Common::String::format("SLOT%d", slot);
+		const Common::String section = Common::String::format("SLOT%d", slot + 1);
 		Common::String file;
 		if (ini.getKey("file", section, file) && !file.empty())
 			sfm->removeSavefile(Common::String(target) + "." + file);

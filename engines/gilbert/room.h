@@ -108,7 +108,7 @@ private:
 	int _radarAlpha = 0, _radarStep = 1;
 	Common::Rect _radar;
 	bool _newTopic = false;
-	int _blink = 50, _blinkStep = 8;
+	int _blink = 0, _blinkStep = 8;
 	Common::String _music;
 };
 

@@ -66,6 +66,7 @@ private:
 	int _scroll = 0;
 	Common::Array<Link> _links; ///< list titles (list view) or links (page view)
 	int _tab = 0x4e;
+	int _pressedButton = -1;
 	int _hoverTab = -1, _hoverArrow = -1, _pressedArrow = -1;
 	int _cursor = 0;
 	bool _flip = false;

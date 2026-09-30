@@ -68,7 +68,7 @@ public:
 	void startStream(Stream stream);
 	/** Streams a WAV file below Data; `sfx` plays it at the sound volume. */
 	void openFile(Stream stream, const Common::Path &path, bool looped, bool sfx);
-	/** Stop-all: every wave and every stream. */
+	/** Stop-all: every stream (the waves play on). */
 	void stopAll();
 
 	/** Levels 1..6 (boot.md "Settings"). */

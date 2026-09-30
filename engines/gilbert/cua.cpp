@@ -38,9 +38,6 @@ enum {
 	kBook = 0x08, kMenuButton = 0x26, kKort = 0x27, kUp = 0x2c, kDown = 0x2d, kBack = 0x73
 };
 
-// The inventory box (screens.md "Taking and using").
-const Common::Rect kInventoryBox(364, 367, 576, 429);
-
 } // End of anonymous namespace
 
 void CloseUp::reset() {
@@ -85,7 +82,7 @@ void CloseUp::refreshObjects() {
 		e.pickable = d.pickable;
 		Picture *p = d.picture >= 0 ? _pictures[d.picture] : nullptr;
 		if (p)
-			e.rect = Common::Rect(64 + e.x, 50 + e.y, 64 + e.x + p->surface.w, 50 + e.y + p->surface.h);
+			e.rect = Common::Rect(64 + e.x, 50 + e.y, 64 + e.x + p->pattern(0).width(), 50 + e.y + p->pattern(0).height());
 		_objects.push_back(e);
 	}
 }
@@ -239,8 +236,13 @@ void CloseUp::handleMouse() {
 		}
 		return -1;
 	};
+	_pressed = -1;
 	_hover = firstHit();
-	if (!_vm->takeLeftPress())
+	bool changed = false;
+	const bool press = _vm->press(GilbertEngine::kScreenCua, &changed);
+	if (changed)
+		_hover = -1;
+	if (!press)
 		return;
 	if (!Common::Rect(509, 336, 589, 396).contains(m)) {
 		Common::Array<uint32> codes;
@@ -279,21 +281,20 @@ void CloseUp::mouseUp() {
 		if (e.rect.contains(m))
 			under.push_back(e.code);
 	if (object >= 0) {
-		if (kInventoryBox.contains(m)) {
+		if (Common::Rect(364, 367, 576, 429).contains(m))
 			logic->objectToInventory(object);
-			return;
-		}
 		for (uint32 code : under)
 			if ((int)code != object)
 				logic->useObjectOnObject(object, code);
-	} else {
+	}
+	if (item >= 0)
 		for (uint32 code : under)
 			logic->useObjectOnObject(item, code);
-	}
 }
 
 // gmenu::Action in mode 2 (screens.md "Buttons").
 void CloseUp::action(int item) {
+	_vm->menu()->setLastAction(item);
 	Sound *snd = _vm->sound();
 	_hover = _pressed = -1;
 	switch (item) {
