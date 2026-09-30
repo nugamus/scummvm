@@ -107,7 +107,7 @@ void DialogBox::handleMouse() {
 			hit = k;
 	}
 	_hover = hit;
-	if (_vm->takeLeftPress()) {
+	if (_vm->press(GilbertEngine::kScreenDialog)) {
 		_pressed = hit;
 		if (hit >= 0) {
 			_open = false;

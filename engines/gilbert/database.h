@@ -73,7 +73,7 @@ struct Walkmap {
 	Common::Array<Cua> cuas;
 	uint32 id = 0;
 	Common::String title;
-	int32 radar[4] = { 0, 0, 0, 0 }; ///< x, y, w, h as stored
+	int32 radar[4] = { 0, 0, 0, 0 }; ///< left, top, right, bottom
 };
 
 struct Anim {

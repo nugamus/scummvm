@@ -50,7 +50,7 @@
 namespace Gilbert {
 
 // The clip rectangle of every picture draw (boot.md "Conventions").
-static const Common::Rect kClip(64, 50, 576, 430);
+static const int kClipLeft = 64, kClipTop = 50, kClipRight = 576, kClipBottom = 430;
 // Menu tick (boot.md "Main loop", Q-0207).
 static const uint32 kTickMs = 16;
 // The loading panel's busy wait (boot.md "Loading panel"); its length on the original's
@@ -98,7 +98,7 @@ Common::Error GilbertEngine::run() {
 	const Graphics::PixelFormat format(2, 5, 6, 5, 0, 11, 5, 0, 0);
 	initGraphics(640, 480, &format);
 	_screen.create(640, 480, format);
-	_clip = kClip;
+	_clip = Common::Rect(kClipLeft, kClipTop, kClipRight, kClipBottom);
 	_sound = new Sound(_mixer);
 	_menu = new Menu(this);
 	_logic = new Logic(this);
@@ -143,6 +143,8 @@ Common::Error GilbertEngine::run() {
 		default:
 			break;
 		}
+		if (_mode != kModeMenu)
+			_keys.clear();
 		previous = now0;
 		next += kTickMs;
 		const uint32 now = _system->getMillis();
@@ -237,14 +239,26 @@ void GilbertEngine::loadingStep(int step, uint line) {
 	drawText(_screen, text, x, 200, 8, kColourTan);
 	present();
 	const uint32 end = _system->getMillis() + kLoadingWaitMs;
+	setBusy(true);
 	while (!shouldQuit() && _system->getMillis() < end) {
 		pollEvents();
 		_system->delayMillis(10);
 	}
+	setBusy(false);
 }
 
 // movie::Play (boot.md "Films").
 void GilbertEngine::playFilm(const Common::String &name, bool fromIntro) {
+	setBusy(true);
+	playFilmBody(name);
+	setBusy(false);
+	if (fromIntro)
+		_menu->musicAfterFilm();
+	else
+		_room->restartMusic();
+}
+
+void GilbertEngine::playFilmBody(const Common::String &name) {
 	_sound->stopAll();
 	Common::File *file = new Common::File();
 	if (!file->open(Common::Path("mpg/").appendComponent(name))) {
@@ -295,16 +309,13 @@ void GilbertEngine::playFilm(const Common::String &name, bool fromIntro) {
 		present();
 		clear();
 	}
-	if (fromIntro)
-		_menu->musicAfterFilm();
-	else
-		_room->restartMusic();
 }
 
 // Saving slot n (boot.md "Save slots"): file=game<n>.dat and the name in the slot list,
 // then GESaveFile into `<target>.game<n>.dat`, the original's file byte for byte.
 bool GilbertEngine::saveSlot(int n, const Common::String &name) {
-	if (n < 1 || n > 50)
+	// SaveSlot does nothing without the installer's registry value (E-0216).
+	if (n < 1 || n > 50 || _settings.installationType == -1)
 		return false;
 	const Common::String file = Common::String::format("game%d.dat", n);
 	Common::ScopedPtr<Common::OutSaveFile> out(_saveFileMan->openForSaving(_targetName + "." + file, false));
@@ -341,20 +352,25 @@ bool GilbertEngine::loadSlot(int n) {
 	return true;
 }
 
+// ScummVM's slots 0..49 are the game's slots 1..50.
 bool GilbertEngine::canSaveGameStateCurrently(Common::U32String *msg) {
-	return _mode == kModeRoom && _menu->canSave();
+	return !_busy && _mode == kModeRoom && _menu->canSave();
 }
 
 bool GilbertEngine::canLoadGameStateCurrently(Common::U32String *msg) {
-	return _mode == kModeRoom || _mode == kModeMenu;
+	return !_busy && (_mode == kModeRoom || _mode == kModeMenu);
 }
 
 Common::Error GilbertEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
-	return saveSlot(slot, desc) ? Common::kNoError : Common::kWritingFailed;
+	// The game's names are Windows-1252, at most 20 characters (boot.md "Typing").
+	Common::String name = Common::U32String(desc, Common::kUtf8).encode(Common::kWindows1252);
+	if (name.size() > 20)
+		name = name.substr(0, 20);
+	return saveSlot(slot + 1, name) ? Common::kNoError : Common::kWritingFailed;
 }
 
 Common::Error GilbertEngine::loadGameState(int slot) {
-	if (!loadSlot(slot))
+	if (!loadSlot(slot + 1))
 		return Common::kReadingFailed;
 	_menu->gameLoaded(true);
 	return Common::kNoError;
@@ -365,6 +381,7 @@ void GilbertEngine::resetState() {
 	_room->reset();
 	_cua->reset();
 	_dialog->close();
+	_menu->reset();
 	_settings.musicVolume = 5;
 	_settings.soundVolume = 4;
 	_settings.fullscreenVideo = false;
@@ -679,16 +696,19 @@ void GilbertEngine::pollEvents() {
 		switch (event.type) {
 		case Common::EVENT_MOUSEMOVE:
 			_mouse = event.mouse;
+			if (_buttonState == -1) {
+				const int held = _eventMan->getButtonState();
+				if (held & Common::EventManager::LBUTTON)
+					setButtonState(1);
+				else if (held & Common::EventManager::RBUTTON)
+					setButtonState(2);
+			}
 			break;
 		case Common::EVENT_LBUTTONDOWN:
-			_mouse = event.mouse;
-			_leftPress = true;
-			_leftHeld = true;
-			if (_mode == kModeCua)
-				_cua->mouseDown();
-			break;
 		case Common::EVENT_RBUTTONDOWN:
 			_mouse = event.mouse;
+			if (_buttonState == -1)
+				setButtonState(event.type == Common::EVENT_LBUTTONDOWN ? 1 : 2);
 			if (_mode == kModeCua)
 				_cua->mouseDown();
 			break;
@@ -696,8 +716,9 @@ void GilbertEngine::pollEvents() {
 		case Common::EVENT_RBUTTONUP:
 			// Releasing any button clears the button state (boot.md "Mouse").
 			_mouse = event.mouse;
-			_leftPress = false;
-			_leftHeld = false;
+			_buttonState = -1;
+			for (int i = 0; i < kScreenCount; i++)
+				_seenState[i] = -1;
 			_cua->mouseUp();
 			break;
 		case Common::EVENT_KEYDOWN:
@@ -727,10 +748,20 @@ void GilbertEngine::pollEvents() {
 	}
 }
 
-bool GilbertEngine::takeLeftPress() {
-	const bool p = _leftPress;
-	_leftPress = false;
-	return p;
+void GilbertEngine::setButtonState(int state) {
+	_buttonState = state;
+	if (state == 1)
+		_downs++;
+}
+
+bool GilbertEngine::press(Screen screen, bool *changed) {
+	// A down and up between two ticks still counts once (_downs), as a held click would.
+	const bool pressed = _downs != _seenDowns[screen];
+	if (changed)
+		*changed = pressed || _buttonState != _seenState[screen];
+	_seenDowns[screen] = _downs;
+	_seenState[screen] = _buttonState;
+	return pressed;
 }
 
 Common::Array<Common::KeyState> GilbertEngine::takeKeys() {

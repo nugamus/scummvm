@@ -25,6 +25,7 @@
 #include "gilbert/dialog.h"
 #include "gilbert/gilbert.h"
 #include "gilbert/logic.h"
+#include "gilbert/menu.h"
 #include "gilbert/room.h"
 #include "gilbert/sound.h"
 
@@ -77,13 +78,14 @@ int Book::tabFor(int book) const {
 	for (const Tab &t : kTabs)
 		if (t.book == book)
 			return t.item;
-	return kTabs[0].item;
+	return -1;
 }
 
 // The book button (rooms.md "Actions in the room", screens.md "Opening and leaving").
 void Book::open() {
 	_images.load("maps/!global/bookimages.wxi");
 	_tab = tabFor(1);
+	_pressedButton = _tab;
 	buildList(1, 0);
 	_hoverTab = _hoverArrow = _pressedArrow = -1;
 	_vm->room()->clearNewTopic();
@@ -101,11 +103,13 @@ void Book::buildList(int book, int first) {
 	_surface.create(355, 320, _vm->screen().format);
 	_surface.clear(kFuchsia);
 	const int count = logic->bookTopicCount(book);
+	// The line and the font run on from title to title (E-0512).
+	int y = 0;
+	Style style;
 	for (int i = 0; i < 20 && first + i < count; i++) {
 		const int rank = first + i;
-		int x = 10, y = 12 * i;
+		int x = 10;
 		const int x0 = x, y0 = y;
-		Style style;
 		BookParser p;
 		for (int t = p.first(logic->bookTopicTitle(book, rank)); t != kTokenEnd; t = p.next()) {
 			if (t == kTokenText) {
@@ -126,6 +130,7 @@ void Book::buildList(int book, int first) {
 		l.book = book;
 		l.topic = logic->bookTopicFromIndex(book, rank);
 		_links.push_back(l);
+		y += 12;
 	}
 }
 
@@ -145,7 +150,7 @@ void Book::buildPage(int book, uint32 topic) {
 	bool inLink = false;
 	Link link;
 	Common::Point linkStart;
-	Style saved;
+	int formatNumber = 0;
 	auto newLine = [&]() {
 		y += lineHeight;
 		x = 10;
@@ -173,11 +178,11 @@ void Book::buildPage(int book, uint32 topic) {
 			break;
 		}
 		case kTokenFormat:
+			formatNumber = p.format;
 			style.format(p.format);
 			break;
 		case kTokenLink:
 			inLink = true;
-			saved = style;
 			colour = kListColour;
 			linkStart = Common::Point(-1, -1);
 			link.book = p.linkBook;
@@ -189,7 +194,7 @@ void Book::buildPage(int book, uint32 topic) {
 					linkStart = Common::Point(x, y);
 				link.rect = Common::Rect(linkStart.x + 135, linkStart.y + 103, x + 135, y + 115);
 				_links.push_back(link);
-				style = saved;
+				style.format(formatNumber);
 				colour = kPageColour;
 				inLink = false;
 			}
@@ -200,10 +205,8 @@ void Book::buildPage(int book, uint32 topic) {
 				break;
 			if (x + pic->surface.w > 354)
 				newLine();
-			if (pic->transparent)
-				_surface.transBlitFrom(pic->surface, Common::Point(x, y), pic->key);
-			else
-				_surface.blitFrom(pic->surface, Common::Point(x, y));
+			// Drawn opaque: fuchsia stays transparent through the page's own key (E-0512).
+			_surface.blitFrom(pic->surface, Common::Point(x, y));
 			x += pic->surface.w;
 			lineHeight = MAX<int>(lineHeight, pic->surface.h);
 			break;
@@ -251,12 +254,14 @@ void Book::draw() {
 		_vm->drawPicture(i2[t.item], t.x, t.y);
 		if (_hoverTab == t.item)
 			_vm->drawPicture(i2[t.item + 6], t.x, t.y);
-		if (_tab == t.item) {
+		if (_pressedButton == t.item)
 			_vm->drawPicture(i2[t.item + 12], t.x, t.y);
-			if (t.title >= 0)
-				_vm->drawPicture(i2[t.title], 192, 56);
-		}
+		if (_tab == t.item && t.title >= 0)
+			_vm->drawPicture(i2[t.title], 192, 56);
 	}
+	// The pressed bar button acts while the mouse is on it, once per press (E-0513).
+	if (_pressedButton >= 0 && _pressedButton == _hoverTab && _pressedButton != _vm->menu()->lastAction())
+		tabAction(_pressedButton);
 	static const struct {
 		int item, x, y;
 	} arrows[] = { { kToList, 115, 93 }, { kUp, 503, 93 }, { kDown, 503, 343 } };
@@ -282,7 +287,7 @@ void Book::handleMouse() {
 	for (uint i = 0; i < _links.size(); i++) {
 		Common::Rect r = _links[i].rect;
 		r.translate(0, -dy);
-		if (r.contains(m))
+		if (r.intersects(mr))
 			linkHit = i;
 	}
 	_cursor = linkHit >= 0 && !_vm->leftHeld() ? 7 : 0;
@@ -301,24 +306,28 @@ void Book::handleMouse() {
 	const bool arrowArea = Common::Rect(500, 90, 525, 360).contains(m) || Common::Rect(114, 90, 130, 125).contains(m);
 	_hoverArrow = arrowArea ? firstHit(arrows, 3) : -1;
 
-	if (!_vm->takeLeftPress())
+	if (!_vm->press(GilbertEngine::kScreenBook))
 		return;
 	if (linkHit >= 0) {
 		const Link l = _links[linkHit];
 		if (_page) {
-			if (l.book != _book)
-				_tab = tabFor(l.book);
+			// Links to books other than 0..3 change nothing (E-0513).
+			const int tab = tabFor(l.book);
+			if (tab < 0)
+				return;
+			_tab = tab;
 		}
 		buildPage(l.book, l.topic);
 		return;
 	}
 	if (_hoverTab >= 0)
-		tabAction(_hoverTab);
+		_pressedButton = _hoverTab;
 	if (_hoverArrow >= 0)
 		_pressedArrow = _hoverArrow;
 }
 
 void Book::tabAction(int item) {
+	_vm->menu()->setLastAction(item);
 	for (const Tab &t : kTabs) {
 		if (t.item != item)
 			continue;
@@ -331,6 +340,9 @@ void Book::tabAction(int item) {
 		} else if (item == kPrint) {
 			_vm->dialog()->openPrintMessage();
 		} else if (item == kBackToRoom) {
+			_vm->sound()->playWave(1, 4);
+			_scroll = _first = 0;
+			_hoverTab = _pressedButton = -1;
 			_vm->setMode(GilbertEngine::kModeRoom);
 		}
 	}
@@ -338,6 +350,7 @@ void Book::tabAction(int item) {
 
 // The arrows (screens.md "Arrows").
 void Book::arrowAction(int item) {
+	_vm->menu()->setLastAction(item);
 	Sound *snd = _vm->sound();
 	snd->playWave(1, 1);
 	const int count = _vm->logic()->bookTopicCount(_book);

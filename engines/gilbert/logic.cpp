@@ -54,11 +54,16 @@ bool Logic::load(Common::SeekableReadStream &in) {
 	if (!_db.load(in))
 		return false;
 	// Each object's current state number resolves to its state, the first if absent.
+	auto resolve = [this](Obj &o) {
+		if (!currentState(o) && !o.states.empty())
+			o.state = o.states[0].state;
+	};
 	for (Walkmap &w : _db.walkmaps)
 		for (Cua &c : w.cuas)
 			for (Obj &o : c.objs)
-				if (!currentState(o) && !o.states.empty())
-					o.state = o.states[0].state;
+				resolve(o);
+	for (Obj &o : _db.inventory)
+		resolve(o);
 	renumberBooks();
 	return true;
 }
@@ -552,13 +557,26 @@ uint32 Logic::runEvent(const Event &e) {
 		break;
 	case 12:
 	case 13: {
-		Obj *o = objById(id);
-		if (o && currentState(*o))
-			for (ObjState &s : o->states)
+		// The first object with that ID that has a state st (and a current state).
+		auto mark = [&](Obj &o) {
+			if (o.id != id || !currentState(o))
+				return false;
+			for (ObjState &s : o.states)
 				if (s.state == st) {
 					s.pickable = e.type == 12 ? 1 : 0;
-					break;
+					return true;
 				}
+			return false;
+		};
+		bool done = false;
+		for (Walkmap &w : _db.walkmaps)
+			for (Cua &c : w.cuas)
+				for (Obj &o : c.objs)
+					if (!done)
+						done = mark(o);
+		for (Obj &o : _db.inventory)
+			if (!done)
+				done = mark(o);
 		break;
 	}
 	case 14: {

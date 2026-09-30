@@ -57,7 +57,11 @@ void Sound::playWave(int list, int index, bool looped) {
 	if (list < 1 || list > 4 || index < 0 || index >= (int)_lists[list].size())
 		return;
 	const Wave &w = _lists[list][index];
-	Common::SeekableReadStream *mem = new Common::MemoryReadStream(w.data.data(), w.data.size());
+	byte *copy = (byte *)malloc(w.data.size());
+	if (!copy)
+		return;
+	memcpy(copy, w.data.data(), w.data.size());
+	Common::SeekableReadStream *mem = new Common::MemoryReadStream(copy, w.data.size(), DisposeAfterUse::YES);
 	Audio::SeekableAudioStream *s = Audio::makeWAVStream(mem, DisposeAfterUse::YES);
 	if (!s)
 		return;
@@ -120,8 +124,8 @@ void Sound::startStream(Stream stream) {
 }
 
 void Sound::stopAll() {
-	_mixer->stopAll();
 	for (int i = 0; i < kStreamCount; i++) {
+		_mixer->stopHandle(_streams[i]);
 		delete _pending[i];
 		_pending[i] = nullptr;
 	}
@@ -131,7 +135,7 @@ void Sound::setVolumes(int music, int sound) {
 	_musicVolume = levelToVolume(music);
 	_soundVolume = levelToVolume(sound);
 	for (int i = 0; i < kStreamCount; i++)
-		_mixer->setChannelVolume(_streams[i], _musicVolume);
+		_mixer->setChannelVolume(_streams[i], i == kOther ? _soundVolume : _musicVolume);
 	_mixer->setChannelVolume(_wave, _soundVolume);
 }
 

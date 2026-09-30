@@ -84,7 +84,7 @@ void Room::reset() {
 	_radarAlpha = 0;
 	_radarStep = 1;
 	_newTopic = false;
-	_blink = 50;
+	_blink = 0;
 	_blinkStep = 8;
 	_lastStep = -1;
 }
@@ -218,8 +218,9 @@ void Room::tick(uint32 elapsed) {
 
 void Room::fade(bool in) {
 	// 256 gamma ramp updates without a clock in the original (Q-0300): 300 ms here.
-	const int from = in ? _vm->brightness() : 256, to = in ? 256 : 64;
+	const int from = in ? _vm->fadeLevel() : 256, to = in ? 256 : 64;
 	const uint32 start = g_system->getMillis();
+	_vm->setBusy(true);
 	for (;;) {
 		const uint32 t = g_system->getMillis() - start;
 		const int level = t >= 300 ? to : from + (to - from) * (int)t / 300;
@@ -229,6 +230,8 @@ void Room::fade(bool in) {
 		_vm->pollEvents();
 		g_system->delayMillis(10);
 	}
+	_vm->setBusy(false);
+	_vm->setFadeLevel(to);
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +288,7 @@ void Room::drawObjectsAndGilbert() {
 			Picture *p = o.picture >= 0 ? _objects[o.picture] : nullptr;
 			if (!p)
 				continue;
-			const bool behind = _oy + o.y + p->surface.h <= feet;
+			const bool behind = _oy + o.y + p->pattern(0).height() <= feet;
 			if (behind == (pass == 0))
 				_vm->drawPattern(p, 0, _ox + o.x, _oy + o.y);
 		}
@@ -352,7 +355,7 @@ void Room::drawBookButton() {
 	if (_newTopic) {
 		_vm->blendPattern(i2[0x0a], 0, Common::Rect(298, 333, 346, 373), _blink);
 		_blink += _blinkStep;
-		if (_blink <= 50) {
+		if (_blink <= 50 && _blinkStep < 0) {
 			_blink = 50;
 			_blinkStep = 8;
 		} else if (_blink >= 200) {
@@ -368,6 +371,7 @@ void Room::rereadRadar() {
 
 // gmenu::Action in mode 1 (rooms.md "Actions in the room").
 void Room::action(int item) {
+	_vm->menu()->setLastAction(item);
 	Sound *snd = _vm->sound();
 	switch (item) {
 	case kBook:
@@ -399,7 +403,8 @@ void Room::handleMouse() {
 	PictureCollection &i2 = _vm->interface2();
 	const Common::Point m = _vm->mouse();
 	const Common::Rect mr(m.x - 3, m.y - 3, m.x + 3, m.y + 3);
-	const bool press = _vm->takeLeftPress();
+	bool changed = false;
+	const bool press = _vm->press(GilbertEngine::kScreenRoom, &changed);
 	auto firstHit = [&]() {
 		for (int item : items) {
 			Picture *p = i2[item];
@@ -439,8 +444,9 @@ void Room::handleMouse() {
 			_cursor = 5;
 		}
 	}
-	if (press) {
+	if (changed)
 		_hover = -1;
+	if (press) {
 		_pressed = firstHit();
 		debugC(1, kDebugScript, "Room: press at (%d, %d): panel item %d", m.x, m.y, _pressed);
 	}
@@ -485,10 +491,8 @@ void Room::moveGilbert(int m) {
 		if (_counter > 14)
 			_counter = 0;
 	} else {
-		if (f > 11) {
+		if (f > 11)
 			f = 0;
-			_counter = 0;
-		}
 		const int base = standingBase(_facing);
 		if (base >= 0)
 			_frame = base + f;

@@ -111,8 +111,24 @@ public:
 	// Input, gathered by pollEvents().
 	void pollEvents();
 	Common::Point mouse() const { return _mouse; }
-	/** A left press not yet taken; taking it clears it (boot.md "Mouse"). */
-	bool takeLeftPress();
+	/** The screens that watch the button state, each with its own last-seen state. */
+	enum Screen {
+		kScreenMenu,
+		kScreenRoom,
+		kScreenCua,
+		kScreenDialog,
+		kScreenBook,
+		kScreenCount
+	};
+	/**
+	 * The button state (boot.md "Mouse", screens.md "Conventions"): -1, or 1 (left) / 2
+	 * (right), set on a mouse down while -1 (and on a move with that button held), -1 on any
+	 * mouse up. A screen sees a press when the state changed to 1 since it last looked;
+	 * `changed` tells whether it changed at all.
+	 */
+	bool press(Screen screen, bool *changed = nullptr);
+	/** Films, fades and waits pump events: the ScummVM menu must not save or load then. */
+	void setBusy(bool busy) { _busy += busy ? 1 : -1; }
 	/** Keys typed since the last call. */
 	Common::Array<Common::KeyState> takeKeys();
 	void warpMouse(int x, int y);
@@ -159,13 +175,15 @@ public:
 	DialogBox *dialog() { return _dialog; }
 	PictureCollection &inventoryPictures() { return _inventory; }
 	PictureCollection &gilbert() { return _gilbert; }
-	bool leftHeld() const { return _leftHeld; }
+	bool leftHeld() const { return _buttonState == 1; }
 	bool ctrlHeld() const;
 	/** boot.md's DrawCursor: the mouse kept inside x 72..568, y 58..422, `cur[n]` at it. */
 	void drawCursor(int n);
 	/** Shows the page at a brightness 0..256 (the room fades, rooms.md "Fades"). */
 	void present(int brightness);
-	int brightness() const { return _brightness; }
+	/** The fades' work ramp: 0 at start-up, so the first room fades in from black. */
+	int fadeLevel() const { return _fadeLevel; }
+	void setFadeLevel(int level) { _fadeLevel = level; }
 
 	// LogicListener: the call-backs of the game rules (logic.md, rooms.md). Close-ups,
 	// the inventory, dialogues and books come with the screens.
@@ -189,6 +207,7 @@ public:
 private:
 	void boot();
 	void loadingStep(int step, uint line);
+	void playFilmBody(const Common::String &name);
 	void checkDatabase();
 	void resetState();
 	void loadLanguage();
@@ -209,15 +228,21 @@ private:
 	Book *_book = nullptr;
 	DialogBox *_dialog = nullptr;
 	int _mode = kModeMenu;
-	int _brightness = 0;
-	bool _leftHeld = false;
+	int _brightness = 256;
+	int _fadeLevel = 0;
+	int _buttonState = -1;
+	uint32 _downs = 0;
+	int _seenState[kScreenCount] = { -1, -1, -1, -1, -1 };
+	uint32 _seenDowns[kScreenCount] = { 0, 0, 0, 0, 0 };
+	/** Films, fades and waits: the ScummVM menu does not save or load then. */
+	int _busy = 0;
 	Menu *_menu = nullptr;
 
 	Common::Point _mouse;
-	bool _leftPress = false;
 	bool _escHeld = false;
 	bool _runHeld = false;
 	Common::Array<Common::KeyState> _keys;
+	void setButtonState(int state);
 };
 
 } // End of namespace Gilbert

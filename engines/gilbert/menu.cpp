@@ -108,7 +108,22 @@ Menu::Result Menu::tick() {
 	return _result;
 }
 
+void Menu::reset() {
+	_lastAction = -1;
+	_page = _hover = _pressed = -1;
+	_pageHover = _pagePress = -1;
+	_loadTop = _saveTop = 0;
+	_loadPicked = _savePicked = _saveNamed = 0;
+	_loadHover = _saveHover = 0;
+	_editing = false;
+	_fieldAlpha = 0;
+	_fieldStep = 5;
+	_counter = 0;
+}
+
 void Menu::enterFromGame() {
+	closeMenuState();
+	_pageHover = _pagePress = -1;
 	_vm->sound()->playWave(1, 2);
 	_vm->sound()->stopAll();
 	_counter = 0;
@@ -118,7 +133,6 @@ void Menu::enterFromGame() {
 
 void Menu::gameOver() {
 	_running = _canSave = false;
-	_counter = 0;
 	_vm->setMode(GilbertEngine::kModeMenu);
 }
 
@@ -185,7 +199,7 @@ void Menu::handleMouse() {
 		kSaveButton, kLoadButton, kUp, kDown, kBack, kHelpUp, kHelpDown,
 		0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, kVideo
 	};
-	const bool press = _vm->takeLeftPress();
+	const bool press = _vm->press(GilbertEngine::kScreenMenu);
 	const Common::Rect m = mouseRect();
 	const bool open = _help || _credits;
 	// Continue counts only once a room has been shown since the last new game or load.
@@ -219,13 +233,13 @@ void Menu::handleMouse() {
 // Typing a save name (boot.md "Typing").
 void Menu::handleTyping() {
 	for (const Common::KeyState &k : _vm->takeKeys()) {
-		if (_page != 4 || !_editing || !_savePicked)
-			continue;
 		if (k.keycode == Common::KEYCODE_BACKSPACE) {
 			if (!_name.empty())
 				_name.deleteLastChar();
 			continue;
 		}
+		if (_page != 4 || !_editing || !_savePicked)
+			continue;
 		char c = 0;
 		if (k.keycode >= Common::KEYCODE_a && k.keycode <= Common::KEYCODE_z)
 			c = 'A' + (k.keycode - Common::KEYCODE_a);
@@ -233,8 +247,9 @@ void Menu::handleTyping() {
 			c = '0' + (k.keycode - Common::KEYCODE_0);
 		else if (k.keycode == Common::KEYCODE_SPACE)
 			c = ' ';
-		else if (k.ascii == ':' || k.ascii == '@' || k.ascii == '[' || k.ascii == '\\')
-			c = (char)k.ascii;
+		else if (k.keycode == Common::KEYCODE_COLON || k.keycode == Common::KEYCODE_AT ||
+		         k.keycode == Common::KEYCODE_LEFTBRACKET || k.keycode == Common::KEYCODE_BACKSLASH)
+			c = (char)k.keycode;
 		else if (k.ascii == 0xE4 || k.ascii == 0xC4)
 			c = (char)0xC4; // Ä
 		else if (k.ascii == 0xE5 || k.ascii == 0xC5)
@@ -253,10 +268,12 @@ void Menu::closeMenuState() {
 
 void Menu::clickAndWait(int wave) {
 	_vm->sound()->playWave(1, wave);
+	_vm->setBusy(true);
 	while (_vm->sound()->isWavePlaying() && !_vm->shouldQuit()) {
 		_vm->pollEvents();
 		g_system->delayMillis(10);
 	}
+	_vm->setBusy(false);
 }
 
 // gmenu::Action for the column and the back button (boot.md "Button actions").
@@ -280,10 +297,9 @@ void Menu::action(int item) {
 			snd->playWave(1, 4);
 			snd->stopAll();
 			_shown = false;
-			if (_vm->newGame()) {
-				_canSave = _vm->settings().installationType != -1;
-				_running = true;
-			}
+			if (_vm->newGame() && _vm->settings().installationType != -1)
+				_canSave = true;
+			_running = true;
 		}
 		closeMenuState();
 		break;
@@ -367,16 +383,16 @@ void Menu::pageAction(int item) {
 		_editing = false;
 	} else if (item == kLoadButton) {
 		snd->playWave(1, 0);
-		if (_loadPicked) {
-			snd->stopAll();
+		if (_loadPicked)
 			gameLoaded(_vm->loadSlot(_loadTop + _loadPicked));
-		}
 	} else if (item == kSaveButton) {
 		snd->playWave(1, 0);
 		if (_savePicked && !_vm->saveSlot(_saveTop + _savePicked, _name))
 			warning("Gilbert: could not save slot %d", _saveTop + _savePicked);
+		_editing = false;
 		closeMenuState();
 	}
+	_lastAction = item;
 	_pageHover = _pagePress = -1;
 }
 
@@ -463,8 +479,8 @@ void Menu::drawSavePage() {
 	_vm->drawPicture(i2(0x40), 102, 63);
 	_vm->drawPicture(i2(0x39), 104, 100);
 	drawRows(5, _saveTop, _saveHover, _savePicked);
-	if (_savePicked && _savePicked != _saveNamed) {
-		// A row picked for the first time, or another row: its name, and editing starts.
+	if (_savePicked && (!_editing || _savePicked != _saveNamed)) {
+		// A row picked while not editing, or another row: its name, and editing starts.
 		_name = _vm->slotName(_saveTop + _savePicked);
 		_editing = true;
 		_saveNamed = _savePicked;
@@ -490,18 +506,22 @@ void Menu::drawSettingsPage() {
 	const Settings &s = _vm->settings();
 	_vm->drawPicture(i2(0x23), 102, 63);
 	_vm->drawPicture(i2(0x37), 102, 63);
-	_vm->drawPicture(i2(0x3b), 108, 97);
-	_vm->drawPicture(i2(0x3e), 108, 192);
-	for (int j = 0; j < 6; j++) {
-		const int x = 114 + 33 * j;
-		_vm->drawPicture(i2(j == s.musicVolume - 1 ? 0x71 : 0x3c), x, 122);
-		pageButton(kMusic1 + j, x, 153, -1, -1);
-		_vm->drawPicture(i2(j == s.soundVolume - 1 ? 0x71 : 0x3c), x, 216);
-		pageButton(kSound1 + j, x, 247, -1, -1);
-	}
 	_vm->drawPicture(i2(0x7d), 112, 288);
 	_vm->drawPicture(i2(s.fullscreenVideo ? 0x71 : 0x3c), 279, 293);
 	pageButton(kVideo, 246, 294, -1, -1);
+	static const struct {
+		int title, titleY, lampY, buttonY, button;
+	} rows[] = { { 0x3b, 97, 122, 153, kMusic1 }, { 0x3e, 192, 216, 247, kSound1 } };
+	for (const auto &r : rows) {
+		const int level = r.button == kMusic1 ? s.musicVolume : s.soundVolume;
+		_vm->drawPicture(i2(r.title), 108, r.titleY);
+		for (int j = 0; j < 6; j++)
+			_vm->drawPicture(i2(0x3c), 114 + 33 * j, r.lampY);
+		if (level >= 1 && level <= 6)
+			_vm->drawPicture(i2(0x71), 114 + 33 * (level - 1), r.lampY);
+		for (int j = 0; j < 6; j++)
+			pageButton(r.button + j, 114 + 33 * j, r.buttonY, -1, -1);
+	}
 }
 
 void Menu::drawHelpPage() {

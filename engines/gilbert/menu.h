@@ -58,6 +58,11 @@ public:
 		_shown = false;
 	}
 	bool canSave() const { return _canSave; }
+	/** gmenu::Action's last item, set by the actions of every mode (E-0214). */
+	void setLastAction(int item) { _lastAction = item; }
+	int lastAction() const { return _lastAction; }
+	/** ResetState's part (E-0309): after a new game or a load. */
+	void reset();
 
 private:
 	Picture *i2(int item) const;
@@ -105,8 +110,8 @@ private:
 	bool _editing = false;
 	int _lastAction = -1;
 	int _counter = 0;
-	int _fieldAlpha = 80;
-	int _fieldStep = -2;
+	int _fieldAlpha = 0;
+	int _fieldStep = 5;
 	double _scroll = 0;
 	Graphics::ManagedSurface _helpText, _creditsText;
 };
