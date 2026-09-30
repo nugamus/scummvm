@@ -22,8 +22,13 @@
 #include "common/formats/ini-file.h"
 #include "common/savefile.h"
 #include "common/system.h"
+#include "common/translation.h"
 
 #include "engines/advancedDetector.h"
+
+#include "backends/keymapper/action.h"
+#include "backends/keymapper/keymap.h"
+#include "backends/keymapper/standard-actions.h"
 
 #include "gilbert/detection.h"
 #include "gilbert/gilbert.h"
@@ -41,6 +46,28 @@ public:
 
 	bool hasFeature(MetaEngineFeature f) const override {
 		return f == kSupportsListSaves || f == kSupportsLoadingDuringStartup || f == kSupportsDeleteSave;
+	}
+
+	Common::KeymapArray initKeymaps(const char *target) const override {
+		using namespace Common;
+		Keymap *keymap = new Keymap(Keymap::kKeymapTypeGame, "gilbert", _("Game keymappings"));
+		Action *act = new Action(kStandardActionLeftClick, _("Click"));
+		act->setLeftClickEvent();
+		act->addDefaultInputMapping("MOUSE_LEFT");
+		act->addDefaultInputMapping("JOY_A");
+		keymap->addAction(act);
+		act = new Action("SKIP", _("Skip film"));
+		act->setCustomEngineActionEvent(Gilbert::kActionSkip);
+		act->addDefaultInputMapping("ESCAPE");
+		act->addDefaultInputMapping("JOY_B");
+		keymap->addAction(act);
+		act = new Action("RUN", _("Run (hold)"));
+		act->setCustomEngineActionEvent(Gilbert::kActionRun);
+		act->addDefaultInputMapping("LCTRL");
+		act->addDefaultInputMapping("RCTRL");
+		act->addDefaultInputMapping("JOY_X");
+		keymap->addAction(act);
+		return Keymap::arrayOf(keymap);
 	}
 
 	int getMaximumSaveSlot() const override {

@@ -33,6 +33,13 @@ enum GilbertDebugChannels {
 	kDebugSound
 };
 
+// Keymapper actions: the original's only keys (boot.md, rooms.md).
+enum GilbertAction {
+	kActionNone,
+	kActionSkip, ///< Escape: skips a film
+	kActionRun   ///< Ctrl: Gilbert runs while it is held
+};
+
 extern const PlainGameDescriptor gilbertGames[];
 
 extern const ADGameDescription gameDescriptions[];
