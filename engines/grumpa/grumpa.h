@@ -25,6 +25,8 @@
 #include "common/error.h"
 #include "engines/advancedDetector.h"
 #include "engines/engine.h"
+#include "common/array.h"
+#include "common/str.h"
 #include "graphics/managed_surface.h"
 
 #include "grumpa/detection.h"
@@ -45,7 +47,10 @@ public:
 
 	Common::Error run() override;
 
-	Common::String dataPath(const Common::String &rel) const;
+	/** Draw the pre-rendered colour view <view>_IS.jpg onto the page (E-0011). */
+	bool loadBackground(const Common::String &view);
+	/** Decode the view's depth buffer <view>_IZ.fxi into `depth` (E-0009). */
+	bool loadDepth(const Common::String &view, Common::Array<uint16> &depth, int &w, int &h);
 
 private:
 	const ADGameDescription *_gameDesc;
