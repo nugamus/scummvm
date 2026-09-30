@@ -137,7 +137,7 @@ void DialogBox::draw() {
 		_vm->drawText(_vm->screen(), GilbertEngine::fromWindows1252(_lines[i]), b.left + 10, b.top - 6 + 12 * i, 8, kColourTan);
 	for (uint k = 0; k < _choices.size(); k++)
 		_vm->drawText(_vm->screen(), GilbertEngine::fromWindows1252(_choices[k]), b.left + 10, b.top + 20 + 18 * k + _off, 8,
-		              (int)k == _hover || (int)k == _pressed ? kColourTan : 0x7F7F7F);
+		              (int)k == _hover || (int)k == _pressed ? (uint32)kColourTan : 0x7F7F7FU);
 }
 
 } // End of namespace Gilbert

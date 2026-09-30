@@ -23,6 +23,7 @@
 #include "common/file.h"
 #include "common/system.h"
 
+#include "gilbert/book.h"
 #include "gilbert/detection.h"
 #include "gilbert/dialog.h"
 #include "gilbert/gilbert.h"
@@ -371,10 +372,8 @@ void Room::action(int item) {
 	switch (item) {
 	case kBook:
 		snd->playWave(1, 4);
-		_newTopic = false;
 		_hover = _pressed = -1;
-		// The book (mode 4) comes with the screens.
-		warning("Gilbert: the book is not implemented yet");
+		_vm->book()->open();
 		break;
 	case kMenuButton:
 		_hover = _pressed = -1;

@@ -1,6 +1,7 @@
 MODULE := engines/gilbert
 
 MODULE_OBJS = \
+	book.o \
 	collection.o \
 	cua.o \
 	database.o \
