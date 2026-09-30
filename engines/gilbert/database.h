@@ -44,9 +44,11 @@ struct ObjState {
 	uint32 cuaAnim = 0;
 	uint32 clickEvent = 0;
 	uint32 takeEvent = 0;
-	uint32 unk1c = 0;
+	uint32 icon = 0; ///< pattern of inventory.wxi (logic.md)
 	uint32 pickable = 0;
 	Common::String text;
+
+	int currentAnim = -1; ///< runtime: index into Database::anims, -1 none (logic.md)
 };
 
 struct Obj {
@@ -81,10 +83,9 @@ struct Anim {
 	Common::String name;
 	uint32 duration = 0;
 	uint32 unk18 = 0;
-	uint32 unk1c = 0;
-	uint32 unk20 = 0;
+	uint32 x = 0, y = 0; ///< the picture's top-left corner (logic.md)
 	uint32 z = 0;
-	uint32 unk28 = 0;
+	uint32 picture = 0; ///< item of the room's or close-up's collection (logic.md)
 	uint32 endEvent = 0;
 };
 

@@ -35,6 +35,7 @@
 #include "graphics/managed_surface.h"
 
 #include "gilbert/collection.h"
+#include "gilbert/logic.h"
 
 namespace Graphics {
 class Font;
@@ -61,7 +62,7 @@ struct Settings {
 	int musicVolume = 5;
 };
 
-class GilbertEngine : public Engine {
+class GilbertEngine : public Engine, public LogicListener {
 public:
 	GilbertEngine(OSystem *syst, const ADGameDescription *gameDesc);
 	~GilbertEngine() override;
@@ -110,10 +111,31 @@ public:
 	void playFilm(const Common::String &name, bool fromIntro = false);
 	/** boot::Exit: logo3 and the end of the program (boot.md "Exit"). */
 	void exitGame();
+	/** New game (boot.md "Button actions"): the database from default.dat, then event 1. */
+	bool newGame();
 
 	/** Save slots 1..50 from gilbert.ini (boot.md "Save slots"). */
 	void readSlotNames();
 	const Common::String &slotName(int slot) const { return _slotNames[CLIP(slot, 1, 50)]; }
+
+	// LogicListener: the call-backs of the game rules (logic.md). The rooms and screens
+	// that answer them are not implemented yet.
+	void gotoWalkmap(uint32 id, int x, int y, int direction) override;
+	void refreshWalkmap() override {}
+	void gotoCua(uint32 id) override;
+	void refreshCua() override {}
+	void refreshInventory() override {}
+	void showDialog() override;
+	void playWave(int list, int index, bool loop) override;
+	void stopWave(int list, int index) override {}
+	void playStream(const Common::String &name, bool loop, int kind) override;
+	void startFilm(const Common::String &name) override { playFilm(name, false); }
+	Common::Point gilbertPosition() override { return _gilbertPos; }
+	int mapWidth() override { return 0; }
+	int mapHeight() override { return 0; }
+	int mapCell(int x, int y) override { return 1; }
+	void walk(int direction) override {}
+	void newTopic(bool shown) override;
 
 private:
 	void boot();
@@ -131,9 +153,11 @@ private:
 	Common::String _slotNames[51];
 	Settings _settings;
 	Sound *_sound = nullptr;
+	Logic *_logic = nullptr;
 	Menu *_menu = nullptr;
 
 	Common::Point _mouse;
+	Common::Point _gilbertPos;
 	bool _leftPress = false;
 	bool _escHeld = false;
 	Common::Array<Common::KeyState> _keys;

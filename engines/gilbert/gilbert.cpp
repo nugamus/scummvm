@@ -58,6 +58,7 @@ GilbertEngine::GilbertEngine(OSystem *syst, const ADGameDescription *gameDesc) :
 
 GilbertEngine::~GilbertEngine() {
 	delete _menu;
+	delete _logic;
 	delete _sound;
 	for (auto &f : _fonts)
 		delete f._value;
@@ -70,6 +71,7 @@ Common::Error GilbertEngine::run() {
 	_clip = kClip;
 	_sound = new Sound(_mixer);
 	_menu = new Menu(this);
+	_logic = new Logic(this);
 	loadSettings();
 	loadLanguage();
 	_mouse = Common::Point(320, 240);
@@ -233,6 +235,41 @@ void GilbertEngine::playFilm(const Common::String &name, bool fromIntro) {
 	if (fromIntro)
 		_menu->musicAfterFilm();
 	// Room music restarts here once rooms exist (boot.md "Films" step 5).
+}
+
+bool GilbertEngine::newGame() {
+	Common::File f;
+	if (!f.open("game/default.dat") || !_logic->load(f)) {
+		warning("Gilbert: cannot load Data/game/default.dat");
+		return false;
+	}
+	_logic->startNewGame();
+	return true;
+}
+
+void GilbertEngine::gotoWalkmap(uint32 id, int x, int y, int direction) {
+	debugC(1, kDebugScript, "GotoWalkmap %d at (%d, %d) facing %d", id, x, y, direction);
+	_gilbertPos = Common::Point(x, y);
+}
+
+void GilbertEngine::gotoCua(uint32 id) {
+	debugC(1, kDebugScript, "GotoCUA %d", id);
+}
+
+void GilbertEngine::showDialog() {
+	debugC(1, kDebugScript, "Dialog: %s", _logic->dialogTitle().c_str());
+}
+
+void GilbertEngine::playWave(int list, int index, bool loop) {
+	_sound->playWave(list, index, loop);
+}
+
+void GilbertEngine::playStream(const Common::String &name, bool loop, int kind) {
+	debugC(1, kDebugSound, "Stream %s loop %d kind %d", name.c_str(), loop, kind);
+}
+
+void GilbertEngine::newTopic(bool shown) {
+	_sound->playWave(1, 10);
 }
 
 // boot::Exit (boot.md "Exit").

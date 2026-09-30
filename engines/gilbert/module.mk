@@ -4,6 +4,7 @@ MODULE_OBJS = \
 	collection.o \
 	database.o \
 	gilbert.o \
+	logic.o \
 	menu.o \
 	metaengine.o \
 	sound.o
