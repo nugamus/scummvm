@@ -24,6 +24,7 @@
 #include "common/system.h"
 
 #include "gilbert/detection.h"
+#include "gilbert/dialog.h"
 #include "gilbert/gilbert.h"
 #include "gilbert/logic.h"
 #include "gilbert/menu.h"
@@ -198,7 +199,15 @@ void Room::newTopic() {
 
 void Room::tick(uint32 elapsed) {
 	draw();
-	handleMouse();
+	DialogBox *dialog = _vm->dialog();
+	if (dialog->isOpen()) {
+		// The dialogue takes the press; the room neither walks nor presses buttons.
+		dialog->handleMouse();
+		dialog->draw();
+		_cursor = 0;
+	} else {
+		handleMouse();
+	}
 	const int divisor = _vm->ctrlHeld() ? 20 : 30;
 	const int lag = MAX<int>(elapsed / 16, 1);
 	moveGilbert(1000 / (lag + divisor));
@@ -286,42 +295,13 @@ void Room::drawObjectsAndGilbert() {
 void Room::drawPanel() {
 	PictureCollection &i2 = _vm->interface2();
 	_vm->drawPicture(_vm->interface1()[0], 64, 50);
-	const int32 eggs = _vm->logic()->variable(199);
-	if (eggs == 0)
-		_vm->drawPicture(i2[4], 296, 374);
-	else if (eggs >= 1 && eggs <= 6)
-		_vm->drawPicture(i2[0x99 + eggs - 1], 296, 374);
-
-	_vm->drawPicture(i2[6], 151, 347);
-	const Common::Rect r(152 + _radar.left, 348 + _radar.top, 152 + _radar.right, 348 + _radar.bottom);
-	_vm->fillAlpha(r, kColourTan, _radarAlpha);
-	_vm->frameRect(r, 0xF9B528);
-	_radarAlpha += _radarStep;
-	if (_radarAlpha <= 0) {
-		_radarAlpha = 0;
-		_radarStep = 1;
-	} else if (_radarAlpha >= 50) {
-		_radarAlpha = 50;
-		_radarStep = -1;
-	}
-
+	drawEggs();
+	drawRadar(50);
 	_vm->drawPicture(i2[kMenuButton], 70, 368);
 	_vm->drawPicture(i2[kKort], 70, 396);
 	_vm->drawPicture(i2[0xa8], 537, 380);
 	_vm->drawPicture(i2[0xa9], 537, 400);
-
-	_vm->drawPicture(i2[kBook], 298, 333);
-	if (_newTopic) {
-		_vm->blendPattern(i2[0x0a], 0, Common::Rect(298, 333, 346, 373), _blink);
-		_blink += _blinkStep;
-		if (_blink <= 50) {
-			_blink = 50;
-			_blinkStep = 8;
-		} else if (_blink >= 200) {
-			_blink = 200;
-			_blinkStep = -2;
-		}
-	}
+	drawBookButton();
 
 	if (_hover == kBook)
 		_vm->drawPicture(i2[0x09], 298, 333);
@@ -341,6 +321,50 @@ void Room::drawPanel() {
 		action(pressed);
 }
 
+void Room::drawEggs() {
+	PictureCollection &i2 = _vm->interface2();
+	const int32 eggs = _vm->logic()->variable(199);
+	if (eggs == 0)
+		_vm->drawPicture(i2[4], 296, 374);
+	else if (eggs >= 1 && eggs <= 6)
+		_vm->drawPicture(i2[0x99 + eggs - 1], 296, 374);
+}
+
+void Room::drawRadar(int maxAlpha) {
+	_vm->drawPicture(_vm->interface2()[6], 151, 347);
+	const Common::Rect r(152 + _radar.left, 348 + _radar.top, 152 + _radar.right, 348 + _radar.bottom);
+	_vm->fillAlpha(r, kColourTan, _radarAlpha);
+	_vm->frameRect(r, 0xF9B528);
+	_radarAlpha += _radarStep;
+	if (_radarAlpha <= 0) {
+		_radarAlpha = 0;
+		_radarStep = 1;
+	} else if (_radarAlpha >= maxAlpha) {
+		_radarAlpha = maxAlpha;
+		_radarStep = -1;
+	}
+}
+
+void Room::drawBookButton() {
+	PictureCollection &i2 = _vm->interface2();
+	_vm->drawPicture(i2[kBook], 298, 333);
+	if (_newTopic) {
+		_vm->blendPattern(i2[0x0a], 0, Common::Rect(298, 333, 346, 373), _blink);
+		_blink += _blinkStep;
+		if (_blink <= 50) {
+			_blink = 50;
+			_blinkStep = 8;
+		} else if (_blink >= 200) {
+			_blink = 200;
+			_blinkStep = -2;
+		}
+	}
+}
+
+void Room::rereadRadar() {
+	_radar = _vm->logic()->radarRect();
+}
+
 // gmenu::Action in mode 1 (rooms.md "Actions in the room").
 void Room::action(int item) {
 	Sound *snd = _vm->sound();
@@ -357,10 +381,11 @@ void Room::action(int item) {
 		_vm->menu()->enterFromGame();
 		break;
 	case kKort:
+		// Event walkmap * 100 + 99 opens close-up 999, the travel map.
 		snd->playWave(1, 4);
+		_vm->logic()->walkmapAreaHit(99999);
 		_hover = _pressed = -1;
-		// The travel map is close-up 999 (mode 2), which comes with the screens.
-		warning("Gilbert: the travel map is not implemented yet");
+		_vm->setMode(GilbertEngine::kModeCua);
 		break;
 	default:
 		break;

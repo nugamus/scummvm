@@ -2,7 +2,9 @@ MODULE := engines/gilbert
 
 MODULE_OBJS = \
 	collection.o \
+	cua.o \
 	database.o \
+	dialog.o \
 	gilbert.o \
 	logic.o \
 	menu.o \
