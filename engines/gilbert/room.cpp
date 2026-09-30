@@ -418,6 +418,7 @@ void Room::handleMouse() {
 	if (press) {
 		_hover = -1;
 		_pressed = firstHit();
+		debugC(1, kDebugScript, "Room: press at (%d, %d): panel item %d", m.x, m.y, _pressed);
 	}
 }
 

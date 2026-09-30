@@ -366,12 +366,14 @@ void Menu::pageAction(int item) {
 		_editing = false;
 	} else if (item == kLoadButton) {
 		snd->playWave(1, 0);
-		if (_loadPicked)
-			warning("Gilbert: loading slot %d is not implemented yet", _loadTop + _loadPicked);
+		if (_loadPicked) {
+			snd->stopAll();
+			gameLoaded(_vm->loadSlot(_loadTop + _loadPicked));
+		}
 	} else if (item == kSaveButton) {
 		snd->playWave(1, 0);
-		if (_savePicked)
-			warning("Gilbert: saving is not implemented yet");
+		if (_savePicked && !_vm->saveSlot(_saveTop + _savePicked, _name))
+			warning("Gilbert: could not save slot %d", _saveTop + _savePicked);
 		closeMenuState();
 	}
 	_pageHover = _pagePress = -1;

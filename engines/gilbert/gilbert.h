@@ -120,6 +120,18 @@ public:
 	void exitGame();
 	/** New game (boot.md "Button actions"): the database from default.dat, then event 1. */
 	bool newGame();
+	/** The Save and Load buttons (boot.md "Save slots"), slots 1..50. */
+	bool saveSlot(int n, const Common::String &name);
+	bool loadSlot(int n);
+
+	bool hasFeature(EngineFeature f) const override {
+		return f == kSupportsLoadingDuringRuntime || f == kSupportsSavingDuringRuntime || f == kSupportsReturnToLauncher;
+	}
+	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
+	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
+	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
+	Common::Error loadGameState(int slot) override;
+	int getAutosaveSlot() const override { return -1; }
 
 	/** Save slots 1..50 from gilbert.ini (boot.md "Save slots"). */
 	void readSlotNames();
@@ -171,6 +183,7 @@ private:
 	void boot();
 	void loadingStep(int step, uint line);
 	void checkDatabase();
+	void resetState();
 	void loadLanguage();
 	void loadSettings();
 

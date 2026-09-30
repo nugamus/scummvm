@@ -19,6 +19,10 @@
  *
  */
 
+#include "common/formats/ini-file.h"
+#include "common/savefile.h"
+#include "common/system.h"
+
 #include "engines/advancedDetector.h"
 
 #include "gilbert/detection.h"
@@ -33,6 +37,60 @@ public:
 	Common::Error createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override {
 		*engine = new Gilbert::GilbertEngine(syst, desc);
 		return Common::kNoError;
+	}
+
+	bool hasFeature(MetaEngineFeature f) const override {
+		return f == kSupportsListSaves || f == kSupportsLoadingDuringStartup || f == kSupportsDeleteSave;
+	}
+
+	int getMaximumSaveSlot() const override {
+		return 50;
+	}
+
+	/**
+	 * The original's saves: `<target>.game<n>.dat`, listed in `<target>.ini` (its
+	 * gilbert.ini) with their names (boot.md "Save slots").
+	 */
+	SaveStateList listSaves(const char *target) const override {
+		SaveStateList list;
+		Common::ScopedPtr<Common::InSaveFile> in(g_system->getSavefileManager()->openForLoading(Common::String(target) + ".ini"));
+		if (!in)
+			return list;
+		Common::INIFile ini;
+		ini.allowNonEnglishCharacters();
+		if (!ini.loadFromStream(*in))
+			return list;
+		for (int n = 1; n <= 50; n++) {
+			Common::String file, name;
+			const Common::String section = Common::String::format("SLOT%d", n);
+			if (!ini.getKey("file", section, file) || file.empty())
+				continue;
+			ini.getKey("name", section, name);
+			list.push_back(SaveStateDescriptor(this, n, Common::U32String(name, Common::kWindows1252)));
+		}
+		return list;
+	}
+
+	bool removeSaveState(const char *target, int slot) const override {
+		Common::SaveFileManager *sfm = g_system->getSavefileManager();
+		Common::INIFile ini;
+		ini.allowNonEnglishCharacters();
+		{
+			Common::ScopedPtr<Common::InSaveFile> in(sfm->openForLoading(Common::String(target) + ".ini"));
+			if (!in || !ini.loadFromStream(*in))
+				return false;
+		}
+		const Common::String section = Common::String::format("SLOT%d", slot);
+		Common::String file;
+		if (ini.getKey("file", section, file) && !file.empty())
+			sfm->removeSavefile(Common::String(target) + "." + file);
+		ini.setKey("file", section, "");
+		ini.setKey("name", section, "");
+		Common::ScopedPtr<Common::OutSaveFile> out(sfm->openForSaving(Common::String(target) + ".ini", false));
+		if (!out || !ini.saveToStream(*out))
+			return false;
+		out->finalize();
+		return true;
 	}
 };
 
