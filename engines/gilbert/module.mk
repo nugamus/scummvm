@@ -7,6 +7,7 @@ MODULE_OBJS = \
 	logic.o \
 	menu.o \
 	metaengine.o \
+	room.o \
 	sound.o
 
 # This module can be built as a plugin

@@ -46,6 +46,12 @@ public:
 	Result tick();
 	/** After the Intro film: menu1 again, starting on the next frame. */
 	void musicAfterFilm();
+	/** The room's first frame was shown (Continue becomes clickable). */
+	void roomShown() { _shown = true; }
+	/** The game's Menu button (boot.md "Button actions"): click 2, menu1, mode 0. */
+	void enterFromGame();
+	/** Variable 198 set: back to the menu with Continue and Save disabled. */
+	void gameOver();
 
 private:
 	Picture *i2(int item) const;

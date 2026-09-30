@@ -44,6 +44,7 @@ class Font;
 namespace Gilbert {
 
 class Menu;
+class Room;
 class Sound;
 
 /** Colours as the original's TColors give them (boot.md "Conventions"), RGB. */
@@ -75,6 +76,12 @@ public:
 	void present();
 	/** Draws a picture with its top-left corner at (x, y), clipped, and records the place. */
 	void drawPicture(Picture *pic, int x, int y);
+	/** The same for pattern k of a picture. */
+	void drawPattern(Picture *pic, int k, int x, int y);
+	/** Pattern k stretched into `dst`, blended over the screen at alpha 0..255, clipped (Q-0202). */
+	void blendPattern(Picture *pic, int k, const Common::Rect &dst, int alpha);
+	/** A one-pixel outline inside `r`, like GDI's Rectangle with a hollow brush. */
+	void frameRect(const Common::Rect &r, uint32 rgb);
 	/** Draws part of an off-screen surface with black transparent, clipped. */
 	void drawSurface(const Graphics::ManagedSurface &src, const Common::Rect &srcRect, int x, int y);
 	/** Fills a rectangle with a colour at alpha 0..255 over what is there (Q-0202). */
@@ -118,10 +125,33 @@ public:
 	void readSlotNames();
 	const Common::String &slotName(int slot) const { return _slotNames[CLIP(slot, 1, 50)]; }
 
-	// LogicListener: the call-backs of the game rules (logic.md). The rooms and screens
-	// that answer them are not implemented yet.
+	// The main loop's modes (boot.md "Main loop").
+	enum Mode {
+		kModeMenu = 0,
+		kModeRoom = 1,
+		kModeCua = 2,
+		kModeBook = 4,
+		kModeLoading = 0x99
+	};
+	void setMode(int mode) { _mode = mode; }
+	int mode() const { return _mode; }
+
+	Logic *logic() { return _logic; }
+	Menu *menu() { return _menu; }
+	Room *room() { return _room; }
+	PictureCollection &gilbert() { return _gilbert; }
+	bool leftHeld() const { return _leftHeld; }
+	bool ctrlHeld() const;
+	/** boot.md's DrawCursor: the mouse kept inside x 72..568, y 58..422, `cur[n]` at it. */
+	void drawCursor(int n);
+	/** Shows the page at a brightness 0..256 (the room fades, rooms.md "Fades"). */
+	void present(int brightness);
+	int brightness() const { return _brightness; }
+
+	// LogicListener: the call-backs of the game rules (logic.md, rooms.md). Close-ups,
+	// the inventory, dialogues and books come with the screens.
 	void gotoWalkmap(uint32 id, int x, int y, int direction) override;
-	void refreshWalkmap() override {}
+	void refreshWalkmap() override;
 	void gotoCua(uint32 id) override;
 	void refreshCua() override {}
 	void refreshInventory() override {}
@@ -130,11 +160,11 @@ public:
 	void stopWave(int list, int index) override {}
 	void playStream(const Common::String &name, bool loop, int kind) override;
 	void startFilm(const Common::String &name) override { playFilm(name, false); }
-	Common::Point gilbertPosition() override { return _gilbertPos; }
-	int mapWidth() override { return 0; }
-	int mapHeight() override { return 0; }
-	int mapCell(int x, int y) override { return 1; }
-	void walk(int direction) override {}
+	Common::Point gilbertPosition() override;
+	int mapWidth() override;
+	int mapHeight() override;
+	int mapCell(int x, int y) override;
+	void walk(int direction) override;
 	void newTopic(bool shown) override;
 
 private:
@@ -154,10 +184,13 @@ private:
 	Settings _settings;
 	Sound *_sound = nullptr;
 	Logic *_logic = nullptr;
+	Room *_room = nullptr;
+	int _mode = kModeMenu;
+	int _brightness = 0;
+	bool _leftHeld = false;
 	Menu *_menu = nullptr;
 
 	Common::Point _mouse;
-	Common::Point _gilbertPos;
 	bool _leftPress = false;
 	bool _escHeld = false;
 	Common::Array<Common::KeyState> _keys;

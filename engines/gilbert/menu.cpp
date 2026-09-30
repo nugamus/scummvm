@@ -26,6 +26,7 @@
 #include "gilbert/detection.h"
 #include "gilbert/gilbert.h"
 #include "gilbert/menu.h"
+#include "gilbert/room.h"
 #include "gilbert/sound.h"
 
 namespace Gilbert {
@@ -105,6 +106,20 @@ Menu::Result Menu::tick() {
 	if (_counter == 10)
 		_vm->sound()->startStream(Sound::kMusic);
 	return _result;
+}
+
+void Menu::enterFromGame() {
+	_vm->sound()->playWave(1, 2);
+	_vm->sound()->stopAll();
+	_counter = 0;
+	_vm->sound()->openStream(Sound::kMusic, "menu1", true, false);
+	_vm->setMode(GilbertEngine::kModeMenu);
+}
+
+void Menu::gameOver() {
+	_running = _canSave = false;
+	_counter = 0;
+	_vm->setMode(GilbertEngine::kModeMenu);
 }
 
 void Menu::musicAfterFilm() {
@@ -254,14 +269,16 @@ void Menu::action(int item) {
 		if (first) {
 			snd->playWave(1, 4);
 			snd->stopAll();
+			_vm->room()->restartMusic();
 		}
 		closeMenuState();
-		// Mode 1, the rooms: not implemented yet.
+		_vm->setMode(GilbertEngine::kModeRoom);
 		break;
 	case kNewGame:
 		if (first) {
 			snd->playWave(1, 4);
 			snd->stopAll();
+			_shown = false;
 			if (_vm->newGame()) {
 				_canSave = _vm->settings().installationType != -1;
 				_running = true;

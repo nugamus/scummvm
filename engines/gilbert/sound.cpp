@@ -54,7 +54,7 @@ void Sound::loadList(int list, const char *file) {
 }
 
 void Sound::playWave(int list, int index, bool looped) {
-	if (list < 1 || list > 2 || index < 0 || index >= (int)_lists[list].size())
+	if (list < 1 || list > 4 || index < 0 || index >= (int)_lists[list].size())
 		return;
 	const Wave &w = _lists[list][index];
 	Common::SeekableReadStream *mem = new Common::MemoryReadStream(w.data.data(), w.data.size());
@@ -64,6 +64,30 @@ void Sound::playWave(int list, int index, bool looped) {
 	_mixer->playStream(Audio::Mixer::kSFXSoundType, &_wave,
 	                   looped ? (Audio::AudioStream *)Audio::makeLoopingAudioStream(s, 0) : s,
 	                   -1, _soundVolume);
+}
+
+void Sound::playListWave(int list, int index, bool looped) {
+	if (list != 1 && list != _lastLoaded) {
+		loadList(3, Common::String::format("%d.wxs", list).c_str());
+		_lastLoaded = list;
+	}
+	playWave(list, index, looped);
+}
+
+void Sound::openFile(Stream stream, const Common::Path &path, bool looped, bool sfx) {
+	_mixer->stopHandle(_streams[stream]);
+	Common::File *f = new Common::File();
+	if (!f->open(path)) {
+		warning("Gilbert: no sound %s", path.toString().c_str());
+		delete f;
+		return;
+	}
+	Audio::SeekableAudioStream *s = Audio::makeWAVStream(f, DisposeAfterUse::YES);
+	if (!s)
+		return;
+	_mixer->playStream(sfx ? Audio::Mixer::kSFXSoundType : Audio::Mixer::kSpeechSoundType, &_streams[stream],
+	                   looped ? (Audio::AudioStream *)Audio::makeLoopingAudioStream(s, 0) : s, -1,
+	                   sfx ? _soundVolume : _musicVolume);
 }
 
 bool Sound::isWavePlaying() const {

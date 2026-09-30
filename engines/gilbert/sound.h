@@ -40,6 +40,8 @@ public:
 	enum Stream {
 		kMusic,   ///< the menu or room music
 		kCredits, ///< credit.wav on the About page
+		kDialog,  ///< a dialogue voice
+		kOther,   ///< another streamed sound (misc)
 		kStreamCount
 	};
 
@@ -50,6 +52,11 @@ public:
 	void loadList(int list, const char *file);
 	/** PlayWave(list, index): a wave of a list at the sound volume. */
 	void playWave(int list, int index, bool looped = false);
+	/**
+	 * Call-back 7: a list other than 1 and than the last one loaded first loads
+	 * `Data/Sounds/misc/<list>.wxs` into wave list 3; then item `index` of wave list `list`.
+	 */
+	void playListWave(int list, int index, bool looped);
 	/** Whether the last wave started is still playing. */
 	bool isWavePlaying() const;
 
@@ -59,6 +66,8 @@ public:
 	 */
 	void openStream(Stream stream, const Common::String &name, bool looped, bool start = true);
 	void startStream(Stream stream);
+	/** Streams a WAV file below Data; `sfx` plays it at the sound volume. */
+	void openFile(Stream stream, const Common::Path &path, bool looped, bool sfx);
 	/** Stop-all: every wave and every stream. */
 	void stopAll();
 
@@ -67,7 +76,8 @@ public:
 
 private:
 	Audio::Mixer *_mixer;
-	Common::Array<Wave> _lists[3];
+	Common::Array<Wave> _lists[5];
+	int _lastLoaded = 0;
 	Audio::SoundHandle _wave;
 	Audio::SoundHandle _streams[kStreamCount];
 	Audio::AudioStream *_pending[kStreamCount];
