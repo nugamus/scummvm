@@ -2,6 +2,7 @@ MODULE := engines/gilbert
 
 MODULE_OBJS = \
 	collection.o \
+	database.o \
 	gilbert.o \
 	menu.o \
 	metaengine.o \

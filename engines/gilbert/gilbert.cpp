@@ -24,6 +24,7 @@
 #include "common/events.h"
 #include "common/file.h"
 #include "common/formats/ini-file.h"
+#include "common/memstream.h"
 #include "common/system.h"
 
 #include "engines/util.h"
@@ -34,6 +35,7 @@
 
 #include "video/mpegps_decoder.h"
 
+#include "gilbert/database.h"
 #include "gilbert/detection.h"
 #include "gilbert/gilbert.h"
 #include "gilbert/menu.h"
@@ -134,8 +136,28 @@ void GilbertEngine::boot() {
 	readSlotNames();
 	loadingStep(5, 14);
 	loadingStep(6, 15);
+	checkDatabase();
 	// The menu music is opened and looped, and starts on the menu's 10th frame.
 	_sound->openStream(Sound::kMusic, "menu1", true, false);
+}
+
+// A debugging check (-d2 --debugflags=Load): default.dat reads, and writes back byte for byte.
+void GilbertEngine::checkDatabase() {
+	if (!DebugMan.isDebugChannelEnabled(kDebugLoad) || gDebugLevel < 2)
+		return;
+	Common::File f;
+	if (!f.open("game/default.dat"))
+		return;
+	Database db;
+	const bool ok = db.load(f);
+	Common::MemoryWriteStreamDynamic out(DisposeAfterUse::YES);
+	db.save(out);
+	f.seek(0);
+	Common::Array<byte> orig(f.size());
+	f.read(orig.data(), orig.size());
+	const bool same = out.size() == orig.size() && memcmp(out.getData(), orig.data(), orig.size()) == 0;
+	debugC(2, kDebugLoad, "Database check: load %s, %d bytes written, %s", ok ? "ok" : "FAILED",
+	       (int)out.size(), same ? "identical" : "DIFFERENT");
 }
 
 // boot::LoadingStep (boot.md "Loading panel").

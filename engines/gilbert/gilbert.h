@@ -118,6 +118,7 @@ public:
 private:
 	void boot();
 	void loadingStep(int step, uint line);
+	void checkDatabase();
 	void loadLanguage();
 	void loadSettings();
 
