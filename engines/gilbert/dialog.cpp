@@ -110,6 +110,11 @@ void DialogBox::handleMouse() {
 	}
 	_hover = hit;
 	if (_vm->press(GilbertEngine::kScreenDialog)) {
+		// The dialogue takes the press (screens.md "While a dialogue is open"): the screen
+		// under it does not see it too.
+		_vm->syncPress(GilbertEngine::kScreenRoom);
+		_vm->syncPress(GilbertEngine::kScreenCua);
+		_vm->syncPress(GilbertEngine::kScreenBook);
 		_pressed = hit;
 		if (hit >= 0) {
 			_open = false;
