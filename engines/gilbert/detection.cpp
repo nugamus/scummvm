@@ -32,6 +32,7 @@ const DebugChannelDef GilbertMetaEngineDetection::debugFlagList[] = {
 };
 
 static const char *const directoryGlobs[] = {
+	"program",
 	"data",
 	"game",
 	nullptr
