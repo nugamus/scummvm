@@ -23,6 +23,7 @@
 #include "common/debug.h"
 #include "common/events.h"
 #include "common/file.h"
+#include "common/fs.h"
 #include "common/formats/ini-file.h"
 #include "common/savefile.h"
 #include "common/memstream.h"
@@ -69,6 +70,16 @@ static bool loadSlotIni(Common::INIFile &ini, const Common::String &target) {
 // Everything the game reads is below Data (boot.md "Conventions"): the detection's
 // directory globs put Data in the search path.
 GilbertEngine::GilbertEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDesc(gameDesc) {
+	// Started from the CD itself: the game's folder is its Program folder.
+	const Common::FSNode gameDir(ConfMan.getPath("path"));
+	Common::FSList children;
+	if (gameDir.getChildren(children, Common::FSNode::kListDirectoriesOnly)) {
+		for (const Common::FSNode &c : children)
+			if (c.getName().equalsIgnoreCase("program") && c.getChild("Gilbert.exe").exists()) {
+				SearchMan.addDirectory(c, 0, 1);
+				SearchMan.addSubDirectoryMatching(c, "data", 0, 4);
+			}
+	}
 }
 
 GilbertEngine::~GilbertEngine() {

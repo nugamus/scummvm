@@ -26,13 +26,24 @@ const PlainGameDescriptor gilbertGames[] = {
 	{ 0, 0 }
 };
 
-// The installed game's folder (the CD's Program folder): Gilbert.exe beside Data.
+// The installed game's folder (the CD's Program folder: Gilbert.exe beside Data), or the
+// CD itself.
 const ADGameDescription gameDescriptions[] = {
 	{
 		"gilbert",
 		nullptr,
 		AD_ENTRY2s("Gilbert.exe", "1285f64f4cf377ed95bf039623fcd561", 582144,
 				   "Data/game/default.dat", "93069a4704dcc9d36b1093840ec2f60f", 702971),
+		Common::DA_DNK,
+		Common::kPlatformWindows,
+		ADGF_UNSTABLE | ADGF_CD,
+		GUIO1(GUIO_NOMIDI)
+	},
+	{
+		"gilbert",
+		"CD",
+		AD_ENTRY2s("Program/Gilbert.exe", "1285f64f4cf377ed95bf039623fcd561", 582144,
+				   "Program/Data/game/default.dat", "93069a4704dcc9d36b1093840ec2f60f", 702971),
 		Common::DA_DNK,
 		Common::kPlatformWindows,
 		ADGF_UNSTABLE | ADGF_CD,
