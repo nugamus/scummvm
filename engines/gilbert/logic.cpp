@@ -99,6 +99,25 @@ void Logic::repairData() {
 		for (ObjState &s : crevice->states)
 			if (s.state == 3 && s.clickEvent == 1083)
 				s.clickEvent = 1080;
+	// 1083 also joins a book topic (type 22), which 1080's own path lacks (E-0609): 1080 gets
+	// the same record at its end.
+	int last1080 = -1;
+	bool hasJoin = false;
+	const Event *join = nullptr;
+	for (uint i = 0; i < _db.events.size(); i++) {
+		const Event &e = _db.events[i];
+		if (e.id == 1080) {
+			last1080 = i;
+			hasJoin |= e.type == 22;
+		} else if (e.id == 1083 && e.type == 22) {
+			join = &e;
+		}
+	}
+	if (last1080 >= 0 && join && !hasJoin) {
+		Event e = *join;
+		e.id = 1080;
+		_db.events.insert_at(last1080 + 1, e);
+	}
 }
 
 void Logic::save(Common::WriteStream &out) {
