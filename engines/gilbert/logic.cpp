@@ -65,7 +65,40 @@ bool Logic::load(Common::SeekableReadStream &in) {
 	for (Obj &o : _db.inventory)
 		resolve(o);
 	renumberBooks();
+	repairData();
 	return true;
+}
+
+// Two dead ends in the original's data (Q-0601), repaired always as bug fixes. Both are
+// applied to the loaded database, so saves carry them; applying them twice changes nothing.
+void Logic::repairData() {
+	// Leaving the igloo after melting the ice queen (v35 = 6) raised its bridge for good:
+	// event 6081 has no case for 6 and falls through to 6084 (E-0604). A case for 6 keeps the
+	// bridge down (6085), so the player can come back to put the queen in the bucket.
+	bool hasCase = false;
+	int lastIndex = -1;
+	for (uint i = 0; i < _db.events.size(); i++) {
+		const Event &e = _db.events[i];
+		if (e.id != 6081)
+			continue;
+		lastIndex = i;
+		hasCase |= e.type == 18 && e.cond == 0 && e.var == 35 && e.value == 6;
+	}
+	if (!hasCase && lastIndex >= 0 && _db.events[lastIndex].type == 18 && _db.events[lastIndex].cond == 4) {
+		Event e = _db.events[lastIndex];
+		e.cond = 0;
+		e.var = 35;
+		e.value = 6;
+		e.jump = 6085;
+		_db.events.insert_at(lastIndex, e);
+	}
+	// Taking the bottle from the crevice after the corkscrew dialogue gave the closed bottle
+	// for good (E-0605): its state 3 runs 1083. The data's own 1080 hands out the opened
+	// bottle when the corkscrew is known (v92) and runs 1083 otherwise.
+	if (Obj *crevice = objById(10810))
+		for (ObjState &s : crevice->states)
+			if (s.state == 3 && s.clickEvent == 1083)
+				s.clickEvent = 1080;
 }
 
 void Logic::save(Common::WriteStream &out) {
