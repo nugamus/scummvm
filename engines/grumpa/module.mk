@@ -2,7 +2,8 @@ MODULE := engines/grumpa
 
 MODULE_OBJS = \
 	grumpa.o \
-	metaengine.o
+	metaengine.o \
+	scene.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_GRUMPA), DYNAMIC_PLUGIN)

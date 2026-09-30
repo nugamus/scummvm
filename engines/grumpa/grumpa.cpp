@@ -22,8 +22,8 @@
 #include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/events.h"
+#include "common/fs.h"
 #include "common/system.h"
-#include "graphics/paletteman.h"
 #include "graphics/pixelformat.h"
 
 #include "engines/util.h"
@@ -39,14 +39,10 @@ GrumpaEngine::GrumpaEngine(OSystem *syst, const ADGameDescription *gameDesc)
 GrumpaEngine::~GrumpaEngine() {
 }
 
-Common::String GrumpaEngine::dataPath(const Common::String &rel) const {
-	return rel;
-}
-
 Common::Error GrumpaEngine::run() {
-	// The original draws to one 800x600 16-bit (RGB555) page; use the closest 16-bit format
-	// the backend offers (E-0010). Scene rendering (2D background + .fxi depth + 3D actors)
-	// comes once the scene formats are specced (games/grumpa docs, Q-0005..Q-0007).
+	// The original draws to one 800x600 16-bit (RGB555) page; use that format (E-0010).
+	// Scene rendering (2D background + .fxi depth + 3D actors) comes once the scene formats
+	// are specced (games/grumpa docs, Q-0005..Q-0007).
 	Graphics::PixelFormat format = Graphics::PixelFormat(2, 5, 5, 5, 0, 10, 5, 0, 0);
 	initGraphics(kScreenWidth, kScreenHeight, &format);
 	_screen.create(kScreenWidth, kScreenHeight, g_system->getScreenFormat());
@@ -54,8 +50,9 @@ Common::Error GrumpaEngine::run() {
 	debug(1, "Grumpa: booted, %dx%d %d-bit surface", kScreenWidth, kScreenHeight,
 		  _screen.format.bytesPerPixel * 8);
 
-	// Minimal event loop: present a cleared page and wait for quit. The boot sequence
-	// (splash, menu, first scene) is added from the boot spec next.
+	// The game data sits in subdirectories (Bitmaps, Actors, Scenes, ...) of the game dir.
+	SearchMan.addDirectory("gamedir", ConfMan.getPath("path"), 0, 2);
+
 	_screen.clear();
 	while (!shouldQuit()) {
 		Common::Event event;
