@@ -127,6 +127,8 @@ public:
 	 * `changed` tells whether it changed at all.
 	 */
 	bool press(Screen screen, bool *changed = nullptr);
+	/** A screen shown now starts from the present button state: the click that showed it is not its press. */
+	void syncPress(Screen screen);
 	/** Films, fades and waits pump events: the ScummVM menu must not save or load then. */
 	void setBusy(bool busy) { _busy += busy ? 1 : -1; }
 	/** Keys typed since the last call. */
@@ -164,7 +166,7 @@ public:
 		kModeBook = 4,
 		kModeLoading = 0x99
 	};
-	void setMode(int mode) { _mode = mode; }
+	void setMode(int mode);
 	int mode() const { return _mode; }
 
 	Logic *logic() { return _logic; }

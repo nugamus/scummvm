@@ -754,6 +754,24 @@ void GilbertEngine::setButtonState(int state) {
 		_downs++;
 }
 
+void GilbertEngine::setMode(int mode) {
+	if (mode != _mode) {
+		static const struct {
+			int mode;
+			Screen screen;
+		} screens[] = { { kModeMenu, kScreenMenu }, { kModeRoom, kScreenRoom }, { kModeCua, kScreenCua }, { kModeBook, kScreenBook } };
+		for (const auto &s : screens)
+			if (s.mode == mode)
+				syncPress(s.screen);
+	}
+	_mode = mode;
+}
+
+void GilbertEngine::syncPress(Screen screen) {
+	_seenDowns[screen] = _downs;
+	_seenState[screen] = _buttonState;
+}
+
 bool GilbertEngine::press(Screen screen, bool *changed) {
 	// A down and up between two ticks still counts once (_downs), as a held click would.
 	const bool pressed = _downs != _seenDowns[screen];
