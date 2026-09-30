@@ -41,6 +41,12 @@ struct Picture {
 	Graphics::ManagedSurface surface;
 	bool transparent = false;
 	uint16 key = 0;
+	/** Pattern size (PatternWidth/Height); 0 = the whole picture is pattern 0. */
+	int patternW = 0, patternH = 0;
+
+	int patternCount() const;
+	/** Pattern k's rectangle in the surface (row-major), empty if there is none. */
+	Common::Rect pattern(int k) const;
 	/** Where the picture was last drawn: the menu's hit tests use it. */
 	Common::Rect last;
 };

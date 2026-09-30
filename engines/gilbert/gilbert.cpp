@@ -39,6 +39,7 @@
 #include "gilbert/detection.h"
 #include "gilbert/gilbert.h"
 #include "gilbert/menu.h"
+#include "gilbert/room.h"
 #include "gilbert/sound.h"
 
 namespace Gilbert {
@@ -58,6 +59,7 @@ GilbertEngine::GilbertEngine(OSystem *syst, const ADGameDescription *gameDesc) :
 
 GilbertEngine::~GilbertEngine() {
 	delete _menu;
+	delete _room;
 	delete _logic;
 	delete _sound;
 	for (auto &f : _fonts)
@@ -72,6 +74,7 @@ Common::Error GilbertEngine::run() {
 	_sound = new Sound(_mixer);
 	_menu = new Menu(this);
 	_logic = new Logic(this);
+	_room = new Room(this);
 	loadSettings();
 	loadLanguage();
 	_mouse = Common::Point(320, 240);
@@ -79,12 +82,28 @@ Common::Error GilbertEngine::run() {
 	boot();
 
 	uint32 next = _system->getMillis();
+	uint32 previous = next;
 	while (!shouldQuit()) {
 		pollEvents();
-		if (_menu->tick() == Menu::kQuit) {
-			exitGame();
-			return Common::kNoError;
+		// TgMain.DXTimer1Timer (boot.md "Main loop").
+		const uint32 now0 = _system->getMillis();
+		_logic->tick(now0);
+		if (_logic->variable(198) != 0 && _mode != kModeMenu)
+			_menu->gameOver();
+		switch (_mode) {
+		case kModeMenu:
+			if (_menu->tick() == Menu::kQuit) {
+				exitGame();
+				return Common::kNoError;
+			}
+			break;
+		case kModeRoom:
+			_room->tick(now0 - previous);
+			break;
+		default:
+			break;
 		}
+		previous = now0;
 		next += kTickMs;
 		const uint32 now = _system->getMillis();
 		if (next > now)
@@ -234,7 +253,8 @@ void GilbertEngine::playFilm(const Common::String &name, bool fromIntro) {
 	}
 	if (fromIntro)
 		_menu->musicAfterFilm();
-	// Room music restarts here once rooms exist (boot.md "Films" step 5).
+	else
+		_room->restartMusic();
 }
 
 bool GilbertEngine::newGame() {
@@ -243,13 +263,56 @@ bool GilbertEngine::newGame() {
 		warning("Gilbert: cannot load Data/game/default.dat");
 		return false;
 	}
+	// ResetState (rooms.md "State"), then GEStartNewGame.
+	_room->reset();
+	_settings.musicVolume = 5;
+	_settings.soundVolume = 4;
+	_settings.fullscreenVideo = false;
+	applyVolumes();
 	_logic->startNewGame();
 	return true;
 }
 
 void GilbertEngine::gotoWalkmap(uint32 id, int x, int y, int direction) {
-	debugC(1, kDebugScript, "GotoWalkmap %d at (%d, %d) facing %d", id, x, y, direction);
-	_gilbertPos = Common::Point(x, y);
+	_room->load(id, x, y, direction);
+}
+
+void GilbertEngine::refreshWalkmap() {
+	_room->refreshObjects();
+}
+
+Common::Point GilbertEngine::gilbertPosition() {
+	return _room->gilbertPosition();
+}
+
+int GilbertEngine::mapWidth() {
+	return _room->mapWidth();
+}
+
+int GilbertEngine::mapHeight() {
+	return _room->mapHeight();
+}
+
+int GilbertEngine::mapCell(int x, int y) {
+	return _room->mapCell(x, y);
+}
+
+void GilbertEngine::walk(int direction) {
+	_room->walk(direction);
+}
+
+bool GilbertEngine::ctrlHeld() const {
+	return (_eventMan->getModifierState() & Common::KBD_CTRL) != 0;
+}
+
+void GilbertEngine::drawCursor(int n) {
+	Common::Point m = _mouse;
+	if (m.x < 72 || m.x > 568 || m.y < 58 || m.y > 422) {
+		m.x = CLIP<int16>(m.x, 72, 568);
+		m.y = CLIP<int16>(m.y, 58, 422);
+		warpMouse(m.x, m.y);
+	}
+	drawPicture(_cursors[n], m.x - 16, m.y - 16);
 }
 
 void GilbertEngine::gotoCua(uint32 id) {
@@ -260,16 +323,31 @@ void GilbertEngine::showDialog() {
 	debugC(1, kDebugScript, "Dialog: %s", _logic->dialogTitle().c_str());
 }
 
+// Call-back 7 (rooms.md "Call-backs used in rooms").
 void GilbertEngine::playWave(int list, int index, bool loop) {
-	_sound->playWave(list, index, loop);
+	_sound->playListWave(list, index, loop);
 }
 
+// Call-back 10: room music, a dialogue voice, or another sound.
 void GilbertEngine::playStream(const Common::String &name, bool loop, int kind) {
 	debugC(1, kDebugSound, "Stream %s loop %d kind %d", name.c_str(), loop, kind);
+	switch (kind) {
+	case 0:
+		_room->roomMusic(name);
+		break;
+	case 1:
+		_sound->stopAll();
+		_sound->openFile(Sound::kDialog, Common::Path("Sounds/Dialog/").appendComponent(name + ".wav"), loop, false);
+		break;
+	default:
+		_sound->stopAll();
+		_sound->openFile(Sound::kOther, Common::Path("Sounds/misc/").appendComponent(name + ".wav"), loop, true);
+		break;
+	}
 }
 
 void GilbertEngine::newTopic(bool shown) {
-	_sound->playWave(1, 10);
+	_room->newTopic();
 }
 
 // boot::Exit (boot.md "Exit").
@@ -291,23 +369,80 @@ void GilbertEngine::clear() {
 }
 
 void GilbertEngine::present() {
-	_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, 640, 480);
+	present(_brightness);
+}
+
+void GilbertEngine::present(int brightness) {
+	_brightness = brightness;
+	if (brightness >= 256) {
+		_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, 640, 480);
+	} else {
+		Graphics::ManagedSurface dim(640, 480, _screen.format);
+		for (int y = 0; y < 480; y++) {
+			const uint16 *s = (const uint16 *)_screen.getBasePtr(0, y);
+			uint16 *d = (uint16 *)dim.getBasePtr(0, y);
+			for (int x = 0; x < 640; x++) {
+				byte r, g, b;
+				_screen.format.colorToRGB(s[x], r, g, b);
+				d[x] = _screen.format.RGBToColor(r * brightness / 256, g * brightness / 256, b * brightness / 256);
+			}
+		}
+		_system->copyRectToScreen(dim.getPixels(), dim.pitch, 0, 0, 640, 480);
+	}
 	_system->updateScreen();
 }
 
 void GilbertEngine::drawPicture(Picture *pic, int x, int y) {
+	drawPattern(pic, 0, x, y);
+}
+
+void GilbertEngine::drawPattern(Picture *pic, int k, int x, int y) {
 	if (!pic)
 		return;
-	pic->last = Common::Rect(x, y, x + pic->surface.w, y + pic->surface.h);
+	const Common::Rect pat = pic->pattern(k);
+	pic->last = Common::Rect(x, y, x + pat.width(), y + pat.height());
 	Common::Rect dst = pic->last;
 	dst.clip(_clip);
 	if (dst.isEmpty())
 		return;
-	const Common::Rect src(dst.left - x, dst.top - y, dst.right - x, dst.bottom - y);
+	const Common::Rect src(pat.left + dst.left - x, pat.top + dst.top - y, pat.left + dst.right - x, pat.top + dst.bottom - y);
 	if (pic->transparent)
 		_screen.transBlitFrom(pic->surface, src, Common::Point(dst.left, dst.top), pic->key);
 	else
 		_screen.blitFrom(pic->surface, src, Common::Point(dst.left, dst.top));
+}
+
+void GilbertEngine::blendPattern(Picture *pic, int k, const Common::Rect &dst, int alpha) {
+	if (!pic)
+		return;
+	const Common::Rect pat = pic->pattern(k);
+	if (pat.isEmpty() || dst.isEmpty())
+		return;
+	Common::Rect area = dst;
+	area.clip(_clip);
+	for (int y = area.top; y < area.bottom; y++) {
+		const int sy = pat.top + (y - dst.top) * pat.height() / dst.height();
+		uint16 *d = (uint16 *)_screen.getBasePtr(area.left, y);
+		for (int x = area.left; x < area.right; x++, d++) {
+			const int sx = pat.left + (x - dst.left) * pat.width() / dst.width();
+			const uint16 c = *(const uint16 *)pic->surface.getBasePtr(sx, sy);
+			if (pic->transparent && c == pic->key)
+				continue;
+			byte r0, g0, b0, r1, g1, b1;
+			_screen.format.colorToRGB(*d, r0, g0, b0);
+			_screen.format.colorToRGB(c, r1, g1, b1);
+			*d = _screen.format.RGBToColor(r0 + (r1 - r0) * alpha / 255, g0 + (g1 - g0) * alpha / 255,
+			                               b0 + (b1 - b0) * alpha / 255);
+		}
+	}
+}
+
+void GilbertEngine::frameRect(const Common::Rect &r, uint32 rgb) {
+	const uint32 c = _screen.format.RGBToColor(rgb >> 16, (rgb >> 8) & 0xFF, rgb & 0xFF);
+	Common::Rect area = r;
+	area.clip(Common::Rect(640, 480));
+	if (!area.isEmpty())
+		_screen.frameRect(area, c);
 }
 
 void GilbertEngine::drawSurface(const Graphics::ManagedSurface &src, const Common::Rect &srcRect, int x, int y) {
@@ -389,7 +524,9 @@ Common::U32String GilbertEngine::languageLine(uint n) const {
 
 void GilbertEngine::loadSettings() {
 	_settings.fullscreenVideo = ConfMan.hasKey("fullscreen_video") && ConfMan.getBool("fullscreen_video");
-	_settings.installationType = ConfMan.hasKey("installation_type") ? ConfMan.getInt("installation_type") : -1;
+	// Without the installer's registry value the original cannot save (-1). ScummVM plays an
+	// installed game, so it defaults to 0; which values the installer writes is Q-0204.
+	_settings.installationType = ConfMan.hasKey("installation_type") ? ConfMan.getInt("installation_type") : 0;
 	const int sound = ConfMan.hasKey("sound_volume") ? ConfMan.getInt("sound_volume") : 4;
 	const int music = ConfMan.hasKey("music_volume") ? ConfMan.getInt("music_volume") : 5;
 	_settings.soundVolume = sound >= 1 && sound <= 6 ? sound : 4;
@@ -429,11 +566,13 @@ void GilbertEngine::pollEvents() {
 		case Common::EVENT_LBUTTONDOWN:
 			_mouse = event.mouse;
 			_leftPress = true;
+			_leftHeld = true;
 			break;
 		case Common::EVENT_LBUTTONUP:
 		case Common::EVENT_RBUTTONUP:
 			// Releasing any button clears the button state (boot.md "Mouse").
 			_leftPress = false;
+			_leftHeld = false;
 			break;
 		case Common::EVENT_KEYDOWN:
 			if (event.kbd.keycode == Common::KEYCODE_ESCAPE)

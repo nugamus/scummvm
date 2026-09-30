@@ -233,6 +233,22 @@ bool decodeDib(const Common::Array<byte> &blob, Graphics::ManagedSurface &out) {
 
 } // End of anonymous namespace
 
+int Picture::patternCount() const {
+	if (patternW <= 0 || patternH <= 0)
+		return surface.w ? 1 : 0;
+	return (surface.w / patternW) * (surface.h / patternH);
+}
+
+Common::Rect Picture::pattern(int k) const {
+	if (patternW <= 0 || patternH <= 0)
+		return k == 0 ? Common::Rect(surface.w, surface.h) : Common::Rect();
+	const int cols = surface.w / patternW;
+	if (k < 0 || k >= patternCount())
+		return Common::Rect();
+	const int x = (k % cols) * patternW, y = (k / cols) * patternH;
+	return Common::Rect(x, y, x + patternW, y + patternH);
+}
+
 bool PictureCollection::load(const Common::Path &path) {
 	clear();
 	Common::Array<Properties> items;
@@ -249,6 +265,8 @@ bool PictureCollection::load(const Common::Path &path) {
 		pic->transparent = p.contains("Transparent") && p["Transparent"].number;
 		const uint32 rgb = delphiColour(p.contains("TransparentColor") ? p["TransparentColor"].text : "clBlack");
 		pic->key = rgb565(rgb >> 16, (rgb >> 8) & 0xFF, rgb & 0xFF);
+		pic->patternW = p.contains("PatternWidth") ? p["PatternWidth"].number : 0;
+		pic->patternH = p.contains("PatternHeight") ? p["PatternHeight"].number : 0;
 		pic->last = Common::Rect(pic->surface.w, pic->surface.h);
 		_items.push_back(pic);
 	}
