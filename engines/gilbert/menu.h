@@ -70,8 +70,9 @@ private:
 	void drawHelpPage();
 	void drawAboutPage();
 	void drawRows(int count, int top, int hover, int picked);
-	/** Draws a page button (plain, hover, pressed); true when its press is to act. */
-	bool pageButton(int item, int x, int y, int hover, int pressed);
+	/** Draws a page button (plain, hover, pressed). */
+	void pageButton(int item, int x, int y, int hover, int pressed);
+	void dispatchPagePress();
 	void handleMouse();
 	void handleTyping();
 	void action(int item);
