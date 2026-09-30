@@ -40,6 +40,8 @@
 #include "gilbert/detection.h"
 #include "gilbert/gilbert.h"
 #include "gilbert/menu.h"
+#include "gilbert/cua.h"
+#include "gilbert/dialog.h"
 #include "gilbert/room.h"
 #include "gilbert/sound.h"
 
@@ -71,6 +73,8 @@ GilbertEngine::GilbertEngine(OSystem *syst, const ADGameDescription *gameDesc) :
 GilbertEngine::~GilbertEngine() {
 	delete _menu;
 	delete _room;
+	delete _cua;
+	delete _dialog;
 	delete _logic;
 	delete _sound;
 	for (auto &f : _fonts)
@@ -86,6 +90,8 @@ Common::Error GilbertEngine::run() {
 	_menu = new Menu(this);
 	_logic = new Logic(this);
 	_room = new Room(this);
+	_cua = new CloseUp(this);
+	_dialog = new DialogBox(this);
 	loadSettings();
 	loadLanguage();
 	_mouse = Common::Point(320, 240);
@@ -113,6 +119,9 @@ Common::Error GilbertEngine::run() {
 			break;
 		case kModeRoom:
 			_room->tick(now0 - previous);
+			break;
+		case kModeCua:
+			_cua->tick();
 			break;
 		default:
 			break;
@@ -337,6 +346,8 @@ Common::Error GilbertEngine::loadGameState(int slot) {
 void GilbertEngine::resetState() {
 	// ResetState (rooms.md "State").
 	_room->reset();
+	_cua->reset();
+	_dialog->close();
 	_settings.musicVolume = 5;
 	_settings.soundVolume = 4;
 	_settings.fullscreenVideo = false;
@@ -397,11 +408,20 @@ void GilbertEngine::drawCursor(int n) {
 }
 
 void GilbertEngine::gotoCua(uint32 id) {
-	debugC(1, kDebugScript, "GotoCUA %d", id);
+	_cua->load(id);
+}
+
+void GilbertEngine::refreshCua() {
+	_cua->refreshObjects();
+}
+
+void GilbertEngine::refreshInventory() {
+	_cua->refreshInventory();
 }
 
 void GilbertEngine::showDialog() {
 	debugC(1, kDebugScript, "Dialog: %s", _logic->dialogTitle().c_str());
+	_dialog->open();
 }
 
 // Call-back 7 (rooms.md "Call-backs used in rooms").
@@ -647,12 +667,21 @@ void GilbertEngine::pollEvents() {
 			_mouse = event.mouse;
 			_leftPress = true;
 			_leftHeld = true;
+			if (_mode == kModeCua)
+				_cua->mouseDown();
+			break;
+		case Common::EVENT_RBUTTONDOWN:
+			_mouse = event.mouse;
+			if (_mode == kModeCua)
+				_cua->mouseDown();
 			break;
 		case Common::EVENT_LBUTTONUP:
 		case Common::EVENT_RBUTTONUP:
 			// Releasing any button clears the button state (boot.md "Mouse").
+			_mouse = event.mouse;
 			_leftPress = false;
 			_leftHeld = false;
+			_cua->mouseUp();
 			break;
 		case Common::EVENT_KEYDOWN:
 			if (event.kbd.keycode == Common::KEYCODE_ESCAPE)

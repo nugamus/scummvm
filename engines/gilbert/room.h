@@ -57,6 +57,14 @@ public:
 	void tick(uint32 elapsed);
 
 	bool shown() const { return _shown; }
+	uint32 current() const { return _current; }
+
+	// Panel pieces the close-ups share (rooms.md "Panel", screens.md "Frame").
+	void drawEggs();
+	void drawRadar(int maxAlpha);
+	void drawBookButton();
+	void rereadRadar();
+	void clearNewTopic() { _newTopic = false; }
 
 private:
 	struct Object {

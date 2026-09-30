@@ -272,7 +272,8 @@ void Menu::action(int item) {
 			_vm->room()->restartMusic();
 		}
 		closeMenuState();
-		_vm->setMode(GilbertEngine::kModeRoom);
+		// Back to the close-up ge.dll still has open (the original shows the room, Q-0501).
+		_vm->setMode(_vm->logic()->cuaId() ? GilbertEngine::kModeCua : GilbertEngine::kModeRoom);
 		break;
 	case kNewGame:
 		if (first) {

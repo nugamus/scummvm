@@ -45,6 +45,8 @@ namespace Gilbert {
 
 class Menu;
 class Room;
+class CloseUp;
+class DialogBox;
 class Sound;
 
 /** Colours as the original's TColors give them (boot.md "Conventions"), RGB. */
@@ -151,6 +153,9 @@ public:
 	Logic *logic() { return _logic; }
 	Menu *menu() { return _menu; }
 	Room *room() { return _room; }
+	CloseUp *closeUp() { return _cua; }
+	DialogBox *dialog() { return _dialog; }
+	PictureCollection &inventoryPictures() { return _inventory; }
 	PictureCollection &gilbert() { return _gilbert; }
 	bool leftHeld() const { return _leftHeld; }
 	bool ctrlHeld() const;
@@ -165,8 +170,8 @@ public:
 	void gotoWalkmap(uint32 id, int x, int y, int direction) override;
 	void refreshWalkmap() override;
 	void gotoCua(uint32 id) override;
-	void refreshCua() override {}
-	void refreshInventory() override {}
+	void refreshCua() override;
+	void refreshInventory() override;
 	void showDialog() override;
 	void playWave(int list, int index, bool loop) override;
 	void stopWave(int list, int index) override {}
@@ -198,6 +203,8 @@ private:
 	Sound *_sound = nullptr;
 	Logic *_logic = nullptr;
 	Room *_room = nullptr;
+	CloseUp *_cua = nullptr;
+	DialogBox *_dialog = nullptr;
 	int _mode = kModeMenu;
 	int _brightness = 0;
 	bool _leftHeld = false;
