@@ -1,8 +1,11 @@
 MODULE := engines/gilbert
 
 MODULE_OBJS = \
+	collection.o \
 	gilbert.o \
-	metaengine.o
+	menu.o \
+	metaengine.o \
+	sound.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_GILBERT), DYNAMIC_PLUGIN)

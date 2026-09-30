@@ -22,19 +22,120 @@
 #ifndef GILBERT_GILBERT_H
 #define GILBERT_GILBERT_H
 
+#include "common/array.h"
+#include "common/hashmap.h"
+#include "common/keyboard.h"
+#include "common/rect.h"
+#include "common/str.h"
+#include "common/ustr.h"
+
 #include "engines/advancedDetector.h"
 #include "engines/engine.h"
 
+#include "graphics/managed_surface.h"
+
+#include "gilbert/collection.h"
+
+namespace Graphics {
+class Font;
+}
+
 namespace Gilbert {
+
+class Menu;
+class Sound;
+
+/** Colours as the original's TColors give them (boot.md "Conventions"), RGB. */
+enum : uint32 {
+	kColourTan = 0xDDBD8E,
+	kColourYellow = 0xFFFF00,
+	kColourWhite = 0xFFFFFF,
+	kColourBlack = 0x000000
+};
+
+/** Settings (boot.md "Settings"), kept in the game's configuration domain. */
+struct Settings {
+	bool fullscreenVideo = false;
+	int installationType = -1;
+	int soundVolume = 4;
+	int musicVolume = 5;
+};
 
 class GilbertEngine : public Engine {
 public:
 	GilbertEngine(OSystem *syst, const ADGameDescription *gameDesc);
+	~GilbertEngine() override;
 
 	Common::Error run() override;
 
+	// Screen: one 640x480 RGB565 page, drawn and then shown (boot.md "Conventions").
+	Graphics::ManagedSurface &screen() { return _screen; }
+	void clear();
+	void present();
+	/** Draws a picture with its top-left corner at (x, y), clipped, and records the place. */
+	void drawPicture(Picture *pic, int x, int y);
+	/** Draws part of an off-screen surface with black transparent, clipped. */
+	void drawSurface(const Graphics::ManagedSurface &src, const Common::Rect &srcRect, int x, int y);
+	/** Fills a rectangle with a colour at alpha 0..255 over what is there (Q-0202). */
+	void fillAlpha(const Common::Rect &r, uint32 rgb, int alpha);
+
+	// Text: Arial of the given point size (boot.md "Conventions", Q-0205).
+	const Graphics::Font *font(int size, bool bold = false);
+	int textWidth(const Common::U32String &text, int size, bool bold = false);
+	void drawText(Graphics::ManagedSurface &dst, const Common::U32String &text, int x, int y, int size, uint32 rgb, bool bold = false);
+	/** Line n of Data/misc/language.txt. */
+	Common::U32String languageLine(uint n) const;
+	static Common::U32String fromWindows1252(const Common::String &s);
+
+	// Pictures (boot.md "Conventions").
+	PictureCollection &interface1() { return _interface1; }
+	PictureCollection &interface2() { return _interface2; }
+	PictureCollection &cursors() { return _cursors; }
+
+	Sound *sound() { return _sound; }
+	Settings &settings() { return _settings; }
+	void applyVolumes();
+	void saveSettings();
+
+	// Input, gathered by pollEvents().
+	void pollEvents();
+	Common::Point mouse() const { return _mouse; }
+	/** A left press not yet taken; taking it clears it (boot.md "Mouse"). */
+	bool takeLeftPress();
+	/** Keys typed since the last call. */
+	Common::Array<Common::KeyState> takeKeys();
+	void warpMouse(int x, int y);
+
+	/** movie::Play: a film of Data/mpg (boot.md "Films"). */
+	void playFilm(const Common::String &name, bool fromIntro = false);
+	/** boot::Exit: logo3 and the end of the program (boot.md "Exit"). */
+	void exitGame();
+
+	/** Save slots 1..50 from gilbert.ini (boot.md "Save slots"). */
+	void readSlotNames();
+	const Common::String &slotName(int slot) const { return _slotNames[CLIP(slot, 1, 50)]; }
+
 private:
+	void boot();
+	void loadingStep(int step, uint line);
+	void loadLanguage();
+	void loadSettings();
+
 	const ADGameDescription *_gameDesc;
+	Graphics::ManagedSurface _screen;
+	Common::Rect _clip;
+	PictureCollection _interface1, _interface2, _map, _cursors, _inventory, _gilbert;
+	Common::HashMap<int, Graphics::Font *> _fonts;
+	Common::Array<Common::String> _language;
+	Common::String _slotNames[51];
+	Settings _settings;
+	Sound *_sound = nullptr;
+	Menu *_menu = nullptr;
+
+	Common::Point _mouse;
+	bool _leftPress = false;
+	bool _escHeld = false;
+	Common::Array<Common::KeyState> _keys;
 };
 
 } // End of namespace Gilbert
