@@ -411,7 +411,7 @@ void GilbertEngine::walk(int direction) {
 }
 
 bool GilbertEngine::ctrlHeld() const {
-	return (_eventMan->getModifierState() & Common::KBD_CTRL) != 0;
+	return _runHeld || (_eventMan->getModifierState() & Common::KBD_CTRL) != 0;
 }
 
 void GilbertEngine::drawCursor(int n) {
@@ -708,6 +708,18 @@ void GilbertEngine::pollEvents() {
 		case Common::EVENT_KEYUP:
 			if (event.kbd.keycode == Common::KEYCODE_ESCAPE)
 				_escHeld = false;
+			break;
+		case Common::EVENT_CUSTOM_ENGINE_ACTION_START:
+			if (event.customType == kActionSkip)
+				_escHeld = true;
+			else if (event.customType == kActionRun)
+				_runHeld = true;
+			break;
+		case Common::EVENT_CUSTOM_ENGINE_ACTION_END:
+			if (event.customType == kActionSkip)
+				_escHeld = false;
+			else if (event.customType == kActionRun)
+				_runHeld = false;
 			break;
 		default:
 			break;

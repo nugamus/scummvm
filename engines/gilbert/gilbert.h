@@ -216,6 +216,7 @@ private:
 	Common::Point _mouse;
 	bool _leftPress = false;
 	bool _escHeld = false;
+	bool _runHeld = false;
 	Common::Array<Common::KeyState> _keys;
 };
 
