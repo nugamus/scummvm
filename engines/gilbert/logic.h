@@ -164,6 +164,7 @@ private:
 		int index = -1;     ///< its index in that list
 	};
 
+	void repairData();
 	ObjRef findObj(uint32 id);
 	Obj *objById(uint32 id);
 	ObjState *currentState(Obj &o);
