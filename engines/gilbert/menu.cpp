@@ -261,9 +261,11 @@ void Menu::action(int item) {
 	case kNewGame:
 		if (first) {
 			snd->playWave(1, 4);
-			// GELoadFile(default.dat) + GEStartNewGame and the first room: not implemented
-			// yet (the game-logic engine comes next).
-			warning("Gilbert: the game itself is not implemented yet");
+			snd->stopAll();
+			if (_vm->newGame()) {
+				_canSave = _vm->settings().installationType != -1;
+				_running = true;
+			}
 		}
 		closeMenuState();
 		break;

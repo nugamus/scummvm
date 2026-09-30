@@ -173,7 +173,7 @@ bool read(ArchiveReader &r, ObjState &s) {
 	s.cuaAnim = r.u32();
 	s.clickEvent = r.u32();
 	s.takeEvent = r.u32();
-	s.unk1c = r.u32();
+	s.icon = r.u32();
 	s.pickable = r.u32();
 	s.text = r.string();
 	return true;
@@ -186,7 +186,7 @@ void write(ArchiveWriter &w, const ObjState &s) {
 	w.u32(s.cuaAnim);
 	w.u32(s.clickEvent);
 	w.u32(s.takeEvent);
-	w.u32(s.unk1c);
+	w.u32(s.icon);
 	w.u32(s.pickable);
 	w.string(s.text);
 }
@@ -261,10 +261,10 @@ bool read(ArchiveReader &r, Anim &a) {
 	a.name = r.string();
 	a.duration = r.u32();
 	a.unk18 = r.u32();
-	a.unk1c = r.u32();
-	a.unk20 = r.u32();
+	a.x = r.u32();
+	a.y = r.u32();
 	a.z = r.u32();
-	a.unk28 = r.u32();
+	a.picture = r.u32();
 	a.endEvent = r.u32();
 	return true;
 }
@@ -276,10 +276,10 @@ void write(ArchiveWriter &w, const Anim &a) {
 	w.string(a.name);
 	w.u32(a.duration);
 	w.u32(a.unk18);
-	w.u32(a.unk1c);
-	w.u32(a.unk20);
+	w.u32(a.x);
+	w.u32(a.y);
 	w.u32(a.z);
-	w.u32(a.unk28);
+	w.u32(a.picture);
 	w.u32(a.endEvent);
 }
 
