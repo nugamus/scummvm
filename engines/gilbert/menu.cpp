@@ -362,7 +362,7 @@ void Menu::pageAction(int item) {
 		const int d = item == kUp ? -1 : 1;
 		if (_page == 3)
 			_loadTop = CLIP(_loadTop + d, 0, 44);
-		else
+		else if (_page == 4)
 			_saveTop = CLIP(_saveTop + d, 0, 45);
 		_editing = false;
 	} else if (item == kLoadButton) {
@@ -380,29 +380,47 @@ void Menu::pageAction(int item) {
 	_pageHover = _pagePress = -1;
 }
 
-bool Menu::pageButton(int item, int x, int y, int hover, int pressed) {
+// A page button with its hover and pressed pictures. Åbn (0x45) and Gem (0x44) share a
+// place, so either item hovers or presses the button the page shows (E-0219).
+void Menu::pageButton(int item, int x, int y, int hover, int pressed) {
+	auto is = [item](int v) {
+		return v == item || ((item == kLoadButton || item == kSaveButton) && (v == kLoadButton || v == kSaveButton));
+	};
 	_vm->drawPicture(i2(item), x, y);
-	if (_pageHover == item && hover >= 0)
+	if (hover >= 0 && is(_pageHover))
 		_vm->drawPicture(i2(hover), x, y);
-	if (_pagePress == item) {
-		if (pressed >= 0)
-			_vm->drawPicture(i2(pressed), x, y);
-		return true;
+	if (pressed >= 0 && is(_pagePress))
+		_vm->drawPicture(i2(pressed), x, y);
+}
+
+// The pressed page item acts by the page shown (boot.md "Button actions", E-0219):
+// 0x44/0x45 load on page 3 and save on page 4, the arrows act on every page (scrolling only
+// on pages 3 and 4), the settings buttons only on page 5; anything else does nothing.
+void Menu::dispatchPagePress() {
+	const int item = _pagePress;
+	if (item == -1)
+		return;
+	if (item == kLoadButton || item == kSaveButton) {
+		if (_page == 3)
+			pageAction(kLoadButton);
+		else if (_page == 4 && _canSave)
+			pageAction(kSaveButton);
+	} else if (item == kUp || item == kDown) {
+		pageAction(item);
+	} else if (item >= kMusic1 && item <= kVideo) {
+		if (_page == 5 && !_help && !_credits)
+			pageAction(item);
 	}
-	return false;
+	_pageHover = _pagePress = -1;
 }
 
 // gmenu::DrawPage (boot.md "Pages").
 void Menu::drawPage() {
-	if (_help) {
+	if (_help)
 		drawHelpPage();
-		return;
-	}
-	if (_credits) {
+	else if (_credits)
 		drawAboutPage();
-		return;
-	}
-	switch (_page) {
+	else switch (_page) {
 	case 3:
 		drawLoadPage();
 		break;
@@ -416,6 +434,7 @@ void Menu::drawPage() {
 	default:
 		break;
 	}
+	dispatchPagePress();
 }
 
 void Menu::drawRows(int count, int top, int hover, int picked) {
@@ -434,12 +453,9 @@ void Menu::drawLoadPage() {
 	_vm->drawPicture(i2(0x3f), 102, 63);
 	_vm->drawPicture(i2(0x38), 104, 100);
 	drawRows(6, _loadTop, _loadHover, _loadPicked);
-	if (pageButton(kLoadButton, 258, 302, 0x49, 0x4d))
-		pageAction(kLoadButton);
-	else if (pageButton(kUp, 301, 107, 0x64, 0x65))
-		pageAction(kUp);
-	else if (pageButton(kDown, 301, 272, 0x67, 0x68))
-		pageAction(kDown);
+	pageButton(kLoadButton, 258, 302, 0x49, 0x4d);
+	pageButton(kUp, 301, 107, 0x64, 0x65);
+	pageButton(kDown, 301, 272, 0x67, 0x68);
 }
 
 void Menu::drawSavePage() {
@@ -465,12 +481,9 @@ void Menu::drawSavePage() {
 		}
 		_vm->drawText(_vm->screen(), GilbertEngine::fromWindows1252(_name), 119, 274, 8, kColourTan);
 	}
-	if (pageButton(kSaveButton, 258, 302, 0x48, 0x4c))
-		pageAction(kSaveButton);
-	else if (pageButton(kUp, 301, 107, 0x64, 0x65))
-		pageAction(kUp);
-	else if (pageButton(kDown, 301, 241, 0x67, 0x68))
-		pageAction(kDown);
+	pageButton(kSaveButton, 258, 302, 0x48, 0x4c);
+	pageButton(kUp, 301, 107, 0x64, 0x65);
+	pageButton(kDown, 301, 241, 0x67, 0x68);
 }
 
 void Menu::drawSettingsPage() {
@@ -479,22 +492,16 @@ void Menu::drawSettingsPage() {
 	_vm->drawPicture(i2(0x37), 102, 63);
 	_vm->drawPicture(i2(0x3b), 108, 97);
 	_vm->drawPicture(i2(0x3e), 108, 192);
-	int act = -1;
 	for (int j = 0; j < 6; j++) {
 		const int x = 114 + 33 * j;
 		_vm->drawPicture(i2(j == s.musicVolume - 1 ? 0x71 : 0x3c), x, 122);
-		if (pageButton(kMusic1 + j, x, 153, -1, -1))
-			act = kMusic1 + j;
+		pageButton(kMusic1 + j, x, 153, -1, -1);
 		_vm->drawPicture(i2(j == s.soundVolume - 1 ? 0x71 : 0x3c), x, 216);
-		if (pageButton(kSound1 + j, x, 247, -1, -1))
-			act = kSound1 + j;
+		pageButton(kSound1 + j, x, 247, -1, -1);
 	}
 	_vm->drawPicture(i2(0x7d), 112, 288);
 	_vm->drawPicture(i2(s.fullscreenVideo ? 0x71 : 0x3c), 279, 293);
-	if (pageButton(kVideo, 246, 294, -1, -1))
-		act = kVideo;
-	if (act != -1)
-		pageAction(act);
+	pageButton(kVideo, 246, 294, -1, -1);
 }
 
 void Menu::drawHelpPage() {
@@ -511,8 +518,8 @@ void Menu::drawHelpPage() {
 	if (_pressed == kBack)
 		_vm->drawPicture(i2(0x75), 513, 320);
 	// The arrows do nothing: the help text never scrolls.
-	if (pageButton(kHelpUp, 503, 93, 0x85, 0x86) || pageButton(kHelpDown, 503, 313, 0x88, 0x89))
-		_pageHover = _pagePress = -1;
+	pageButton(kHelpUp, 503, 93, 0x85, 0x86);
+	pageButton(kHelpDown, 503, 313, 0x88, 0x89);
 }
 
 void Menu::drawAboutPage() {
