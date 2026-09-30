@@ -30,11 +30,12 @@
 #include "graphics/managed_surface.h"
 
 #include "grumpa/detection.h"
+#include "grumpa/mesh.h"
 
 namespace Grumpa {
 
-// The original runs one 800x480... no: 800x600, 16-bit (RGB555) surface on DirectDraw7
-// (games/grumpa docs, E-0010). We keep the same page and blit it to the backend each frame.
+// The original runs one 800x600, 16-bit (RGB555) surface on DirectDraw7 (games/grumpa docs,
+// E-0010). We keep the same page and blit it to the backend each frame.
 enum {
 	kScreenWidth = 800,
 	kScreenHeight = 600
@@ -51,6 +52,8 @@ public:
 	bool loadBackground(const Common::String &view);
 	/** Decode the view's depth buffer <view>_IZ.fxi into `depth` (E-0009). */
 	bool loadDepth(const Common::String &view, Common::Array<uint16> &depth, int &w, int &h);
+	/** Load an actor mesh from Meshes/<name>.anb (frame 0 geometry, E-0014). */
+	bool loadMesh(const Common::String &name, Mesh &mesh);
 
 private:
 	const ADGameDescription *_gameDesc;
