@@ -46,6 +46,7 @@ namespace Gilbert {
 class Menu;
 class Room;
 class CloseUp;
+class Book;
 class DialogBox;
 class Sound;
 
@@ -85,7 +86,7 @@ public:
 	/** A one-pixel outline inside `r`, like GDI's Rectangle with a hollow brush. */
 	void frameRect(const Common::Rect &r, uint32 rgb);
 	/** Draws part of an off-screen surface with black transparent, clipped. */
-	void drawSurface(const Graphics::ManagedSurface &src, const Common::Rect &srcRect, int x, int y);
+	void drawSurface(const Graphics::ManagedSurface &src, const Common::Rect &srcRect, int x, int y, uint32 key = 0);
 	/** Fills a rectangle with a colour at alpha 0..255 over what is there (Q-0202). */
 	void fillAlpha(const Common::Rect &r, uint32 rgb, int alpha);
 
@@ -154,6 +155,7 @@ public:
 	Menu *menu() { return _menu; }
 	Room *room() { return _room; }
 	CloseUp *closeUp() { return _cua; }
+	Book *book() { return _book; }
 	DialogBox *dialog() { return _dialog; }
 	PictureCollection &inventoryPictures() { return _inventory; }
 	PictureCollection &gilbert() { return _gilbert; }
@@ -204,6 +206,7 @@ private:
 	Logic *_logic = nullptr;
 	Room *_room = nullptr;
 	CloseUp *_cua = nullptr;
+	Book *_book = nullptr;
 	DialogBox *_dialog = nullptr;
 	int _mode = kModeMenu;
 	int _brightness = 0;

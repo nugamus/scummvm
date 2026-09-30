@@ -40,6 +40,7 @@
 #include "gilbert/detection.h"
 #include "gilbert/gilbert.h"
 #include "gilbert/menu.h"
+#include "gilbert/book.h"
 #include "gilbert/cua.h"
 #include "gilbert/dialog.h"
 #include "gilbert/room.h"
@@ -74,6 +75,7 @@ GilbertEngine::~GilbertEngine() {
 	delete _menu;
 	delete _room;
 	delete _cua;
+	delete _book;
 	delete _dialog;
 	delete _logic;
 	delete _sound;
@@ -91,6 +93,7 @@ Common::Error GilbertEngine::run() {
 	_logic = new Logic(this);
 	_room = new Room(this);
 	_cua = new CloseUp(this);
+	_book = new Book(this);
 	_dialog = new DialogBox(this);
 	loadSettings();
 	loadLanguage();
@@ -122,6 +125,9 @@ Common::Error GilbertEngine::run() {
 			break;
 		case kModeCua:
 			_cua->tick();
+			break;
+		case kModeBook:
+			_book->tick();
 			break;
 		default:
 			break;
@@ -546,14 +552,14 @@ void GilbertEngine::frameRect(const Common::Rect &r, uint32 rgb) {
 		_screen.frameRect(area, c);
 }
 
-void GilbertEngine::drawSurface(const Graphics::ManagedSurface &src, const Common::Rect &srcRect, int x, int y) {
+void GilbertEngine::drawSurface(const Graphics::ManagedSurface &src, const Common::Rect &srcRect, int x, int y, uint32 key) {
 	Common::Rect dst(x, y, x + srcRect.width(), y + srcRect.height());
 	dst.clip(_clip);
 	if (dst.isEmpty())
 		return;
 	const Common::Rect s(srcRect.left + dst.left - x, srcRect.top + dst.top - y,
 	                     srcRect.left + dst.right - x, srcRect.top + dst.bottom - y);
-	_screen.transBlitFrom(src, s, Common::Point(dst.left, dst.top), 0);
+	_screen.transBlitFrom(src, s, Common::Point(dst.left, dst.top), key);
 }
 
 void GilbertEngine::fillAlpha(const Common::Rect &r, uint32 rgb, int alpha) {
