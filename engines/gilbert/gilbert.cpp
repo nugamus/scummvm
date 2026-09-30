@@ -24,6 +24,7 @@
 #include "common/events.h"
 #include "common/file.h"
 #include "common/formats/ini-file.h"
+#include "common/savefile.h"
 #include "common/memstream.h"
 #include "common/system.h"
 
@@ -51,6 +52,16 @@ static const uint32 kTickMs = 16;
 // The loading panel's busy wait (boot.md "Loading panel"); its length on the original's
 // machines is not known (Q-0200).
 static const uint32 kLoadingWaitMs = 250;
+
+// The slots live in `<target>.ini`, the original's gilbert.ini, in the save folder; until
+// the first save the game folder's gilbert.ini (all empty) stands in for it.
+static bool loadSlotIni(Common::INIFile &ini, const Common::String &target) {
+	ini.allowNonEnglishCharacters();
+	Common::ScopedPtr<Common::InSaveFile> in(g_system->getSavefileManager()->openForLoading(target + ".ini"));
+	if (in)
+		return ini.loadFromStream(*in);
+	return ini.loadFromFile("gilbert.ini");
+}
 
 // Everything the game reads is below Data (boot.md "Conventions"): the detection's
 // directory globs put Data in the search path.
@@ -80,6 +91,9 @@ Common::Error GilbertEngine::run() {
 	_mouse = Common::Point(320, 240);
 
 	boot();
+	// A save picked in the launcher.
+	if (ConfMan.hasKey("save_slot") && !shouldQuit())
+		loadGameState(ConfMan.getInt("save_slot"));
 
 	uint32 next = _system->getMillis();
 	uint32 previous = next;
@@ -228,12 +242,15 @@ void GilbertEngine::playFilm(const Common::String &name, bool fromIntro) {
 		drawPicture(_interface2[0x97], 64, 50);
 	}
 	decoder.start();
+	const uint32 filmStart = _system->getMillis();
+	int frames = 0;
 	_escHeld = false;
 	while (!shouldQuit() && !decoder.endOfVideo()) {
 		pollEvents();
 		if (decoder.needsUpdate()) {
 			const Graphics::Surface *frame = decoder.decodeNextFrame();
 			if (frame) {
+				frames++;
 				if (fullscreen)
 					_screen.blitFrom(*frame, Common::Rect(frame->w, frame->h), Common::Rect(640, 480));
 				else
@@ -245,6 +262,7 @@ void GilbertEngine::playFilm(const Common::String &name, bool fromIntro) {
 		}
 		_system->delayMillis(5);
 	}
+	debugC(1, kDebugGraphics, "Film %s: %d frames in %d ms (%d ms long)", name.c_str(), frames, _system->getMillis() - filmStart, decoder.getDuration().msecs());
 	decoder.close();
 	if (fullscreen) {
 		clear();
@@ -257,18 +275,81 @@ void GilbertEngine::playFilm(const Common::String &name, bool fromIntro) {
 		_room->restartMusic();
 }
 
+// Saving slot n (boot.md "Save slots"): file=game<n>.dat and the name in the slot list,
+// then GESaveFile into `<target>.game<n>.dat`, the original's file byte for byte.
+bool GilbertEngine::saveSlot(int n, const Common::String &name) {
+	if (n < 1 || n > 50)
+		return false;
+	const Common::String file = Common::String::format("game%d.dat", n);
+	Common::ScopedPtr<Common::OutSaveFile> out(_saveFileMan->openForSaving(_targetName + "." + file, false));
+	if (!out)
+		return false;
+	_logic->save(*out);
+	out->finalize();
+	Common::INIFile ini;
+	loadSlotIni(ini, _targetName);
+	ini.setKey("total", "SAVEDGAMES", "50");
+	const Common::String section = Common::String::format("SLOT%d", n);
+	ini.setKey("file", section, file);
+	ini.setKey("name", section, name);
+	Common::ScopedPtr<Common::OutSaveFile> iniOut(_saveFileMan->openForSaving(_targetName + ".ini", false));
+	if (!iniOut || !ini.saveToStream(*iniOut))
+		return false;
+	iniOut->finalize();
+	_slotNames[n] = name;
+	return true;
+}
+
+// Loading slot n: the file named in the slot list, then ResetState and GEContinueGame.
+bool GilbertEngine::loadSlot(int n) {
+	Common::INIFile ini;
+	Common::String file;
+	if (n < 1 || n > 50 || !loadSlotIni(ini, _targetName) ||
+	    !ini.getKey("file", Common::String::format("SLOT%d", n), file) || file.empty())
+		return false;
+	Common::ScopedPtr<Common::InSaveFile> in(_saveFileMan->openForLoading(_targetName + "." + file));
+	if (!in || !_logic->load(*in))
+		return false;
+	resetState();
+	_logic->continueGame();
+	return true;
+}
+
+bool GilbertEngine::canSaveGameStateCurrently(Common::U32String *msg) {
+	return _mode == kModeRoom && _menu->canSave();
+}
+
+bool GilbertEngine::canLoadGameStateCurrently(Common::U32String *msg) {
+	return _mode == kModeRoom || _mode == kModeMenu;
+}
+
+Common::Error GilbertEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
+	return saveSlot(slot, desc) ? Common::kNoError : Common::kWritingFailed;
+}
+
+Common::Error GilbertEngine::loadGameState(int slot) {
+	if (!loadSlot(slot))
+		return Common::kReadingFailed;
+	_menu->gameLoaded(true);
+	return Common::kNoError;
+}
+
+void GilbertEngine::resetState() {
+	// ResetState (rooms.md "State").
+	_room->reset();
+	_settings.musicVolume = 5;
+	_settings.soundVolume = 4;
+	_settings.fullscreenVideo = false;
+	applyVolumes();
+}
+
 bool GilbertEngine::newGame() {
 	Common::File f;
 	if (!f.open("game/default.dat") || !_logic->load(f)) {
 		warning("Gilbert: cannot load Data/game/default.dat");
 		return false;
 	}
-	// ResetState (rooms.md "State"), then GEStartNewGame.
-	_room->reset();
-	_settings.musicVolume = 5;
-	_settings.soundVolume = 4;
-	_settings.fullscreenVideo = false;
-	applyVolumes();
+	resetState();
 	_logic->startNewGame();
 	return true;
 }
@@ -546,8 +627,7 @@ void GilbertEngine::applyVolumes() {
 
 void GilbertEngine::readSlotNames() {
 	Common::INIFile ini;
-	ini.allowNonEnglishCharacters();
-	const bool ok = ini.loadFromFile("gilbert.ini");
+	const bool ok = loadSlotIni(ini, _targetName);
 	for (int i = 1; i <= 50; i++) {
 		Common::String name;
 		if (!ok || !ini.getKey("name", Common::String::format("SLOT%d", i), name))

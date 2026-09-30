@@ -52,6 +52,12 @@ public:
 	void enterFromGame();
 	/** Variable 198 set: back to the menu with Continue and Save disabled. */
 	void gameOver();
+	/** After a load: Continue and Save on (or both off when it failed). */
+	void gameLoaded(bool ok) {
+		_running = _canSave = ok;
+		_shown = false;
+	}
+	bool canSave() const { return _canSave; }
 
 private:
 	Picture *i2(int item) const;
