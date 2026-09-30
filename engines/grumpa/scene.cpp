@@ -28,6 +28,13 @@
 
 #include "grumpa/grumpa.h"
 
+static inline float READ_LE_FLOAT(const byte *p) {
+	uint32 v = READ_LE_UINT32(p);
+	float f;
+	memcpy(&f, &v, 4);
+	return f;
+}
+
 namespace Grumpa {
 
 // A scene view is a pre-rendered 800x600 colour background (<name>_IS.jpg) plus a 16-bit
@@ -119,6 +126,49 @@ bool GrumpaEngine::loadDepth(const Common::String &view, Common::Array<uint16> &
 				for (int col = 0; col < 8; col++)
 					depth[(by * 8 + row) * w + bx * 8 + col] = (hi[row * 8 + col] << 8) | lo[row * 8 + col];
 		}
+	}
+	return true;
+}
+
+// Load an actor mesh: Meshes/<name>.anb, frame-0 geometry (E-0014). We keep only the static
+// pose (vertices, faces, UVs); the animation frames after it are ignored for now.
+bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
+	Common::File f;
+	if (!f.open(Common::Path("Meshes/" + name + ".anb")))
+		return false;
+	Common::Array<byte> buf(f.size());
+	f.read(buf.begin(), buf.size());
+	const byte *d = buf.begin();
+	uint size = buf.size();
+	if (size < 8)
+		return false;
+	mesh.frames = READ_LE_UINT32(d);
+	uint nsec = READ_LE_UINT32(d + 4);
+	uint off = 8;
+	for (uint si = 0; si < nsec; si++) {
+		if (off + 12 > size)
+			return false;
+		uint a = READ_LE_UINT32(d + off), b = READ_LE_UINT32(d + off + 4), c = READ_LE_UINT32(d + off + 8);
+		off += 12;
+		MeshSection sec;
+		for (uint i = 0; i < a; i++, off += 24) {
+			sec.verts.push_back(Vec3(READ_LE_FLOAT(d + off), READ_LE_FLOAT(d + off + 4), READ_LE_FLOAT(d + off + 8)));
+			sec.normals.push_back(Vec3(READ_LE_FLOAT(d + off + 20), READ_LE_FLOAT(d + off + 16), READ_LE_FLOAT(d + off + 12)));
+		}
+		Common::Array<Face> faces;
+		faces.resize(c);
+		for (uint i = 0; i < c; i++, off += 6)
+			for (int k = 0; k < 3; k++)
+				faces[i].v[k] = READ_LE_UINT16(d + off + k * 2);
+		for (uint i = 0; i < b; i++, off += 8) {
+			sec.u.push_back(READ_LE_FLOAT(d + off));
+			sec.v.push_back(READ_LE_FLOAT(d + off + 4));
+		}
+		for (uint i = 0; i < c; i++, off += 6)
+			for (int k = 0; k < 3; k++)
+				faces[i].uv[k] = READ_LE_UINT16(d + off + k * 2);
+		sec.faces = faces;
+		mesh.sections.push_back(sec);
 	}
 	return true;
 }
