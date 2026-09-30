@@ -42,6 +42,7 @@ void DialogBox::open() {
 	_print = false;
 	_open = true;
 	_hover = _pressed = -1;
+	_vm->syncPress(GilbertEngine::kScreenDialog);
 }
 
 // The book's Udskriv message: language lines 20..24 and one choice, line 25.
@@ -58,6 +59,7 @@ void DialogBox::openPrintMessage() {
 	_print = true;
 	_open = true;
 	_hover = _pressed = -1;
+	_vm->syncPress(GilbertEngine::kScreenDialog);
 }
 
 // dialog::Layout, every tick (screens.md "Layout").
