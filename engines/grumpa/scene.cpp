@@ -601,6 +601,19 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 			frame = (int)((elapsed * (uint32)sp.fps / 1000) % (uint32)sp.frames);
 		drawSprite(sp, frame);
 	}
+	// Hotspot overlay (H): outline each unspent trigger's clickable polygon (E-0108), so the
+	// exits and interactions are visible. A development/accessibility view.
+	if (_showHotspots) {
+		uint32 col = _screen.format.RGBToColor(0, 255, 0);
+		for (uint i = 0; i < _sceneData.triggers.size(); i++) {
+			const SceneTrigger &tr = _sceneData.triggers[i];
+			if (tr.spent || tr.poly.size() < 2)
+				continue;
+			for (uint j = 0; j < tr.poly.size(); j++)
+				_screen.drawLine(tr.poly[j].x, tr.poly[j].y,
+								 tr.poly[(j + 1) % tr.poly.size()].x, tr.poly[(j + 1) % tr.poly.size()].y, col);
+		}
+	}
 	// 3D animated-mesh actors (type 0x1a, E-0114) are loaded (meshes cached) but not yet drawn
 	// in the live scene: each scene has several views at different eye positions, and the
 	// view that matches the shown background ("<n>_1") is not yet mapped (Scene_061 has 4

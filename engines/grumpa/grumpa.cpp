@@ -80,6 +80,9 @@ Common::Error GrumpaEngine::run() {
 				if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE) {
 					state = kMenu;
 					dirty = true;
+				} else if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_h) {
+					_showHotspots = !_showHotspots;  // overlay the clickable trigger polygons
+					dirty = true;
 				} else if (event.type == Common::EVENT_LBUTTONUP) {
 					if (handleSceneClick(event.mouse)) {
 						if (_nextScene >= 0) {  // a go-to-scene trigger (E-0116)
