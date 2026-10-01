@@ -120,6 +120,10 @@ public:
 	void setMouse(int x, int y);
 	/** Clears app+0x74 from a click handler: the clicked object (flag 8) does not go in hand (spec/bag.md "Taking"). */
 	void keepHand() { _takeAllowed = false; }
+	/** Clears app+0x78 from the bag-click event: the object picked in the bag is not kept in hand (spec/bag.md). */
+	void keepBagObject() { _listAllowed = false; }
+	/** The current puzzle when one is current, else the current rotation. */
+	int currentPlace() const { return _mode == 2 ? _puzzle : _rotation; }
 	/** `RotGetAlp` 0x405ab0: the stored alpha + 135, less 360 above 360. */
 	float rotGetAlp(int rotation);
 	Common::Point mouse() const { return _mouse; }
@@ -262,6 +266,7 @@ private:
 	Common::Array<Timer> _timers;
 	int _gameOver = 0; ///< app+0x70 while mode 4 is pending
 	bool _takeAllowed = true; ///< app+0x74
+	bool _listAllowed = true; ///< app+0x78
 	struct WorldState {
 		Common::Array<int> bag;
 		Common::Array<Timer> timers;

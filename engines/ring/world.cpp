@@ -711,6 +711,12 @@ void World::setMovabilities(int place, bool on, int from, int to) {
 			(*list)[i].hotSpot.enabled = on;
 }
 
+void World::setRide(int id, int index, const Common::String &name) {
+	if (Rotation *r = rotation(id))
+		if ((uint)index < r->movabilities.size())
+			r->movabilities[index].ride = name;
+}
+
 void World::setBackground(int id, const Common::String &file) {
 	if (Puzzle *p = puzzle(id)) {
 		p->background = file;

@@ -91,6 +91,8 @@ public:
 	/** `SouSet_406e20`: the sound's own volume. */
 	void setVolume(int id, int volume);
 	void setPan(int id, int pan);
+	/** 0x406e60: the type volume of every sound of `type`. */
+	void setTypeVolume(int type, int volume);
 	/** The preferences' volumes: `volume` for every type but 5, `dialogue` for 5. */
 	void setTypeVolumes(int volume, int dialogue);
 	bool playing(int id);

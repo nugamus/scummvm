@@ -267,6 +267,8 @@ public:
 	void hideAndFree(int object, int presentation = -1);
 	/** `PuzSetMovOnOrOff` / `RotSetMovOnOrOff`: movabilities `from`..`to` (all when negative) of a puzzle or rotation. */
 	void setMovabilities(int place, bool on, int from = -1, int to = -1);
+	/** `RotSetMovRidNam` (0x405870): the ride video of movability `index` of the rotation. */
+	void setRide(int rotation, int index, const Common::String &name);
 	/** `PuzAddBgrImg` while playing: the puzzle's background becomes `file`. */
 	void setBackground(int puzzle, const Common::String &file);
 	/** `ObjSetAccOnOrOff` over all (from < 0) or `from`..`to` of the object's accessibilities. */
