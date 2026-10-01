@@ -464,6 +464,19 @@ void Logic::clickObjectInCua(uint32 code) {
 		doEvent(s->clickEvent);
 }
 
+bool Logic::cuaObjectActive(uint32 code) {
+	Obj *o = objById(code / 100);
+	ObjState *s = o ? currentState(*o) : nullptr;
+	if (!s)
+		return false;
+	if (s->pickable || s->clickEvent)
+		return true;
+	for (const UseObj &u : _db.useObjs)
+		if (u.target == code)
+			return true;
+	return false;
+}
+
 void Logic::objectToInventory(uint32 code) {
 	ObjRef r = findObj(code / 100);
 	if (!r.obj || !r.cua)

@@ -33,12 +33,30 @@ enum GilbertDebugChannels {
 	kDebugSound
 };
 
-// Keymapper actions: the original's only keys (boot.md, rooms.md).
+// Keymapper actions: the original's keys (boot.md, rooms.md), then the shortcuts of the
+// keyboard_shortcuts option and the hotspot overlay.
 enum GilbertAction {
 	kActionNone,
-	kActionSkip, ///< Escape: skips a film
-	kActionRun   ///< Ctrl: Gilbert runs while it is held
+	kActionSkip, ///< Escape: skips a film (and goes back, with the shortcuts)
+	kActionRun,  ///< Ctrl: Gilbert runs while it is held
+	kActionMap,
+	kActionBook,
+	kActionInventoryUp,
+	kActionInventoryDown,
+	kActionHotspots,
+	kActionBack,    ///< not a keymapper action: Escape outside films, with the shortcuts
+	kActionChoice1, ///< ..kActionChoice1 + 8: the dialogue's choices 1..9
+	kActionChoice9 = kActionChoice1 + 8
 };
+
+// Enhancements, all off by default (the original).
+#define GAMEOPTION_ALWAYS_RUN GUIO_GAMEOPTIONS1
+#define GAMEOPTION_SHORTCUTS GUIO_GAMEOPTIONS2
+#define GAMEOPTION_WHEEL GUIO_GAMEOPTIONS3
+#define GAMEOPTION_MARK_CHOICES GUIO_GAMEOPTIONS4
+#define GAMEOPTION_NEW_TOPICS GUIO_GAMEOPTIONS5
+#define GAMEOPTION_AUTOSAVE GUIO_GAMEOPTIONS6
+#define GAMEOPTION_FULLSCREEN_FILMS GUIO_GAMEOPTIONS7
 
 extern const PlainGameDescriptor gilbertGames[];
 

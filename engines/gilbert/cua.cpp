@@ -135,6 +135,13 @@ void CloseUp::draw() {
 			continue;
 		_vm->drawPicture(_pictures[e.picture], 64 + e.x, 50 + e.y);
 	}
+	// The hotspot overlay: the objects something happens to, outlined.
+	if (_vm->hotspotsShown() && !_vm->dialog()->isOpen())
+		for (const Entry &e : _objects)
+			if ((int)e.code != _carriedObject && !e.rect.isEmpty() && _vm->logic()->cuaObjectActive(e.code)) {
+				_vm->fillAlpha(e.rect, 0xFFFF00, 40);
+				_vm->frameRect(e.rect, 0xFFFF00);
+			}
 	drawFrame();
 	if (_hoverObject >= 0 && _hoverObject < (int)_objects.size()) {
 		const Common::Rect &r = _objects[_hoverObject].rect;
@@ -242,8 +249,15 @@ void CloseUp::handleMouse() {
 	const bool press = _vm->press(GilbertEngine::kScreenCua, &changed);
 	if (changed)
 		_hover = -1;
-	if (!press)
+	if (!press) {
+		// The keyboard shortcuts and the mouse wheel press the buttons.
+		const int s = _vm->shortcut();
+		if (!_vm->dialog()->isOpen() && (s == kActionBack || s == kActionInventoryUp || s == kActionInventoryDown)) {
+			_pressed = s == kActionBack ? kBack : (s == kActionInventoryUp ? kUp : kDown);
+			_vm->takeShortcut();
+		}
 		return;
+	}
 	if (!Common::Rect(509, 336, 589, 396).contains(m)) {
 		Common::Array<uint32> codes;
 		for (const Entry &e : _objects)
@@ -253,6 +267,40 @@ void CloseUp::handleMouse() {
 			_vm->logic()->clickObjectInCua(code);
 	}
 	_pressed = firstHit();
+}
+
+void CloseUp::hotspots(Common::Array<Graphics::HotspotInfo> &list) {
+	for (const Entry &e : _objects)
+		if ((int)e.code != _carriedObject && !e.rect.isEmpty() && _vm->logic()->cuaObjectActive(e.code))
+			list.push_back(Graphics::HotspotInfo(objectPoint(e), GilbertEngine::fromWindows1252(e.text),
+			                                     e.pickable ? Graphics::kHotspotObject : Graphics::kHotspotDefault));
+}
+
+// The picture's opaque point nearest the middle of its rectangle, inside the view.
+Common::Point CloseUp::objectPoint(const Entry &e) {
+	Common::Rect r = e.rect;
+	r.clip(Common::Rect(64, 50, 576, 370));
+	const Common::Point mid((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+	Picture *p = e.picture >= 0 ? _pictures[e.picture] : nullptr;
+	if (!p || !p->transparent || r.isEmpty())
+		return mid;
+	const Common::Rect pat = p->pattern(0);
+	Common::Point best = mid;
+	int bestD = -1;
+	const int step = MAX(1, MIN(r.width(), r.height()) / 16);
+	for (int y = r.top; y < r.bottom; y += step)
+		for (int x = r.left; x < r.right; x += step) {
+			const int sx = pat.left + x - e.rect.left, sy = pat.top + y - e.rect.top;
+			if (sx < 0 || sy < 0 || sx >= p->surface.w || sy >= p->surface.h ||
+			    *(const uint16 *)p->surface.getBasePtr(sx, sy) == p->key)
+				continue;
+			const int d = ABS(x - mid.x) + ABS(y - mid.y);
+			if (bestD < 0 || d < bestD) {
+				bestD = d;
+				best = Common::Point(x, y);
+			}
+		}
+	return best;
 }
 
 // cua::PickUp (screens.md "Taking and using").

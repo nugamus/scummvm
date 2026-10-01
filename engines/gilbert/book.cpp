@@ -50,6 +50,7 @@ enum {
 };
 
 const uint32 kListColour = 0x802D19;
+const uint32 kNewColour = 0x1E46A0; ///< a topic not opened yet (the mark_new_topics option)
 const uint32 kPageColour = 0x402E1A;
 const uint16 kFuchsia = 0xF81F;
 
@@ -108,13 +109,15 @@ void Book::buildList(int book, int first) {
 	Style style;
 	for (int i = 0; i < 20 && first + i < count; i++) {
 		const int rank = first + i;
+		const uint32 topic = logic->bookTopicFromIndex(book, rank);
+		const uint32 colour = _vm->options().newTopics && !_vm->isSeen(GilbertEngine::topicKey(book, topic)) ? kNewColour : kListColour;
 		int x = 10;
 		const int x0 = x, y0 = y;
 		BookParser p;
 		for (int t = p.first(logic->bookTopicTitle(book, rank)); t != kTokenEnd; t = p.next()) {
 			if (t == kTokenText) {
 				const Common::U32String s = GilbertEngine::fromWindows1252(p.token);
-				_vm->drawText(_surface, s, x, y, style.size, kListColour, style.bold);
+				_vm->drawText(_surface, s, x, y, style.size, colour, style.bold);
 				x += _vm->textWidth(s, style.size, style.bold);
 			} else if (t == kTokenFormat) {
 				style.format(p.format);
@@ -128,7 +131,7 @@ void Book::buildList(int book, int first) {
 		Link l;
 		l.rect = Common::Rect(x0 + 135, y0 + 103, x + 135, y + 115);
 		l.book = book;
-		l.topic = logic->bookTopicFromIndex(book, rank);
+		l.topic = topic;
 		_links.push_back(l);
 		y += 12;
 	}
@@ -138,6 +141,7 @@ void Book::buildList(int book, int first) {
 void Book::buildPage(int book, uint32 topic) {
 	Logic *logic = _vm->logic();
 	const int rank = logic->bookIndexFromTopic(book, topic);
+	_vm->markSeen(GilbertEngine::topicKey(book, topic));
 	_book = book;
 	_page = true;
 	_scroll = 0;
@@ -279,6 +283,12 @@ void Book::draw() {
 
 // book::HandleMouse (screens.md "Mouse").
 void Book::handleMouse() {
+	// The keyboard shortcuts: Escape is the bar's back button.
+	if (_vm->shortcut() == kActionBack) {
+		_vm->takeShortcut();
+		tabAction(kBackToRoom);
+		return;
+	}
 	PictureCollection &i2 = _vm->interface2();
 	const Common::Point m = _vm->mouse();
 	const Common::Rect mr(m.x - 3, m.y - 3, m.x + 3, m.y + 3);

@@ -39,6 +39,7 @@ void DialogBox::open() {
 	_choices.clear();
 	for (uint i = 0; i < logic->dialogChoiceCount(); i++)
 		_choices.push_back(logic->dialogChoice(i));
+	_id = logic->dialogId();
 	_print = false;
 	_open = true;
 	_hover = _pressed = -1;
@@ -109,7 +110,15 @@ void DialogBox::handleMouse() {
 			hit = k;
 	}
 	_hover = hit;
-	if (_vm->press(GilbertEngine::kScreenDialog)) {
+	// The keyboard shortcuts: 1..9 pick a choice as a click on it would.
+	const int key = _vm->shortcut() - kActionChoice1;
+	bool keyed = false;
+	if (key >= 0 && key < (int)_choices.size() && _vm->shortcut() <= kActionChoice9) {
+		_vm->takeShortcut();
+		hit = key;
+		keyed = true;
+	}
+	if (_vm->press(GilbertEngine::kScreenDialog) || keyed) {
 		// The dialogue takes the press (screens.md "While a dialogue is open"): the screen
 		// under it does not see it too.
 		_vm->syncPress(GilbertEngine::kScreenRoom);
@@ -118,8 +127,10 @@ void DialogBox::handleMouse() {
 		_pressed = hit;
 		if (hit >= 0) {
 			_open = false;
-			if (!_print)
+			if (!_print) {
+				_vm->markSeen(GilbertEngine::choiceKey(_id, _choices[hit]));
 				_vm->logic()->dialogEnd(hit);
+			}
 		}
 	}
 }
@@ -142,9 +153,15 @@ void DialogBox::draw() {
 	_vm->blendPattern(i2[0xa4], 0, Common::Rect(b.right - 1, b.top - 14, b.right + 2, b.bottom - 8), 255);
 	for (uint i = 0; i < _lines.size(); i++)
 		_vm->drawText(_vm->screen(), GilbertEngine::fromWindows1252(_lines[i]), b.left + 10, b.top - 6 + 12 * i, 8, kColourTan);
-	for (uint k = 0; k < _choices.size(); k++)
-		_vm->drawText(_vm->screen(), GilbertEngine::fromWindows1252(_choices[k]), b.left + 10, b.top + 20 + 18 * k + _off, 8,
-		              (int)k == _hover || (int)k == _pressed ? (uint32)kColourTan : 0x7F7F7FU);
+	const bool mark = _vm->options().markChoices && !_print;
+	for (uint k = 0; k < _choices.size(); k++) {
+		uint32 colour = 0x7F7F7F;
+		if ((int)k == _hover || (int)k == _pressed)
+			colour = kColourTan;
+		else if (mark && _vm->isSeen(GilbertEngine::choiceKey(_id, _choices[k])))
+			colour = 0x4C4C4C; // the mark_choices option: picked before
+		_vm->drawText(_vm->screen(), GilbertEngine::fromWindows1252(_choices[k]), b.left + 10, b.top + 20 + 18 * k + _off, 8, colour);
+	}
 }
 
 } // End of namespace Gilbert
