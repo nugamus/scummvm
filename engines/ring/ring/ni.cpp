@@ -21,10 +21,12 @@
 
 // Zone NI: Nibelheim, Alberich's world (games/ring/docs/ni.md).
 
+#include "common/debug.h"
 #include "common/system.h"
 #include "common/textconsole.h"
 
 #include "ring/bag.h"
+#include "ring/detection.h"
 #include "ring/resources.h"
 #include "ring/ring.h"
 #include "ring/sound.h"
@@ -509,6 +511,7 @@ void onClick(RingEngine *vm, int object, int value, int place) {
 
 void onButtonDown(RingEngine *vm, int object, int value) {
 	g_vm = vm;
+	debugC(1, kDebugScript, "NI button down: object %d unk_19 %d", object, value);
 	switch (object) {
 	case kMosaic:
 		if (held())
