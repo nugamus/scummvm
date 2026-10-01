@@ -250,9 +250,12 @@ public:
 	static const Accessibility *hit(const Common::Array<Common::SharedPtr<Accessibility> > &list, int x, int y);
 	static const Movability *hit(const Common::Array<Movability> &list, int x, int y);
 
-	/** `VarGetByte` / `VarSetByte` (spec/api.md, "Variables"): an unknown id is reported and reads 0. */
-	int varByte(int id) const;
-	void setVarByte(int id, int value);
+	/** `VarGet*` / `VarSet*` (spec/api.md, "Variables"): an unknown id is reported and reads 0. */
+	enum VarType { kVarByte, kVarWord, kVarDword };
+	int var(VarType type, int id) const;
+	void setVar(VarType type, int id, int value);
+	int varByte(int id) const { return var(kVarByte, id); }
+	void setVarByte(int id, int value) { setVar(kVarByte, id, value); }
 	float varFloat(int id) const;
 	void setVarFloat(int id, float value);
 
@@ -265,8 +268,8 @@ private:
 	const Graphics::Font *_font = nullptr;
 	Sounds *_sounds = nullptr;
 	int _lr = -1;
-	// ponytail: words, dwords and strings come with the zones that read them
-	Common::HashMap<int, int8> _bytes;
+	// ponytail: strings come with the zones that read them
+	Common::HashMap<int, int32> _ints[3]; ///< by VarType, the values truncated to the type
 	Common::HashMap<int, float> _floats;
 };
 

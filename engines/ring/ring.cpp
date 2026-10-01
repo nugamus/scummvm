@@ -459,10 +459,10 @@ void RingEngine::rotSetAct(int rotation, bool start, bool stop) {
 }
 
 void RingEngine::goZone(int zone, int entry) {
-	// ponytail: the CD check, the ambient lists (0x41a820), the zone's archive (ART_x) and the
-	// saved-game entry (1000) come with their specs
+	// ponytail: the CD check, the zone's archive (ART_x) and the saved-game entry (1000) come with their specs
 	leavePlace();
 	_sounds->stopAll(8);
+	_sounds->clearPlaces();
 	_zone = zone;
 	_menuZone = 0;
 	if (zone == kZoneAS)
