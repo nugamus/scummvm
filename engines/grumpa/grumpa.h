@@ -67,6 +67,9 @@ public:
 	bool enterScene(int num);
 	/** Redraw the current scene (cached background + each sprite's animated frame) at `now`. */
 	void renderSceneFrame(uint32 now);
+	/** A left click in the scene at `p`: run the first unspent trigger whose polygon contains
+	 *  it (docs/spec/events.md). Returns true if a trigger fired (the scene changed). */
+	bool handleSceneClick(const Common::Point &p);
 	/** Load the game's hand cursor as the system cursor (E-0005). */
 	void setGameCursor();
 	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */

@@ -361,13 +361,50 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			}
 			if (c.ok)
 				scene.sprites.push_back(sp);
+		} else if (t == 0x19) {
+			// Trigger (E-0108/E-0109): capture its command list (CC) and clickable polygon.
+			SceneTrigger tr;
+			tr.id = id;
+			c.skip(12); ecVec(c); c.skip(32); c.skip(76); sub56(c); ecVec(c);
+			int32 ncc = acount(c);
+			for (int32 j = 0; j < ncc && c.ok; j++) {
+				int32 base[5];
+				for (int b = 0; b < 5; b++) base[b] = (int32)c.u32();
+				int32 nsub = acount(c);           // nested EC guard conditions
+				c.skip(20 * (uint32)nsub);
+				SceneCommand cmd;
+				cmd.when = base[0];               // base = (when, targetId, opcode, arg1, arg2)
+				cmd.targetId = base[1];
+				cmd.opcode = base[2];
+				cmd.arg1 = base[3];
+				cmd.arg2 = base[4];
+				cmd.hasCond = nsub > 0;
+				tr.cmds.push_back(cmd);
+			}
+			int32 k = c.i32();                     // polygon point count
+			for (int32 j = 0; j < k && c.ok; j++) {
+				float px = READ_LE_FLOAT(c.d + c.o); c.skip(4);
+				float py = READ_LE_FLOAT(c.d + c.o); c.skip(4);
+				tr.poly.push_back(Common::Point((int16)px, (int16)py));
+			}
+			c.skip(16); c.skip(4);
+			uint32 mode = c.u32();
+			if (mode == 2) {
+				int32 nb = acount(c);
+				for (int32 j = 0; j < nb && c.ok; j++) {
+					c.skip(8);
+					if (c.u32() != 0) { int32 n = c.i32(); if (n > 0) c.skip(n); }
+				}
+			}
+			if (c.ok)
+				scene.triggers.push_back(tr);
 		} else if (!skipBody(c, t)) {
 			warning("Grumpa: scene %s unmodelled type %#x at %#x", name.c_str(), t, c.o - 8);
 			return false;
 		}
 	}
-	debug(1, "Grumpa: scene %s -> %u views, %u sprites", name.c_str(),
-		  (uint)scene.views.size(), (uint)scene.sprites.size());
+	debug(1, "Grumpa: scene %s -> %u views, %u sprites, %u triggers", name.c_str(),
+		  (uint)scene.views.size(), (uint)scene.sprites.size(), (uint)scene.triggers.size());
 	return c.ok;
 }
 
@@ -420,6 +457,69 @@ void GrumpaEngine::drawSprite(const SceneSprite &sprite, int frame) {
 			_screen.setPixel(dx, dy, s->getPixel(xx, yy));
 		}
 	}
+}
+
+// Ray-cast point-in-polygon for a trigger's clickable region (E-0108).
+static bool pointInPoly(const Common::Array<Common::Point> &poly, const Common::Point &p) {
+	bool in = false;
+	for (uint i = 0, j = poly.size() - 1; i < poly.size(); j = i++) {
+		if ((poly[i].y > p.y) != (poly[j].y > p.y) &&
+			p.x < (int)((int64)(poly[j].x - poly[i].x) * (p.y - poly[i].y) /
+						(poly[j].y - poly[i].y) + poly[i].x))
+			in = !in;
+	}
+	return in;
+}
+
+// Apply one command to its target actor (by id), per the opcode vocabulary (E-0111). Only
+// sprites and triggers are modelled so far; commands to other actor ids are ignored.
+static void applyCommand(SceneData &scene, const SceneCommand &cmd) {
+	for (uint i = 0; i < scene.sprites.size(); i++) {
+		SceneSprite &s = scene.sprites[i];
+		if ((int)s.id != cmd.targetId)
+			continue;
+		debug(2, "Grumpa:   cmd target=%d op=%d -> sprite %s (vis %d act %d)",
+			  cmd.targetId, cmd.opcode, s.name.c_str(), s.visible, s.active);
+		switch (cmd.opcode) {
+		case 0:   s.active = true; break;               // play
+		case 1:   s.active = false; break;              // stop
+		case 2:   s.visible = true; break;              // show
+		case 3:   s.visible = false; break;             // hide
+		case 11:  s.active = true; break;               // activate
+		case 12:  s.active = false; break;              // deactivate
+		case 13:  s.active = s.visible = false; break;  // disable
+		case 500: s.active = s.visible = true; break;   // full on
+		case 501: s.active = s.visible = false; break;  // full off
+		default: break;
+		}
+		return;
+	}
+	for (uint i = 0; i < scene.triggers.size(); i++) {
+		SceneTrigger &tr = scene.triggers[i];
+		if ((int)tr.id != cmd.targetId)
+			continue;
+		if (cmd.opcode == 13)       // disable (one-shot)
+			tr.spent = true;
+		else if (cmd.opcode == 11 || cmd.opcode == 500 || cmd.opcode == 52)
+			tr.spent = false;       // (re-)enable
+		return;
+	}
+}
+
+bool GrumpaEngine::handleSceneClick(const Common::Point &p) {
+	for (uint i = 0; i < _sceneData.triggers.size(); i++) {
+		SceneTrigger &tr = _sceneData.triggers[i];
+		if (tr.spent || tr.poly.size() < 3 || !pointInPoly(tr.poly, p))
+			continue;
+		debug(1, "Grumpa: trigger %u fired (%u commands)", tr.id, (uint)tr.cmds.size());
+		// Apply only the immediate, unconditional commands for now; timed (when>=0) and
+		// condition-guarded commands need the tick queue and variable actors (Q-0010).
+		for (uint j = 0; j < tr.cmds.size(); j++)
+			if (tr.cmds[j].when == -1 && !tr.cmds[j].hasCond)
+				applyCommand(_sceneData, tr.cmds[j]);
+		return true;
+	}
+	return false;
 }
 
 // Enter scene <num>: read its graph (views + sprites) and decode its background view

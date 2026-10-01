@@ -80,6 +80,9 @@ Common::Error GrumpaEngine::run() {
 				if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE) {
 					state = kMenu;
 					dirty = true;
+				} else if (event.type == Common::EVENT_LBUTTONUP) {
+					if (handleSceneClick(event.mouse))
+						dirty = true;  // a trigger fired; redraw with the new actor state
 				}
 				continue;
 			}
