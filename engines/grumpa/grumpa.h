@@ -58,8 +58,11 @@ public:
 	bool loadDepth(const Common::String &view, Common::Array<uint16> &depth, int &w, int &h);
 	/** Load an actor mesh from Meshes/<name>.anb (frame 0 geometry, E-0014). */
 	bool loadMesh(const Common::String &name, Mesh &mesh);
-	/** Read Scenes/Scene_<num>.abi and collect its type-0x11 views (docs/spec/scene.md). */
-	bool loadScene(int num, Common::Array<SceneView> &views);
+	/** Read Scenes/Scene_<num>.abi: its type-0x11 views and type-0x0d sprite props
+	 *  (docs/spec/scene.md). */
+	bool loadScene(int num, SceneData &scene);
+	/** Draw a sprite prop's current frame at its position with the blue colour key (E-0107). */
+	void drawSprite(const SceneSprite &sprite);
 	/** Load the game's hand cursor as the system cursor (E-0005). */
 	void setGameCursor();
 	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */

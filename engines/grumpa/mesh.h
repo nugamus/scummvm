@@ -23,6 +23,7 @@
 #define GRUMPA_MESH_H
 
 #include "common/array.h"
+#include "common/str.h"
 #include "graphics/managed_surface.h"
 
 namespace Grumpa {
@@ -70,6 +71,22 @@ struct SceneView {
 	uint32 id = 0;
 	uint32 camId = 0;
 	float cam[26] = {};
+};
+
+// An animated 2D sprite prop (type 0x0d, E-0106/E-0107): a JPG frame sequence drawn at a
+// screen position with a colour key. `frames`/`fps` come from the record's animation block.
+struct SceneSprite {
+	Common::String name;   // frame-0 JPG base, e.g. "cannons_0000.jpg"
+	uint32 id = 0;
+	int x = 0, y = 0;
+	int flag0 = 0, flag1 = 0;
+	int frames = 0, fps = 0;
+};
+
+// Everything the engine reads from a Scene_<NNN>.abi today.
+struct SceneData {
+	Common::Array<SceneView> views;
+	Common::Array<SceneSprite> sprites;
 };
 
 /** Build the view camera from its 26-float .abi block (E-0105). */
