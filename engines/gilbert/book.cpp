@@ -52,7 +52,8 @@ enum {
 const uint32 kListColour = 0x802D19;
 const uint32 kNewColour = 0x1E46A0; ///< a topic not opened yet (the mark_new_topics option)
 const uint32 kPageColour = 0x402E1A;
-const uint16 kFuchsia = 0xF81F;
+// The heights of the original's surfaces for the list and a page.
+const int kListHeight = 320, kPageHeight = 1000;
 
 // The text style of the markup's \f formats (screens.md "A topic page").
 struct Style {
@@ -101,8 +102,7 @@ void Book::buildList(int book, int first) {
 	_page = false;
 	_scroll = 0;
 	_links.clear();
-	_surface.create(355, 320, _vm->screen().format);
-	_surface.clear(kFuchsia);
+	_surface.clear();
 	const int count = logic->bookTopicCount(book);
 	// The line and the font run on from title to title (E-0512).
 	int y = 0;
@@ -117,7 +117,7 @@ void Book::buildList(int book, int first) {
 		for (int t = p.first(logic->bookTopicTitle(book, rank)); t != kTokenEnd; t = p.next()) {
 			if (t == kTokenText) {
 				const Common::U32String s = GilbertEngine::fromWindows1252(p.token);
-				_vm->drawText(_surface, s, x, y, style.size, colour, style.bold);
+				_surface.text(s, x, y, style.size, colour, style.bold);
 				x += _vm->textWidth(s, style.size, style.bold);
 			} else if (t == kTokenFormat) {
 				style.format(p.format);
@@ -146,8 +146,7 @@ void Book::buildPage(int book, uint32 topic) {
 	_page = true;
 	_scroll = 0;
 	_links.clear();
-	_surface.create(355, 1000, _vm->screen().format);
-	_surface.clear(kFuchsia);
+	_surface.clear();
 	int x = 10, y = 10, lineHeight = 12;
 	Style style;
 	uint32 colour = kPageColour;
@@ -170,13 +169,12 @@ void Book::buildPage(int book, uint32 topic) {
 				newLine();
 			if (inLink && linkStart.x < 0)
 				linkStart = Common::Point(x, y);
-			_vm->drawText(_surface, s, x, y, style.size, colour, style.bold);
+			_surface.text(s, x, y, style.size, colour, style.bold);
 			if (style.underline || inLink) {
 				const Graphics::Font *f = _vm->font(style.size, style.bold);
 				const int uy = y + f->getFontAscent() + 1;
-				if (uy < _surface.h)
-					_surface.hLine(x, uy, MIN(x + w - 1, (int)_surface.w - 1),
-					               _surface.format.RGBToColor(colour >> 16, (colour >> 8) & 0xFF, colour & 0xFF));
+				if (uy < kPageHeight)
+					_surface.underlineLast(uy, MIN(w, 355 - x));
 			}
 			x += w;
 			break;
@@ -210,7 +208,7 @@ void Book::buildPage(int book, uint32 topic) {
 			if (x + pic->surface.w > 354)
 				newLine();
 			// Drawn opaque: fuchsia stays transparent through the page's own key (E-0512).
-			_surface.blitFrom(pic->surface, Common::Point(x, y));
+			_surface.picture(pic, x, y);
 			x += pic->surface.w;
 			lineHeight = MAX<int>(lineHeight, pic->surface.h);
 			break;
@@ -251,7 +249,7 @@ void Book::draw() {
 	_vm->clear();
 	_vm->drawPicture(i2[0x00], 64, 50);
 	_vm->drawPicture(i2[0x6f], 64, 50);
-	_vm->drawSurface(_surface, Common::Rect(0, _scroll, 355, MIN(_scroll + 320, (int)_surface.h)), 135, 95, kFuchsia);
+	_vm->drawPage(_surface, Common::Rect(0, _scroll, 355, MIN(_scroll + 320, _page ? kPageHeight : kListHeight)), 135, 95);
 	_vm->drawPicture(_vm->interface1()[0], 64, 50);
 	_vm->drawPicture(i2[0x41], 64, 337);
 	for (const Tab &t : kTabs) {

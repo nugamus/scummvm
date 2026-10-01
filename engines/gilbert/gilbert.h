@@ -70,6 +70,33 @@ struct Settings {
 	int musicVolume = 5;
 };
 
+/**
+ * Text, lines and pictures laid out once and drawn each frame through a window: the book's
+ * pages, the help and the credits, which the original draws into off-screen surfaces. Kept
+ * as a list so that the text is drawn at the screen's resolution, over what lies under it.
+ */
+struct TextPage {
+	struct Item {
+		enum Type { kText, kPicture } type = kText;
+		int x = 0, y = 0;
+		int underline = -1; ///< the underline's y, -1 none
+		int underlineW = 0;  ///< its length in the page's layout
+		Common::U32String text;
+		int size = 8;
+		uint32 rgb = 0;
+		bool bold = false;
+		Picture *picture = nullptr;
+	};
+	Common::Array<Item> items;
+
+	void clear() { items.clear(); }
+	void text(const Common::U32String &s, int x, int y, int size, uint32 rgb, bool bold = false);
+	/** Underlines the last text at y, w long in the layout (as long as the drawn text at a larger scale). */
+	void underlineLast(int y, int w);
+	/** A picture, fuchsia transparent. */
+	void picture(Picture *pic, int x, int y);
+};
+
 /** The launcher's game options, the enhancements (metaengine.cpp). */
 struct Options {
 	bool alwaysRun = false;
@@ -79,6 +106,8 @@ struct Options {
 	bool newTopics = false;
 	bool autosave = false;
 	bool fullscreenFilms = false;
+	bool smoothText = false;
+	bool highResText = false;
 };
 
 class GilbertEngine : public Engine, public LogicListener {
@@ -88,8 +117,11 @@ public:
 
 	Common::Error run() override;
 
-	// Screen: one 640x480 RGB565 page, drawn and then shown (boot.md "Conventions").
+	// Screen: one 640x480 RGB565 page, drawn and then shown (boot.md "Conventions"). With
+	// the high_res_text option the page is kept at twice the size: everything is drawn in
+	// the original's coordinates, pictures doubled and text at the page's resolution.
 	Graphics::ManagedSurface &screen() { return _screen; }
+	int scale() const { return _scale; }
 	void clear();
 	void present();
 	/** Draws a picture with its top-left corner at (x, y), clipped, and records the place. */
@@ -100,15 +132,16 @@ public:
 	void blendPattern(Picture *pic, int k, const Common::Rect &dst, int alpha);
 	/** A one-pixel outline inside `r`, like GDI's Rectangle with a hollow brush. */
 	void frameRect(const Common::Rect &r, uint32 rgb);
-	/** Draws part of an off-screen surface with black transparent, clipped. */
-	void drawSurface(const Graphics::ManagedSurface &src, const Common::Rect &srcRect, int x, int y, uint32 key = 0);
+	/** Draws the part `src` of a page with its top-left corner at (x, y), clipped. */
+	void drawPage(const TextPage &page, const Common::Rect &src, int x, int y);
 	/** Fills a rectangle with a colour at alpha 0..255 over what is there (Q-0202). */
 	void fillAlpha(const Common::Rect &r, uint32 rgb, int alpha);
 
 	// Text: Arial of the given point size (boot.md "Conventions", Q-0205).
 	const Graphics::Font *font(int size, bool bold = false);
 	int textWidth(const Common::U32String &text, int size, bool bold = false);
-	void drawText(Graphics::ManagedSurface &dst, const Common::U32String &text, int x, int y, int size, uint32 rgb, bool bold = false);
+	/** Text on the page; not clipped (boot.md "Conventions"). */
+	void drawText(const Common::U32String &text, int x, int y, int size, uint32 rgb, bool bold = false);
 	/** Line n of Data/misc/language.txt. */
 	Common::U32String languageLine(uint n) const;
 	static Common::U32String fromWindows1252(const Common::String &s);
@@ -252,6 +285,12 @@ private:
 	void loadLanguage();
 	void loadSettings();
 	void loadOptions();
+	/** The font text is drawn with: the layout font, or the smooth one at the page's scale. */
+	const Graphics::Font *drawingFont(int size, bool bold);
+	void renderText(Graphics::ManagedSurface &dst, const Common::U32String &text, int x, int y, int size, uint32 rgb, bool bold);
+	Common::Rect scaled(const Common::Rect &r) const {
+		return Common::Rect(r.left * _scale, r.top * _scale, r.right * _scale, r.bottom * _scale);
+	}
 	void toggleHotspots();
 	void enableKeymaps();
 	void seedTopics();
@@ -261,7 +300,8 @@ private:
 	Graphics::ManagedSurface _screen;
 	Common::Rect _clip;
 	PictureCollection _interface1, _interface2, _map, _cursors, _inventory, _gilbert;
-	Common::HashMap<int, Graphics::Font *> _fonts;
+	Common::HashMap<int, Graphics::Font *> _fonts, _drawingFonts;
+	int _scale = 1;
 	Common::Array<Common::String> _language;
 	Common::String _slotNames[51];
 	Settings _settings;

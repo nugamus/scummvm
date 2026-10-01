@@ -27,6 +27,8 @@
 
 #include "graphics/managed_surface.h"
 
+#include "gilbert/gilbert.h"
+
 namespace Gilbert {
 
 class GilbertEngine;
@@ -113,7 +115,7 @@ private:
 	int _fieldAlpha = 0;
 	int _fieldStep = 5;
 	double _scroll = 0;
-	Graphics::ManagedSurface _helpText, _creditsText;
+	TextPage _helpText, _creditsText;
 };
 
 } // End of namespace Gilbert

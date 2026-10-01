@@ -215,7 +215,7 @@ void CloseUp::drawTooltip(const Common::String &text, int x, int y) {
 	if (x + w > 560)
 		x -= w;
 	_vm->fillAlpha(Common::Rect(x - 4, y - 2, x + w + 4, y + 16), kColourBlack, 120);
-	_vm->drawText(_vm->screen(), t, x, y, 8, kColourTan);
+	_vm->drawText(t, x, y, 8, kColourTan);
 }
 
 // cua::HandleMouse (screens.md "Mouse").

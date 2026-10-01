@@ -114,6 +114,28 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 			0
 		}
 	},
+	{
+		GAMEOPTION_SMOOTH_TEXT,
+		{
+			_s("Smooth text"),
+			_s("Draw the text with smooth, anti-aliased edges (the original's text is hard-edged)"),
+			"smooth_text",
+			false,
+			0,
+			0
+		}
+	},
+	{
+		GAMEOPTION_HIGH_RES_TEXT,
+		{
+			_s("High-resolution text"),
+			_s("Draw the game at twice its size, with the text smooth and sharp at that resolution; the pictures are doubled"),
+			"high_res_text",
+			false,
+			0,
+			0
+		}
+	},
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 
