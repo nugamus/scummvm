@@ -253,6 +253,10 @@ public:
 	void showPresentation(int object, int presentation, bool shown, uint32 time = 0);
 	/** `ObjPrePauAni` / `ObjPreUnPauAni`. */
 	void pauseAnimations(int object, int presentation, bool paused);
+	/** `ObjPreAniSetActFra` (0x4039b0 .. 0x416aa0): every animation of the presentation goes to `frame` (1-based). */
+	void setAnimationFrame(int object, int presentation, int frame);
+	/** `ObjPreSetAniIdeOnPuz` / `...OnRot`: the id of the presentation's `index`-th puzzle / rotation animation. */
+	void setAnimationId(int object, int presentation, int index, int id, bool onRotation);
 	/** `ObjPrePauFraAni`: every animation of the presentation pauses `ms` on `frame` (1-based). */
 	void pauseOnFrame(int object, int presentation, int frame, uint32 ms, int direction);
 	/** `ObjPreSetTxtToPuz` / `ObjPreSetTxtCooToPuz`: the presentation's `index`-th text. */

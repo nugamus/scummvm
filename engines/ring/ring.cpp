@@ -63,6 +63,8 @@ static void onClick(RingEngine *vm, int zone, int object, int value, int place) 
 		AS::onClick(vm, object, value);
 	else if (zone == kZoneNI)
 		NI::onClick(vm, object, value, place);
+	else if (zone == kZoneRH)
+		RH::onClick(vm, object, value);
 }
 
 static void onButtonDown(RingEngine *vm, int zone, int object, int value) {
@@ -75,6 +77,8 @@ static void onTimer(RingEngine *vm, int zone, int id) {
 		AS::onTimer(vm, id);
 	else if (zone == kZoneNI)
 		NI::onTimer(vm, id);
+	else if (zone == kZoneRH)
+		RH::onTimer(vm, id);
 }
 
 static void onAnimation(RingEngine *vm, int zone, int id, int frame) {
@@ -82,6 +86,8 @@ static void onAnimation(RingEngine *vm, int zone, int id, int frame) {
 		AS::onAnimation(vm, id, frame);
 	else if (zone == kZoneNI)
 		NI::onAnimation(vm, id, frame);
+	else if (zone == kZoneRH)
+		RH::onAnimation(vm, id, frame);
 }
 
 static void onBeforeMove(RingEngine *vm, int zone, int from, int to, int index, int value, int kind) {
@@ -89,6 +95,8 @@ static void onBeforeMove(RingEngine *vm, int zone, int from, int to, int index, 
 		AS::onBeforeMove(vm, from, to, kind);
 	else if (zone == kZoneNI)
 		NI::onBeforeMove(vm, from, to, value, kind);
+	else if (zone == kZoneRH)
+		RH::onBeforeMove(vm, from);
 }
 
 static void onAfterMove(RingEngine *vm, int zone, int to, int from, int index, int value, int kind) {
@@ -96,14 +104,20 @@ static void onAfterMove(RingEngine *vm, int zone, int to, int from, int index, i
 		AS::onAfterMove(vm, to, from, kind);
 	else if (zone == kZoneNI)
 		NI::onAfterMove(vm, to, from, value, kind);
+	else if (zone == kZoneRH)
+		RH::onAfterMove(vm, to, kind);
 }
 
+RingEngine *g_engine = nullptr;
+
 RingEngine::RingEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc) {
+	g_engine = this;
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addDirectory(gameDataDir, 0, 5); // DATA/<zone>/DIA/<language>/<file>
 }
 
 RingEngine::~RingEngine() {
+	g_engine = nullptr;
 }
 
 bool RingEngine::hasFeature(EngineFeature f) const {
@@ -353,6 +367,8 @@ Common::Error RingEngine::run() {
 				} else {
 					warning("Ring: dev mov %u: no such enabled movability in %d", x, here);
 				}
+			} else if (!strcmp(what, "zone") && n == 4) {
+				goZone(x, y); // "zone <zone> <entry>": GoZone
 			} else if (!strcmp(what, "hold") && n >= 3) {
 				dropObject();
 				holdObject(x);
@@ -583,6 +599,8 @@ void RingEngine::goZone(int zone, int entry) {
 		AS::enter(this, entry);
 	else if (zone == kZoneNI)
 		NI::enter(this, entry);
+	else if (zone == kZoneRH)
+		RH::enter(this, entry);
 	else
 		warning("Ring: zone %d is not implemented yet", zone);
 }
@@ -715,6 +733,14 @@ bool RingEngine::loadWorldState(const Common::String &file) {
 	return true;
 }
 
+float RingEngine::rotGetAlp(int rotation) {
+	Rotation *r = _world->rotation(rotation);
+	if (!r)
+		return 0.0f;
+	float a = r->alpha + 135.0f;
+	return a > 360.0f ? a - 360.0f : a;
+}
+
 void RingEngine::setMouse(int x, int y) {
 	_mouse = Common::Point(x, y);
 	g_system->warpMouse(x, y);
@@ -813,14 +839,19 @@ void RingEngine::clickObject(int zone, int object, int value, int place) {
 	if (!o)
 		return;
 	int before = _zone;
+	_takeAllowed = true;
 	if (o->flags & 1)
 		onClick(this, zone, object, value, place); // 0x40bbb0
 	if (_zone != before)
 		return; // a zone change is pending (mode 4)
 	if (o->flags & 8) {
-		// 0x40bed0 (only FO and WA handle it), then the clicked object goes in hand.
-		dropObject();
-		holdObject(object);
+		// 0x40bed0 (only FO and WA handle it), then, unless a handler cleared app+0x74, the
+		// clicked object goes in hand.
+		if (_takeAllowed) {
+			dropObject();
+			holdObject(object);
+		}
+		_takeAllowed = true;
 	}
 }
 
@@ -1031,6 +1062,8 @@ void RingEngine::soundEvent(int id, int type, int reason) {
 		AS::onSound(this, id, type, why, ended);
 	else if (_zone == kZoneNI)
 		NI::onSound(this, id, type, why, ended);
+	else if (_zone == kZoneRH)
+		RH::onSound(this, id, type, why, ended);
 }
 
 void RingEngine::track(int x, int y) {

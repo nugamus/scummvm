@@ -13,6 +13,7 @@ MODULE_OBJS = \
 	world.o \
 	ring/as.o \
 	ring/ni.o \
+	ring/rh.o \
 	ring/setup.o \
 	ring/sy.o
 

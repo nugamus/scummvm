@@ -116,6 +116,10 @@ public:
 	void gameOver(int n);
 	/** `SetCursorPos`. */
 	void setMouse(int x, int y);
+	/** Clears app+0x74 from a click handler: the clicked object (flag 8) does not go in hand (spec/bag.md "Taking"). */
+	void keepHand() { _takeAllowed = false; }
+	/** `RotGetAlp` 0x405ab0: the stored alpha + 135, less 360 above 360. */
+	float rotGetAlp(int rotation);
 	Common::Point mouse() const { return _mouse; }
 	/**
 	 * `LoadSaveTimer(file, mode)` (spec/bag.md, Erda): the timers and the bag of a world
@@ -255,6 +259,7 @@ private:
 	};
 	Common::Array<Timer> _timers;
 	int _gameOver = 0; ///< app+0x70 while mode 4 is pending
+	bool _takeAllowed = true; ///< app+0x74
 	struct WorldState {
 		Common::Array<int> bag;
 		Common::Array<Timer> timers;
@@ -264,6 +269,9 @@ private:
 	Common::HashMap<Common::String, WorldState> _worldStates;
 	Common::RandomSource _random{ "ring" };
 };
+
+/** The running engine, for the zone code (ring/zone.h). */
+extern RingEngine *g_engine;
 
 } // End of namespace Ring
 
