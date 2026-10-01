@@ -23,6 +23,7 @@
 #define RING_WORLD_H
 
 #include "common/array.h"
+#include "common/hashmap.h"
 #include "common/ptr.h"
 #include "common/rect.h"
 #include "common/str.h"
@@ -68,9 +69,42 @@ struct PuzzleText {
 	Common::String text;
 };
 
+/** `aAnimation` (spec/animation.md); frames count from 0, events report frame + 1. */
+struct Animation {
+	int id = 0;
+	int frames = 1, start = 0;
+	int mode = 4;            ///< 4 forward, 8 backward, 0x10 / 0x20 ping-pong (forward / backward first)
+	bool stopAtWrap = false; ///< flag bit 1
+	bool restart = true;     ///< back to the start frame when started
+	int frame = 0;
+	bool backward = false; ///< ping-pong's current direction
+	bool active = false, paused = false, justStarted = true;
+	uint32 frameTime = 0, lastStep = 0;
+	int lastReported = -5;
+
+	/** `aAnimation::Init` 0x416450, start frame 1. */
+	void init(int count, float fps, int flags);
+	/** 0x416670 */
+	void begin(uint32 time);
+	/** 0x416710 */
+	void end() {
+		active = false;
+		justStarted = true;
+	}
+	/** 0x416870: at most one step; true when frame + 1 is to be reported (the animation event). */
+	bool advance(uint32 time);
+};
+
+/** A rotation layer a presentation shows (`ObjPreAddImgToRot`, `ObjPreAddAniToRot`). */
+struct LayerRef {
+	int rotation = 0, layer = 0;
+};
+
 struct Presentation {
 	bool shown = false;
 	Common::Array<Common::SharedPtr<PuzzleText> > texts;
+	Common::Array<LayerRef> layers;
+	Common::Array<Common::SharedPtr<Animation> > animations; ///< its rotation layers' animations
 };
 
 /** A picture of a presentation on a puzzle (`ObjPreAddImgToPuz`, spec/drawing.md). */
@@ -116,7 +150,13 @@ struct Rotation {
 	int id = 0;
 	int zone = 0;
 	Common::String name;
-	int layers = 0;
+	/** A layer's state (rotation +0x2d, spec/rotation.md "Layers"); its pictures are the panorama's. */
+	struct Layer {
+		bool shown = false, dirty = true;
+		int frame = 0;
+		Common::SharedPtr<Animation> animation; ///< `ObjPreAddAniToRot`
+	};
+	Common::Array<Layer> layers;
 	bool paused = false; ///< +0x28: not drawn and not tracked while set
 	// ponytail: the constructor leaves alpha, beta and ran unset (E-0046); the zones set them first
 	float alpha = 0, beta = 0, ran = 85.3f;
@@ -177,7 +217,13 @@ public:
 	void setFont(const Graphics::Font *font) { _font = font; }
 
 	bool shown(int object, int presentation);
-	void showPresentation(int object, int presentation, bool shown);
+	/**
+	 * `ObjPreSho` / `ObjPreHid` (spec/animation.md): also starts / stops the presentation's
+	 * animations at `time` and shows / hides its rotation layers.
+	 */
+	void showPresentation(int object, int presentation, bool shown, uint32 time = 0);
+	/** `ObjPrePauAni` / `ObjPreUnPauAni`. */
+	void pauseAnimations(int object, int presentation, bool paused);
 	/** `ObjPreSetTxtToPuz` / `ObjPreSetTxtCooToPuz`: the presentation's `index`-th text. */
 	PuzzleText *text(int object, int presentation, int index);
 	/** `ObjPreSetImgCooOnPuz`: the `index`-th picture of the presentation, on any puzzle. */
@@ -198,6 +244,12 @@ public:
 	static const Accessibility *hit(const Common::Array<Common::SharedPtr<Accessibility> > &list, int x, int y);
 	static const Movability *hit(const Common::Array<Movability> &list, int x, int y);
 
+	/** `VarGetByte` / `VarSetByte` (spec/api.md, "Variables"): an unknown id is reported and reads 0. */
+	int varByte(int id) const;
+	void setVarByte(int id, int value);
+	float varFloat(int id) const;
+	void setVarFloat(int id, float value);
+
 private:
 	void apply(int zone, const SetupCall &c);
 
@@ -207,6 +259,9 @@ private:
 	const Graphics::Font *_font = nullptr;
 	Sounds *_sounds = nullptr;
 	int _lr = -1;
+	// ponytail: words, dwords and strings come with the zones that read them
+	Common::HashMap<int, int8> _bytes;
+	Common::HashMap<int, float> _floats;
 };
 
 } // End of namespace Ring

@@ -32,8 +32,9 @@
 namespace Ring {
 
 // Node: u32 index size, 13-word header, index stream (13-bit), u32 table size, table
-// stream (16-bit) (formats README, aqc.ksy). Sections (layers) follow; not read yet.
-bool Panorama::load(Common::SeekableReadStream &s) {
+// stream (16-bit); then one section per layer: u32 count, rate, last frame, and `count`
+// entries (u32 size, 13-word header, index stream) (formats README, aqc.ksy).
+bool Panorama::load(Common::SeekableReadStream &s, uint layerCount) {
 	uint32 size = s.size();
 	Common::Array<byte> d(size);
 	if (size < 60 || s.read(d.data(), size) != size)
@@ -64,7 +65,59 @@ bool Panorama::load(Common::SeekableReadStream &s) {
 	for (uint16 i : _index)
 		if (4u * i + 3 >= _table.size())
 			return false;
+
+	// 0x4111d0, 0x411150, 0x410d70; then the backup under the first entry (0x410e50).
+	pos += tableSize;
+	_layers.resize(layerCount);
+	for (Layer &l : _layers) {
+		if (pos + 12 > size)
+			return false;
+		uint32 count = READ_LE_UINT32(&d[pos]);
+		l.animated = READ_LE_FLOAT32(&d[pos + 4]) != 0.0f;
+		pos += 12;
+		for (uint32 e = 0; e < count; e++) {
+			if (pos + 56 > size)
+				return false;
+			uint32 streamSize = READ_LE_UINT32(&d[pos]);
+			const byte *eh = &d[pos + 4];
+			Patch p;
+			p.x0 = READ_LE_UINT32(eh + 28);
+			p.x1 = READ_LE_UINT32(eh + 32);
+			p.y0 = READ_LE_UINT32(eh + 36);
+			p.y1 = READ_LE_UINT32(eh + 40);
+			uint32 entrySize = READ_LE_UINT32(eh + 44);
+			pos += 56;
+			if (pos + streamSize > size || p.x0 >= p.x1 || p.x1 > 2048 || (p.x0 & 3) || (p.x1 & 3) ||
+				p.y0 >= p.y1 || p.y1 > (uint32)height || entrySize != (p.x1 - p.x0) * (p.y1 - p.y0) * 2)
+				return false;
+			p.index = decodeBits(d.data(), size, 13, pos * 8, (pos + streamSize) * 8, entrySize / 8);
+			pos += streamSize;
+			if (p.index.size() != entrySize / 8)
+				return false;
+			for (uint16 i : p.index)
+				if (4u * i + 3 >= _table.size())
+					return false;
+			l.entries.push_back(p);
+		}
+		if (!l.entries.empty()) {
+			l.backup = l.entries[0];
+			l.backup.index.clear();
+			for (uint32 y = l.backup.y0; y < l.backup.y1; y++)
+				for (uint32 x = l.backup.x0 / 4; x < l.backup.x1 / 4; x++)
+					l.backup.index.push_back(_index[y * 512 + x]);
+		}
+	}
 	return true;
+}
+
+void Panorama::patch(uint layer, int frame) {
+	if (layer >= _layers.size() || _layers[layer].entries.empty())
+		return;
+	const Layer &l = _layers[layer];
+	const Patch &p = frame < 0 ? l.backup : l.entries[MIN<uint>(frame, l.entries.size() - 1)];
+	uint32 w = (p.x1 - p.x0) / 4;
+	for (uint32 y = p.y0, i = 0; y < p.y1; y++, i += w)
+		memcpy(&_index[y * 512 + p.x0 / 4], &p.index[i], w * 2);
 }
 
 void RotationView::update(Rotation &r, const Panorama &p) {

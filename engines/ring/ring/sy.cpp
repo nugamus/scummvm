@@ -221,7 +221,7 @@ void onClick(RingEngine *vm, int object, int value) {
 		if (value <= 3)
 			closeQuestion(vm, value >= 2 ? 2 : 0);
 		if (value == 2) // 0x431140: a new game starts in zone AS
-			vm->setZone(kZoneAS, 999);
+			vm->goZone(kZoneAS, 999);
 		break;
 	default:
 		break;

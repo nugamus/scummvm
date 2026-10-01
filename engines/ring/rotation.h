@@ -40,15 +40,34 @@ struct Rotation;
 /** A panorama node in memory (spec/rotation.md, "Node in memory"); 2048 columns. */
 class Panorama {
 public:
-	bool load(Common::SeekableReadStream &s);
+	/** Reads the node and its first `layerCount` sections (spec/rotation.md, "Layers"). */
+	bool load(Common::SeekableReadStream &s, uint layerCount);
 
 	/** RGB565, as the table stores it. */
 	uint16 pixel(int x, int y) const { return _table[4 * _index[(y * 2048 + x) >> 2] + (x & 3)]; }
+
+	/**
+	 * 0x4126b0: writes the layer's entry `frame` into the index array, or the backup taken
+	 * under the first entry when `frame` is negative.
+	 */
+	void patch(uint layer, int frame);
+	/** True when the layer's section has a frame rate (an animated layer). */
+	bool animated(uint layer) const { return layer < _layers.size() && _layers[layer].animated; }
 
 	int height = 0;
 	float hRange = 0, hMid = 0, vRange = 0, vMid = 0;
 
 private:
+	struct Patch {
+		uint32 x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+		Common::Array<uint16> index;
+	};
+	struct Layer {
+		bool animated = false;
+		Common::Array<Patch> entries;
+		Patch backup;
+	};
+	Common::Array<Layer> _layers;
 	Common::Array<uint16> _table, _index;
 };
 
