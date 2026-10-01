@@ -164,6 +164,7 @@ struct Rotation {
 	};
 	Common::Array<Layer> layers;
 	bool paused = false; ///< +0x28: not drawn and not tracked while set
+	bool frozen = false; ///< +0x67: no looking around with the mouse (set while the bag is open)
 	// ponytail: the constructor leaves alpha, beta and ran unset (E-0046); the zones set them first
 	float alpha = 0, beta = 0, ran = 85.3f;
 	Common::Array<Common::SharedPtr<Accessibility> > accessibilities;
@@ -190,14 +191,20 @@ struct Rotation {
 struct DragCursor {
 	int offsetX = 0, offsetY = 0, frames = 0, kind = 0;
 	float fps = 0.0f;
+	int flags = 0, imageKind = 0; ///< the in-hand cursors' (`ObjSetPasCur` / `ObjSetActCur`); 4: `LSTICON`
 };
 
 struct Object {
 	int id = 0;
 	/** `AddObj`'s last argument: bit 0 clicks reach the zone, bit 1 button-down events, bit 2 drags. */
 	byte flags = 0;
+	Common::String name; ///< `AddObj`'s, or the language's line of aObj.ini
 	Common::String icon;
 	DragCursor dragCursors[2]; ///< passive (cursor 3), active (cursor 4)
+	DragCursor handCursors[2]; ///< in hand: passive (cursor 1), active (cursor 2) (spec/bag.md)
+	/** `ObjAddBagAni`: the bag animation, none when 0 frames. */
+	int bagFrames = 0, bagFlags = 4;
+	float bagFps = 12.5f;
 	Common::Array<Common::SharedPtr<Accessibility> > accessibilities;
 	Common::Array<Presentation> presentations;
 };
@@ -218,6 +225,9 @@ public:
 	Puzzle *puzzle(int id);
 	Rotation *rotation(int id);
 	Object *object(int id);
+
+	/** aObj.ini (formats README): the objects' names for the language (the first three letters of `lan`). */
+	void loadNames(const Common::String &lan);
 
 	/** Font 1 (spec/text.md); texts are not drawn without it. */
 	void setFont(const Graphics::Font *font) { _font = font; }

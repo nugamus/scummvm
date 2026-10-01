@@ -20,6 +20,8 @@
  */
 
 #include "common/debug.h"
+#include "common/file.h"
+#include "common/util.h"
 
 #include "graphics/font.h"
 #include "graphics/managed_surface.h"
@@ -38,6 +40,27 @@ void World::setUp(Sounds *sounds, int lr) {
 		const SetupCall *calls = zoneSetup(zone, count);
 		for (uint i = 0; i < count; i++)
 			apply(zone, calls[i]);
+	}
+}
+
+void World::loadNames(const Common::String &lan) {
+	// An object id line, then `LAN<whitespace>#name#` lines (formats README "Configuration files").
+	Common::File f;
+	if (!f.open("aObj.ini")) {
+		warning("Ring: cannot open aObj.ini");
+		return;
+	}
+	Object *o = nullptr;
+	while (!f.eos() && !f.err()) {
+		Common::String line = f.readLine();
+		line.trim();
+		if (!line.empty() && Common::isDigit(line[0])) {
+			o = object(atoi(line.c_str()));
+		} else if (o && line.hasPrefix(lan.substr(0, 3))) {
+			size_t a = line.find('#'), b = a == Common::String::npos ? a : line.find('#', a + 1);
+			if (b != Common::String::npos)
+				o->name = line.substr(a + 1, b - a - 1);
+		}
 	}
 }
 
@@ -178,18 +201,32 @@ void World::apply(int zone, const SetupCall &c) {
 		}
 		break;
 	case kAddObj: {
-		// Name and icon come from aObj.ini when present (spec/api.md); not needed yet.
+		// The name comes from aObj.ini when it has the object (loadNames, spec/api.md).
 		Common::SharedPtr<Object> o(new Object());
 		o->id = a[0];
+		o->name = str(1);
 		o->icon = str(2);
 		o->flags = (byte)a[3];
 		_objects.push_back(o);
 		break;
 	}
+	case kObjAddBagAni:
+		// (object, 1, 3, frames, fps, flags) (spec/bag.md; Q-0013 for the 1 and 3)
+		if (Object *o = object(a[0])) {
+			o->bagFrames = a[3];
+			o->bagFps = asFloat(a[4]);
+			o->bagFlags = a[5];
+		}
+		break;
+	case kObjSetPasCur:
+	case kObjSetActCur:
 	case kObjSetPasDraCur:
 	case kObjSetActDraCur:
 		if (Object *o = object(a[0])) {
-			DragCursor &d = o->dragCursors[c.call == kObjSetActDraCur];
+			bool active = c.call == kObjSetActDraCur || c.call == kObjSetActCur;
+			DragCursor &d = (c.call == kObjSetPasCur || c.call == kObjSetActCur ? o->handCursors : o->dragCursors)[active];
+			d.flags = a[6];
+			d.imageKind = a[7];
 			d.offsetX = a[1];
 			d.offsetY = a[2];
 			d.frames = a[3];

@@ -38,8 +38,11 @@ class Resources;
 /** The cursor handler (spec/cursor.md): cursors by id, one current, drawn last each frame. */
 class Cursors {
 public:
-	/** `CurAdd`: kind 3 is one picture, kind 4 an animation of `frames` at `fps`. */
-	void add(int id, const Common::String &name, int kind, int frames = 0, float fps = 0.0f);
+	/**
+	 * `CurAdd`: kind 3 is one picture, kind 4 an animation of `frames` at `fps`, from the
+	 * archive folder `folder` of SY (`CURSOR`, or `LSTICON` for image kind 4).
+	 */
+	void add(int id, const Common::String &name, int kind, int frames = 0, float fps = 0.0f, const char *folder = "CURSOR");
 	/** Drops the cursor with that id (the drag cursors, spec/cursor.md "Dragging"). */
 	void remove(int id);
 	/** `CurSetOffset`. */
@@ -53,6 +56,7 @@ private:
 	struct Cursor {
 		int id, kind;
 		Common::String name;
+		const char *folder;
 		int offsetX = 0, offsetY = 0;
 		int frames = 1;
 		uint32 frameMs = 0, lastStep = 0;
