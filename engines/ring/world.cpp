@@ -95,7 +95,7 @@ void World::apply(int zone, const SetupCall &c) {
 		r->zone = zone;
 		r->name = str(1);
 		r->paused = a[2] != 0;
-		r->layers = a[3];
+		r->layers.resize(MAX<int32>(a[3], 0));
 		_rotations.push_back(r);
 		break;
 	}
@@ -266,6 +266,49 @@ void World::apply(int zone, const SetupCall &c) {
 	case kObjPreSho:
 		showPresentation(a[0], c.argc > 1 ? a[1] : -1, true);
 		break;
+	case kObjPreAddImgToRot:
+	case kObjPreAddAniToRot: {
+		// (object, presentation, rotation, layer[, frames, fps, flags]); the layer must exist.
+		Object *o = object(a[0]);
+		Rotation *r = rotation(a[2]);
+		if (!o || !r || (uint)a[1] >= o->presentations.size() || (uint)a[3] >= r->layers.size())
+			break;
+		Presentation &pr = o->presentations[a[1]];
+		LayerRef ref;
+		ref.rotation = r->id;
+		ref.layer = a[3];
+		pr.layers.push_back(ref);
+		if (c.call == kObjPreAddAniToRot) {
+			// aRotation::AddPreAni: without flag 2 the animation keeps its frame when started.
+			Common::SharedPtr<Animation> anim(new Animation());
+			anim->init(a[4], asFloat(a[5]), a[6]);
+			if (!(a[6] & 2))
+				anim->restart = false;
+			r->layers[a[3]].animation = anim;
+			pr.animations.push_back(anim);
+		}
+		break;
+	}
+	case kObjPreSetAniIdeOnRot:
+		// (object, presentation, index, id): the presentation's index-th rotation animation.
+		if (Object *o = object(a[0]))
+			if ((uint)a[1] < o->presentations.size() && (uint)a[2] < o->presentations[a[1]].animations.size())
+				o->presentations[a[1]].animations[a[2]]->id = a[3];
+		break;
+	case kObjPrePauAni:
+		pauseAnimations(a[0], a[1], true);
+		break;
+	case kVarDefByte:
+		if (!_bytes.contains(a[0]))
+			_bytes[a[0]] = (int8)a[1];
+		break;
+	case kVarDefFloa:
+		if (!_floats.contains(a[0]))
+			_floats[a[0]] = asFloat(a[1]);
+		break;
+	case kVarSetByte:
+		setVarByte(a[0], a[1]);
+		break;
 	case kSouAdd:
 		if (_sounds)
 			_sounds->add(a[0], a[1], str(2));
@@ -341,13 +384,132 @@ PuzzleText *World::text(int id, int presentation, int index) {
 	return (uint)index < pr.texts.size() ? pr.texts[index].get() : nullptr;
 }
 
-void World::showPresentation(int id, int presentation, bool shown) {
+void World::showPresentation(int id, int presentation, bool shown, uint32 time) {
 	Object *o = object(id);
 	if (!o)
 		return;
-	for (uint i = 0; i < o->presentations.size(); i++)
-		if (presentation < 0 || (int)i == presentation)
-			o->presentations[i].shown = shown;
+	for (uint i = 0; i < o->presentations.size(); i++) {
+		if (presentation >= 0 && (int)i != presentation)
+			continue;
+		Presentation &pr = o->presentations[i];
+		pr.shown = shown;
+		for (auto &anim : pr.animations) {
+			if (shown)
+				anim->begin(time);
+			else
+				anim->end();
+		}
+		// 0x4103d0, 0x411580: a layer whose shown flag changes becomes dirty.
+		for (const LayerRef &ref : pr.layers) {
+			Rotation::Layer &l = rotation(ref.rotation)->layers[ref.layer];
+			if (l.shown != shown) {
+				l.shown = shown;
+				l.dirty = true;
+			}
+		}
+	}
+}
+
+void World::pauseAnimations(int id, int presentation, bool paused) {
+	Object *o = object(id);
+	if (o && (uint)presentation < o->presentations.size())
+		for (auto &anim : o->presentations[presentation].animations)
+			anim->paused = paused;
+}
+
+int World::varByte(int id) const {
+	if (!_bytes.contains(id)) {
+		warning("Ring: VarGetByte: no variable %d", id);
+		return 0;
+	}
+	return _bytes.getVal(id);
+}
+
+void World::setVarByte(int id, int value) {
+	if (_bytes.contains(id))
+		_bytes[id] = (int8)value;
+	else
+		warning("Ring: VarSetByte: no variable %d", id);
+}
+
+float World::varFloat(int id) const {
+	if (!_floats.contains(id)) {
+		warning("Ring: VarGetFloa: no variable %d", id);
+		return 0.0f;
+	}
+	return _floats.getVal(id);
+}
+
+void World::setVarFloat(int id, float value) {
+	if (_floats.contains(id))
+		_floats[id] = value;
+	else
+		warning("Ring: VarSetFloa: no variable %d", id);
+}
+
+void Animation::init(int count, float fps, int flags) {
+	frames = MAX(count, 1);
+	start = 0;
+	mode = flags & 4 ? 4 : flags & 8 ? 8 : flags & 0x10 ? 0x10 : flags & 0x20 ? 0x20 : 0;
+	stopAtWrap = (flags & 2) != 0;
+	frame = mode == 8 || mode == 0x20 ? frames - 1 : start;
+	backward = mode == 0x20;
+	frameTime = fps > 0.0f ? (uint32)(1000.0f / fps) : 0;
+}
+
+void Animation::begin(uint32 time) {
+	active = true;
+	if (restart) {
+		if (mode == 4 || mode == 0x10)
+			frame = start;
+		else if (mode == 8 || mode == 0x20)
+			frame = frames - 1;
+	}
+	if (mode == 0x10 || mode == 0x20)
+		backward = mode == 0x20;
+	lastStep = time;
+	lastReported = -5;
+}
+
+bool Animation::advance(uint32 time) {
+	if (!active)
+		return false;
+	if (justStarted) {
+		justStarted = false;
+	} else {
+		if (paused)
+			return false;
+		int step = 0;
+		if (time - lastStep > frameTime) {
+			step = 1;
+			lastStep = time;
+		}
+		bool wrapped = false;
+		if (mode == 4 || (mode >= 0x10 && !backward)) {
+			frame += step;
+			if (frame >= frames) {
+				frame = mode == 4 ? start : frames - 1;
+				backward = mode != 4;
+				wrapped = true;
+			}
+		} else if (mode == 8 || mode >= 0x10) {
+			frame -= step;
+			if (frame < start) {
+				frame = mode == 8 ? frames - 1 : start;
+				backward = false;
+				wrapped = true;
+			}
+		}
+		if (wrapped && stopAtWrap)
+			end();
+		if (!active) {
+			lastReported = frame + 1;
+			return false;
+		}
+	}
+	bool report = frame + 1 != lastReported;
+	lastReported = frame + 1;
+	return report;
 }
 
 PuzzleImage *World::image(int id, int presentation, int index) {

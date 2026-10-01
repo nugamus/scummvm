@@ -29,6 +29,7 @@
 #include "engines/util.h"
 
 #include "graphics/fonts/winfont.h"
+#include "image/png.h"
 
 #include "ring/cursor.h"
 #include "ring/detection.h"
@@ -40,6 +41,44 @@
 #include "ring/ring/zones.h"
 
 namespace Ring {
+
+// The zone's handlers; puzzle 1's events always go to SY (spec/events.md).
+static void onAccessibility(RingEngine *vm, int zone, int object, int value) {
+	if (zone == kZoneSY)
+		SY::onAccessibility(vm, object, value);
+}
+
+static void onNothing(RingEngine *vm, int zone) {
+	if (zone == kZoneSY)
+		SY::onNothing(vm);
+}
+
+static void onClick(RingEngine *vm, int zone, int object, int value) {
+	if (zone == kZoneSY)
+		SY::onClick(vm, object, value);
+	else if (zone == kZoneAS)
+		AS::onClick(vm, object, value);
+}
+
+static void onTimer(RingEngine *vm, int zone, int id) {
+	if (zone == kZoneAS)
+		AS::onTimer(vm, id);
+}
+
+static void onAnimation(RingEngine *vm, int zone, int id, int frame) {
+	if (zone == kZoneAS)
+		AS::onAnimation(vm, id, frame);
+}
+
+static void onBeforeMove(RingEngine *vm, int zone, int from, int to, int index, int value, int kind) {
+	if (zone == kZoneAS)
+		AS::onBeforeMove(vm, from, to, kind);
+}
+
+static void onAfterMove(RingEngine *vm, int zone, int to, int from, int index, int value, int kind) {
+	if (zone == kZoneAS)
+		AS::onAfterMove(vm, to, from, kind);
+}
 
 RingEngine::RingEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
@@ -73,9 +112,9 @@ void RingEngine::pollEvents(uint32 ms) {
 			_escapeDown = false;
 		else if (event.type == Common::EVENT_MOUSEMOVE && !_scripted)
 			_mouse = event.mouse;
-		else if (event.type == Common::EVENT_LBUTTONDOWN || event.type == Common::EVENT_LBUTTONUP) {
-			if (!_scripted)
-				_mouse = event.mouse;
+		else if ((event.type == Common::EVENT_LBUTTONDOWN || event.type == Common::EVENT_LBUTTONUP) && !_scripted) {
+			// While dev_input drives the mouse the real buttons are ignored.
+			_mouse = event.mouse;
 			_buttons.push_back(Button{ event.type == Common::EVENT_LBUTTONDOWN, event.mouse });
 		}
 	}
@@ -214,17 +253,35 @@ Common::Error RingEngine::run() {
 
 	startMenu(false);
 	_buttons.clear();
+	// Development: dev_rotation=<id> starts in the rotation's zone on that rotation (alpha 90, ran 85.3).
+	if (Rotation *r = _world->rotation(ConfMan.getInt("dev_rotation"))) {
+		_zone = r->zone;
+		_menuZone = 0;
+		r->setAlpha(90.0f);
+		r->ran = 85.3f;
+		rotSetAct(r->id);
+	}
 	// Development: dev_input="ms:move x y;ms:click x y;ms:key code 0;..." replays input at ms after the menu opens.
 	Common::StringArray script;
 	for (const Common::String &step : Common::StringTokenizer(ConfMan.get("dev_input"), ";").split())
 		script.push_back(step);
-	_scripted = !script.empty(); // the real mouse's moves are ignored while scripted
+	_scripted = !script.empty(); // the real mouse (moves and buttons) is ignored while scripted
 	uint32 menuStart = g_system->getMillis();
 	while (!shouldQuit()) {
 		pollEvents();
 		while (!script.empty()) {
 			uint ms, x, y;
-			char what[8];
+			char what[8], file[256];
+			if (sscanf(script[0].c_str(), "%u:snap %255s", &ms, file) == 2) {
+				// "snap C:/tmp/x.png" saves the screen as it was last presented
+				if (g_system->getMillis() - menuStart < ms)
+					break;
+				Common::DumpFile out;
+				if (!out.open(Common::FSNode(Common::Path(file, '/'))) || !::Image::writePNG(out, *_screen.surfacePtr()))
+					warning("Ring: cannot write %s", file);
+				script.remove_at(0);
+				continue;
+			}
 			if (sscanf(script[0].c_str(), "%u:%7s %u %u", &ms, what, &x, &y) != 4) {
 				script.remove_at(0);
 				continue;
@@ -258,6 +315,7 @@ Common::Error RingEngine::run() {
 			else
 				click(b.pos.x, b.pos.y);
 		}
+		runTimers();
 		frame();
 		g_system->delayMillis(10);
 	}
@@ -380,7 +438,7 @@ void RingEngine::rotSetAct(int rotation, bool start, bool stop) {
 		Common::File f;
 		Common::Path path = Common::Path("DATA").appendComponent(zoneFolder(r->zone)).appendComponent("NODE").appendComponent(r->name + ".aqc");
 		r->panorama.reset(new Panorama());
-		if (!f.open(path) || !r->panorama->load(f)) {
+		if (!f.open(path) || !r->panorama->load(f, r->layers.size())) {
 			warning("Ring: cannot load the node %s", path.toString().c_str());
 			r->panorama.reset();
 			return;
@@ -395,14 +453,78 @@ void RingEngine::rotSetAct(int rotation, bool start, bool stop) {
 	_sounds->enterPlace(&r->sounds, start, stop, true, r->alpha + 135.0f, _preferences[2]);
 }
 
-void RingEngine::setZone(int zone, int entry) {
-	// ponytail: the CD check, the zone's archive (ART_x) and the saved-game entry (1000) come with their specs
+void RingEngine::goZone(int zone, int entry) {
+	// ponytail: the CD check, the ambient lists (0x41a820), the zone's archive (ART_x) and the
+	// saved-game entry (1000) come with their specs
+	leavePlace();
+	_sounds->stopAll(8);
 	_zone = zone;
 	_menuZone = 0;
 	if (zone == kZoneAS)
 		AS::enter(this, entry);
 	else
 		warning("Ring: zone %d is not implemented yet", zone);
+}
+
+void RingEngine::plyCin(const Common::String &name, int channel) {
+	playMovie(this, Common::Path("DATA").appendComponent(zoneFolder(_zone)).appendComponent("PLA").appendComponent(name + ".cnm"), channel);
+}
+
+void RingEngine::plyCinMul(const Common::String &name) {
+	_sounds->stopType(kSoundEffect, 0x100);
+	_sounds->stopType(kSoundDialogue, 0x100);
+	plyCin(name, languageChannel());
+}
+
+int RingEngine::languageId() const {
+	switch (_gameDescription->language) {
+	case Common::FR_FRA: return 2;
+	case Common::DE_DEU: return 3;
+	case Common::IT_ITA: return 4;
+	case Common::ES_ESP: return 5;
+	case Common::SV_SWE: return 6;
+	case Common::NL_NLD: return 7;
+	default: return 1;
+	}
+}
+
+int RingEngine::languageChannel() const {
+	static const int channels[] = { 1, 1, 2, 3, 1, 2, 1, 3 }; // by language id 1..7
+	return channels[languageId()];
+}
+
+void RingEngine::timSta(int id, uint32 ms) {
+	if (timerRunning(id))
+		return; // aTimer::StartTimer refuses a running id
+	_timers.push_back(Timer{ id, ms, g_system->getMillis() + ms });
+}
+
+void RingEngine::timSto(int id) {
+	for (uint i = 0; i < _timers.size(); i++)
+		if (_timers[i].id == id)
+			_timers.remove_at(i--);
+}
+
+bool RingEngine::timerRunning(int id) const {
+	for (const Timer &t : _timers)
+		if (t.id == id)
+			return true;
+	return false;
+}
+
+void RingEngine::runTimers() {
+	// One WM_TIMER per due timer and loop, as Windows posts at most one pending per timer.
+	uint32 now = g_system->getMillis();
+	Common::Array<int> due;
+	for (Timer &t : _timers) {
+		if ((int32)(now - t.due) >= 0) {
+			t.due = now + t.period;
+			due.push_back(t.id);
+		}
+	}
+	for (int id : due)
+		if (timerRunning(id))
+			onTimer(this, _zone, id);
 }
 
 bool RingEngine::puzSetMod(int puzzle, int mode, int object) {
@@ -465,6 +587,7 @@ void RingEngine::drawView() {
 		if (now - _panTime >= 17)
 			_panTime = now;
 		_view.update(*r, *r->panorama);
+		updateLayers(*r);
 		_view.draw(*r->panorama, _screen, 16);
 		// 3D sounds follow the view (0x41ed80, every frame).
 		float alpha = r->alpha + 135.0f;
@@ -481,6 +604,39 @@ void RingEngine::drawView() {
 	}
 	if (Puzzle *p1 = _world->puzzle(1))
 		_world->draw(*p1, *_resources, _screen);
+}
+
+void RingEngine::updateLayers(Rotation &r) {
+	uint32 now = g_system->getMillis();
+	for (uint i = 0; i < r.layers.size(); i++) {
+		Common::SharedPtr<Animation> anim = r.layers[i].animation;
+		if (anim && anim->advance(now))
+			onAnimation(this, _zone, anim->id, anim->frame + 1);
+	}
+	// An animated layer takes its animation's state: stopped hides it (0x4103d0), running sets its frame (0x411530).
+	for (uint i = 0; i < r.layers.size(); i++) {
+		Rotation::Layer &l = r.layers[i];
+		if (!l.animation || !r.panorama->animated(i))
+			continue;
+		if (!l.animation->active) {
+			if (l.shown) {
+				l.shown = false;
+				l.dirty = true;
+			}
+		} else if (l.frame != l.animation->frame) {
+			l.frame = l.animation->frame;
+			if (l.shown)
+				l.dirty = true;
+		}
+	}
+	// 0x4114c0
+	for (uint i = 0; i < r.layers.size(); i++) {
+		Rotation::Layer &l = r.layers[i];
+		if (l.dirty) {
+			r.panorama->patch(i, l.shown ? l.frame : -1);
+			l.dirty = false;
+		}
+	}
 }
 
 void RingEngine::turn(Rotation &r, float alpha, float beta, float ran) {
@@ -509,10 +665,13 @@ void RingEngine::turn(Rotation &r, float alpha, float beta, float ran) {
 	}
 }
 
-void RingEngine::move(const Movability &m) {
-	// ponytail: the zone's movability events (0x40c2b0, 0x40c420) come with the zone handlers;
-	// Ctrl-clicks (no turn, no ride) with the key spec's modifiers
+void RingEngine::move(const Movability &m, int index) {
+	// ponytail: Ctrl-clicks (no turn, no ride) come with the key spec's modifiers
 	Rotation *from = _mode == 1 ? _world->rotation(_rotation) : nullptr;
+	int fromId = from ? _rotation : _puzzle, zone = _zone;
+	onBeforeMove(this, _zone, fromId, m.target, index, m.hotSpot.value, m.kind); // 0x40c2b0
+	if (_zone != zone)
+		return; // the zone changed (mode 4)
 	if (from && m.turn == 0)
 		turn(*from, m.alpha1, m.beta1, m.ran1);
 	else if (from && m.turn == 1)
@@ -529,8 +688,8 @@ void RingEngine::move(const Movability &m) {
 	} else if (toPuzzle) {
 		_sounds->prepareTransition(&toPuzzle->sounds);
 	}
-	int zone = from ? from->zone : _zone;
-	if (m.ride.empty() || !playMovie(this, Common::Path("DATA").appendComponent(zoneFolder(zone)).appendComponent("PLA").appendComponent(m.ride + ".cnm"), 0))
+	int rideZone = from ? from->zone : _zone;
+	if (m.ride.empty() || !playMovie(this, Common::Path("DATA").appendComponent(zoneFolder(rideZone)).appendComponent("PLA").appendComponent(m.ride + ".cnm"), 0))
 		_sounds->finishTransition();
 	if (to) {
 		rotSetAct(m.target);
@@ -538,22 +697,7 @@ void RingEngine::move(const Movability &m) {
 	} else {
 		puzSetAct(m.target);
 	}
-}
-
-// The zone's handlers; puzzle 1's events always go to SY (spec/events.md).
-static void onAccessibility(RingEngine *vm, int zone, int object, int value) {
-	if (zone == kZoneSY)
-		SY::onAccessibility(vm, object, value);
-}
-
-static void onNothing(RingEngine *vm, int zone) {
-	if (zone == kZoneSY)
-		SY::onNothing(vm);
-}
-
-static void onClick(RingEngine *vm, int zone, int object, int value) {
-	if (zone == kZoneSY)
-		SY::onClick(vm, object, value);
+	onAfterMove(this, _zone, m.target, fromId, index, m.hotSpot.value, m.kind); // 0x40c420
 }
 
 void RingEngine::soundEvent(int id, int type, int reason) {
@@ -687,7 +831,7 @@ void RingEngine::click(int x, int y) {
 	if (p1 && p1->mode != 2) {
 		if (const Movability *m = World::hit(p1->movabilities, x, y)) {
 			Movability copy = *m;
-			move(copy);
+			move(copy, m - p1->movabilities.begin());
 			return;
 		}
 	}
@@ -706,7 +850,7 @@ void RingEngine::click(int x, int y) {
 		if (q == p) {
 			if (const Movability *m = World::hit(p->movabilities, x, y)) {
 				Movability copy = *m;
-				move(copy);
+				move(copy, m - p->movabilities.begin());
 				return;
 			}
 		}
@@ -724,7 +868,7 @@ void RingEngine::click(int x, int y) {
 	}
 	if (const Movability *m = World::hit(r->movabilities, pt.x, pt.y)) {
 		Movability copy = *m;
-		move(copy);
+		move(copy, m - r->movabilities.begin());
 	}
 }
 

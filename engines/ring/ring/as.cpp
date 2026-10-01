@@ -19,33 +19,293 @@
  *
  */
 
-// Zone AS (spec/rotation.md for the entry of a new game).
+// Zone AS: the hub, Ish's island and the ring dial (games/ring/docs/as.md).
 
+#include "common/system.h"
 #include "common/textconsole.h"
 
+#include "ring/resources.h"
 #include "ring/ring.h"
+#include "ring/sound.h"
 #include "ring/world.h"
 #include "ring/ring/zones.h"
 
 namespace Ring {
 namespace AS {
 
-void enter(RingEngine *vm, int entry) {
-	if (entry == 999) { // a new game (0x437ba0, E-0046)
-		Rotation *r = vm->world().rotation(80001);
-		if (!r)
-			return;
-		r->setAlpha(90.0f);
-		r->ran = 85.3f;
-		vm->rotSetAct(80001);
-		// ponytail: timers 2, 3, 4 (100, 220, 150 s) come with the zone's handlers
-		return;
+enum {
+	kObjSoundPoints = 80012, kObjSky16 = 80016, kObjDial = 80018, kObjWorlds = 80019,
+	kObjDialButtons = 80021, kObjSky = 80022,
+	kRotIsland = 80001, kRotChamber = 80101,
+	kByteSway = 80001, kByteTarget = 80004, kByteFrame = 80005,
+	kFloatSign = 80001, kFloatAmount = 80002,
+	kByteWorldDone = 90001 ///< + 0..3: NI, N2, FO, WA done (SY's variables)
+};
+
+// ponytail: the inventory (bag, object in hand) comes with its spec; nothing is in hand yet
+static bool holding(RingEngine *) { return false; }
+
+static void showRotation(RingEngine *vm, int id, float alpha, float beta, float ran, bool setBeta = true) {
+	if (Rotation *r = vm->world().rotation(id)) {
+		r->setAlpha(alpha);
+		if (setBeta)
+			r->beta = beta;
+		r->ran = ran;
+		vm->rotSetAct(id);
 	}
-	warning("Ring: AS entry %d is not implemented yet", entry);
+}
+
+static void startTimers(RingEngine *vm) {
+	vm->timSta(2, 100000);
+	vm->timSta(3, 220000);
+	vm->timSta(4, 150000);
+}
+
+void enter(RingEngine *vm, int entry) {
+	int lang = vm->languageId();
+	switch (entry) {
+	case 999: // a new game
+		showRotation(vm, kRotIsland, 90.0f, 0.0f, 85.3f, false);
+		startTimers(vm);
+		break;
+	case 998: // the intro's chain of pictures and sounds (onSound)
+		vm->plyCinMul(lang < 4 || (lang > 5 && lang != 7) ? "1164" : "1163");
+		vm->plyCin("1166");
+		vm->puzSetAct(80011);
+		vm->sounds().play(80100, false);
+		break;
+	case 5: // down from the sky
+		vm->plyCin("1047");
+		showRotation(vm, 80003, 270.0f, 0.0f, 85.3f);
+		break;
+	case 6: // the end
+		vm->plyCinMul(lang == 4 || lang == 5 || lang == 7 ? "1160" : lang == 6 ? "1161" : "1162");
+		vm->puzSetAct(80001);
+		vm->sounds().play(80107, false);
+		break;
+	default:
+		warning("Ring: AS entry %d is not implemented", entry);
+		break;
+	}
+}
+
+void onClick(RingEngine *vm, int object, int value) {
+	World &w = vm->world();
+	Sounds &snd = vm->sounds();
+	// ponytail: with an object in hand every click drops it, and Death on the ring's place
+	// (80007) ends the game (BagRemAll, stop 0x400, TimStoAll, GoZone(7, 6)): with the inventory
+	if (holding(vm))
+		return;
+	switch (object) {
+	case kObjSoundPoints: {
+		static const int sounds[] = { 80028, 80025, 80021, 80024, 80022, 80026, 80027, 80023 };
+		if (value >= 0 && value < 8)
+			snd.play(sounds[value], false);
+		break;
+	}
+	case kObjDial: { // a done world's mark: its picture and monologue again
+		static const int ambient[] = { 80201, 80203, 80204, 80205 }, volume[] = { 80, 90, 90, 80 };
+		static const int monologue[] = { 80040, 80049, 80058, 80068 };
+		if (value >= 0 && value < 4 && w.varByte(kByteWorldDone + value) == 1) {
+			vm->puzSetAct(80002 + value);
+			snd.setVolume(ambient[value], volume[value]);
+			snd.play(monologue[value], false);
+		}
+		break;
+	}
+	case kObjWorlds: { // entering the world on the puzzle, unless it is done
+		static const int world[] = { 1, 2, 1, 3, 2, 4 };
+		static const int zone[] = { 0, kZoneNI, kZoneN2, kZoneFO, kZoneWA };
+		if (value >= 0 && value < 6 && w.varByte(kByteWorldDone - 1 + world[value]) == 0) {
+			// ponytail: the worlds' own entries (0x44a7d0, 0x436270, 0x443710, 0x43ad00: entry 0
+			// the first time, else the resume entry 10 from SY's dwords) come with those zones
+			vm->timStoAll();
+			vm->goZone(zone[world[value]], 0);
+		}
+		break;
+	}
+	case kObjDialButtons:
+		if (value == 0) { // go: ride to the world the ring points at
+			static const struct {
+				int frame, puzzle;
+				const char *video;
+			} go[] = { { 11, 80007, "1143" }, { 21, 80009, "1144" }, { 31, 80008, "1145" }, { 41, 80010, "1146" } };
+			int target = w.varByte(kByteTarget);
+			if (target == 1) {
+				vm->puzSetAct(80006);
+				if (w.varByte(kByteWorldDone) == 0) {
+					vm->plyCin("1141");
+				} else {
+					vm->plyCin("1142");
+					w.showPresentation(kObjWorlds, 0, true, g_system->getMillis());
+				}
+			}
+			for (const auto &g : go) {
+				if (target == g.frame) {
+					vm->puzSetAct(g.puzzle);
+					vm->plyCin(g.video);
+				}
+			}
+		} else if (value >= 1 && value <= 4) { // turn the ring by 10 × value frames
+			snd.play(80080, false);
+			snd.play(80082, false);
+			int target = w.varByte(kByteFrame) + 10 * value;
+			w.setVarByte(kByteTarget, target > 49 ? target - 50 : target);
+			w.pauseAnimations(kObjDial, 1, false);
+			w.setAccessibilities(kObjDialButtons, false, 0, 4);
+		}
+		break;
+	case kObjSky:
+		returnFromWorld(vm, 5);
+		break;
+	default:
+		break;
+	}
+}
+
+void onAnimation(RingEngine *vm, int id, int frame) {
+	World &w = vm->world();
+	if (id != 80001)
+		return;
+	if (frame == w.varByte(kByteTarget)) { // the ring stops on its target
+		w.pauseAnimations(kObjDial, 1, true);
+		w.setAccessibilities(kObjDialButtons, true, 0, 4);
+		vm->sounds().stop(80082, 0x400);
+		vm->sounds().play(80081, false);
+	}
+	w.setVarByte(kByteFrame, frame);
+}
+
+void onBeforeMove(RingEngine *vm, int from, int to, int kind) {
+	// From a world's puzzle back to the chamber: the ride's video.
+	if (kind != 2 || to != kRotChamber)
+		return;
+	switch (from) {
+	case 80006: vm->plyCin(vm->world().varByte(kByteWorldDone) == 0 ? "1151" : "1152"); break;
+	case 80007: vm->plyCin("1153"); break;
+	case 80009: vm->plyCin("1154"); break;
+	case 80008: vm->plyCin("1155"); break;
+	case 80010: vm->plyCin("1156"); break;
+	default: break;
+	}
+}
+
+void onAfterMove(RingEngine *vm, int to, int from, int kind) {
+	if (kind == 2 && to == kRotChamber && from >= 80006 && from <= 80010)
+		vm->world().setVarByte(80003, 0);
+}
+
+void onTimer(RingEngine *vm, int id) {
+	World &w = vm->world();
+	switch (id) {
+	case 2:
+	case 3:
+	case 4: { // a voice, then the sway, the flicker and a whisper
+		static const uint32 sway[] = { 20, 30, 10 };
+		vm->sounds().play(80016 + id, false);
+		if (!vm->timerRunning(5))
+			vm->timSta(5, sway[id - 2]);
+		if (!vm->timerRunning(6))
+			vm->timSta(6, 10);
+		if (!vm->sounds().typePlaying(kSoundDialogue))
+			vm->sounds().play(80004 + vm->rnd().getRandomNumber(11), false);
+		break;
+	}
+	case 5: { // the view sways from side to side and settles (E-0059)
+		w.setVarByte(kByteSway, w.varByte(kByteSway) + 1);
+		float d = w.varFloat(kFloatSign) * w.varFloat(kFloatAmount);
+		if (Rotation *r = w.rotation(vm->currentRotation())) {
+			r->beta += d;
+			r->alpha += d * 0.5f;
+		}
+		w.setVarFloat(kFloatSign, w.varFloat(kFloatSign) * -1.0f);
+		w.setVarFloat(kFloatAmount, w.varFloat(kFloatAmount) * (float)(5.0 / 6.0));
+		if (w.varByte(kByteSway) > 50) {
+			w.setVarByte(kByteSway, 0);
+			w.setVarFloat(kFloatAmount, 2.0f);
+			vm->timSto(5);
+			vm->timSto(6);
+			w.showPresentation(kObjSky16, -1, false);
+		}
+		break;
+	}
+	case 6: // 80016 flickers
+		w.showPresentation(kObjSky16, -1, vm->rnd().getRandomNumber(9) % 2 == 0, g_system->getMillis());
+		break;
+	default:
+		break;
+	}
 }
 
 void onSound(RingEngine *vm, int id, int type, int reason, int ended) {
-	// ponytail: the zone's sound chains (0x437190) come with its handlers
+	if (!ended)
+		return;
+	World &w = vm->world();
+	Sounds &snd = vm->sounds();
+	// The four monologues; at a chain's end its world's ambient sound comes back up.
+	static const struct {
+		int first, last, ambient, state;
+	} chains[] = { { 80040, 80048, 80201, 2 }, { 80049, 80057, 80203, 3 }, { 80058, 80067, 80204, 4 }, { 80068, 80080, 80205, 5 } };
+	for (const auto &c : chains) {
+		if (id >= c.first && id < c.last) {
+			snd.play(id + 1, false);
+			return;
+		}
+		if (id == c.last) {
+			snd.setVolume(c.ambient, 100);
+			w.setVarByte(80002, c.state);
+			return;
+		}
+	}
+	switch (id) {
+	case 80100: vm->puzSetAct(80012); snd.play(80101, false); break;
+	case 80101: vm->puzSetAct(80011); snd.play(80102, false); break;
+	case 80102: vm->puzSetAct(80012); snd.play(80103, false); break;
+	case 80103: vm->plyCin("1157"); vm->puzSetAct(80013); snd.play(80104, false); break;
+	case 80104: snd.play(80105, false); break;
+	case 80105: vm->plyCin("1158"); vm->puzSetAct(80014); snd.play(80106, false); break;
+	case 80106:
+		startTimers(vm);
+		showRotation(vm, kRotIsland, 270.0f, -26.0f, 85.3f);
+		break;
+	case 80107: // the end: Isha's picture and words (0x431190(7, 0), games/ring/docs/sy.md)
+		vm->plyCin("1159");
+		vm->setZone(kZoneSY);
+		vm->puzSetAct(1);
+		w.showPresentation(7, 0, true, g_system->getMillis());
+		snd.play(90001, false);
+		break;
+	default:
+		break;
+	}
+}
+
+void returnFromWorld(RingEngine *vm, int n) {
+	World &w = vm->world();
+	static const int monologue[] = { 80040, 80049, 80058, 80068 };
+	if (n >= 1 && n <= 4) {
+		// ponytail: BagRemAll, Death (BagAdd(80020)) once all four are done and FO's type 2
+		// volume of 100 (0x406e60) come with the inventory and the type volumes
+		vm->setZone(kZoneAS);
+		w.setAccessibilities(kObjDial, true, n - 1, n - 1);
+		w.setVarByte(kByteWorldDone - 1 + n, 1);
+		w.showPresentation(kObjDial, n + 1, true, g_system->getMillis());
+		showRotation(vm, kRotChamber, 90.0f, 0.0f, 85.3f, false);
+		vm->sounds().play(monologue[n - 1], false);
+		if (n == 1) {
+			w.setAccessibilities(kObjWorlds, false, 0, 0);
+			w.setAccessibilities(kObjWorlds, true, 1, 1);
+		}
+	} else if (n == 5) {
+		vm->goZone(kZoneAS, 5);
+	} else if (n == 13) {
+		// ponytail: BagRemAll and hiding the inventory (0x419350) come with the inventory
+		vm->timStoAll();
+		vm->sounds().stopAll(0x400);
+		vm->setZone(kZoneAS);
+		showRotation(vm, kRotChamber, 90.0f, 0.0f, 85.3f, false);
+		startTimers(vm);
+	}
 }
 
 } // End of namespace AS

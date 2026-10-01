@@ -43,8 +43,19 @@ void onSound(RingEngine *vm, int id, int type, int reason, int ended);
 namespace AS {
 /** GameSetZoneAS (0x437ba0): entering the zone at `entry` (999: a new game). */
 void enter(RingEngine *vm, int entry);
+/** The object click (0x4364a0). */
+void onClick(RingEngine *vm, int object, int value);
+/** The animation event (0x437110). */
+void onAnimation(RingEngine *vm, int id, int frame);
+/** Before / after a movability (0x436c10 / 0x436d60). */
+void onBeforeMove(RingEngine *vm, int from, int to, int kind);
+void onAfterMove(RingEngine *vm, int to, int from, int kind);
+/** The timer event (0x436df0). */
+void onTimer(RingEngine *vm, int id);
 /** The sound event (0x437190). */
 void onSound(RingEngine *vm, int id, int type, int reason, int ended);
+/** 0x437750: back from world n (1 NI, 2 N2, 3 FO, 4 WA); 5 leaves by the sky, 13 restarts the hub. */
+void returnFromWorld(RingEngine *vm, int n);
 }
 
 } // End of namespace Ring

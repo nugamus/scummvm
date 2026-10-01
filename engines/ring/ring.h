@@ -24,6 +24,7 @@
 
 #include "common/array.h"
 #include "common/ptr.h"
+#include "common/random.h"
 #include "common/rect.h"
 #include "common/str.h"
 
@@ -77,6 +78,8 @@ public:
 	World &world() { return *_world; }
 	Cursors &cursors() { return *_cursors; }
 	Sounds &sounds() { return *_sounds; }
+	/** The zones' rand(). */
+	Common::RandomSource &rnd() { return _random; }
 	/** The current zone (app+0x6e). */
 	int zone() const { return _zone; }
 	/** The sound event (0x40ced0, spec/sound.md) to the current zone's handler. */
@@ -86,8 +89,24 @@ public:
 	void puzSetAct(int puzzle, bool start = true, bool stop = true);
 	/** `RotSetAct` (0x4025b0, spec/rotation.md): the rotation becomes the current view. */
 	void rotSetAct(int rotation, bool start = true, bool stop = true);
-	/** 0x402280: enter a zone at an entry point (the zone's GameSetZone). */
-	void setZone(int zone, int entry);
+	/** `GoZone` 0x402280: leaves the place, stops the sounds, enters a zone at an entry point. */
+	void goZone(int zone, int entry);
+	/** `SetZone`: only the current zone changes. */
+	void setZone(int zone) { _zone = zone; }
+	/** The current rotation, 0 when a puzzle is shown (0x402730). */
+	int currentRotation() const { return _mode == 1 ? _rotation : 0; }
+	/** `PlyCin` 0x401490: `DATA\<zone>\PLA\<name>.cnm` with sound channel 0 (spec/video.md). */
+	void plyCin(const Common::String &name, int channel = 0);
+	/** `PlyCinMul` 0x4016a0: effects and dialogues stop, then the video plays with the language's channel. */
+	void plyCinMul(const Common::String &name);
+	/** `GetLanID` / `GetLanCha` (spec/boot.md, `AddLanguage`). */
+	int languageId() const;
+	int languageChannel() const;
+	/** `TimSta` / `TimSto` / `TimStoAll` / 0x406640 (spec/api.md, "Timers"). */
+	void timSta(int id, uint32 ms);
+	void timSto(int id);
+	void timStoAll() { _timers.clear(); }
+	bool timerRunning(int id) const;
 	/** `PuzSetMod`: refused (false) when mode 2 is asked of a puzzle already in mode 2. */
 	bool puzSetMod(int puzzle, int mode, int object);
 	/** `StartMenu` (sy.md, "Flow"). */
@@ -142,12 +161,16 @@ private:
 	void click(int x, int y);
 	/** The drag event (0x40c060) to the zone's handler. */
 	void dragEvent(int phase);
-	/** Through a movability of the current rotation or puzzle (spec/rotation.md). */
-	void move(const Movability &m);
+	/** Through movability `index` of the current rotation or puzzle (spec/rotation.md). */
+	void move(const Movability &m, int index);
 	/** 0x4101c0: an animated turn of the current rotation, one step per frame. */
 	void turn(Rotation &r, float alpha, float beta, float ran);
 	/** Draws the current rotation (or puzzle) and puzzle 1, without the cursor. */
 	void drawView();
+	/** 0x410610's layer part: animations advance (their events), layers follow, patches apply. */
+	void updateLayers(Rotation &r);
+	/** `WM_TIMER`: due timers go to the zone's handler (0x40b4a0). */
+	void runTimers();
 	/** A key (0x40b060): clicks the hot spot that has it (spec/events.md, "Keys"). */
 	void key(int code);
 
@@ -179,6 +202,12 @@ private:
 	Common::String _languageFolder;
 	bool _escapeDown = false;
 	bool _scripted = false; ///< dev_input drives the mouse
+	struct Timer {
+		int id;
+		uint32 period, due;
+	};
+	Common::Array<Timer> _timers;
+	Common::RandomSource _random{ "ring" };
 };
 
 } // End of namespace Ring
