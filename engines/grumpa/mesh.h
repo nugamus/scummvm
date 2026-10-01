@@ -23,6 +23,7 @@
 #define GRUMPA_MESH_H
 
 #include "common/array.h"
+#include "common/rect.h"
 #include "common/str.h"
 #include "graphics/managed_surface.h"
 
@@ -84,10 +85,31 @@ struct SceneSprite {
 	int frames = 0, fps = 0;
 };
 
+// One command in a trigger's list (E-0109/E-0110): apply `opcode` to the actor `targetId`
+// after `when` ticks (-1 = immediately on the click). `hasCond` marks a command guarded by a
+// condition on another actor's state (honoured later; for now such commands are skipped).
+struct SceneCommand {
+	int when = -1;
+	int targetId = 0;
+	int opcode = 0;
+	int arg1 = 0, arg2 = 0;
+	bool hasCond = false;
+};
+
+// A clickable trigger (type 0x19, E-0108): a screen polygon and the commands it runs when
+// clicked. `once` goes true after it fires if it disables itself (opcode 13 on its own id).
+struct SceneTrigger {
+	uint32 id = 0;
+	Common::Array<Common::Point> poly;
+	Common::Array<SceneCommand> cmds;
+	bool spent = false;
+};
+
 // Everything the engine reads from a Scene_<NNN>.abi today.
 struct SceneData {
 	Common::Array<SceneView> views;
 	Common::Array<SceneSprite> sprites;
+	Common::Array<SceneTrigger> triggers;
 };
 
 /** Build the view camera from its 26-float .abi block (E-0105). */
