@@ -43,21 +43,34 @@ static Vec3 normalize(const Vec3 &v) {
 	return len > 1e-6f ? Vec3(v.x / len, v.y / len, v.z / len) : v;
 }
 
+// The scene .fxi holds the render device's own 16-bit depth (E-0010). We don't yet know the
+// exact view-space-Z -> z16 mapping (Q-0008 device math), so assume a linear ramp over the
+// camera's far/range and occlude where the scene is nearer. Returns 0xFFFF (farthest) when
+// the actor is behind the camera.
+static inline uint16 depth16(float vz, float farZ) {
+	if (vz <= 0.0f || farZ <= 0.0f)
+		return 0xFFFF;
+	float t = vz / farZ;
+	if (t < 0.0f) t = 0.0f;
+	if (t > 1.0f) t = 1.0f;
+	return (uint16)(t * 65535.0f);
+}
+
 void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera &cam,
-				const Common::Array<uint16> *depth) {
-	(void)depth;  // scene-depth occlusion pending camera calibration
+				const Common::Array<uint16> *depth, int dw, int dh) {
 	const int W = screen.w, H = screen.h;
+	const bool useScene = depth && !depth->empty() && dw == W && dh == H;
 	Common::Array<float> zbuf;
-	zbuf.resize(W * H);
-	for (uint i = 0; i < zbuf.size(); i++)
-		zbuf[i] = 1e30f;
+	if (!useScene) {
+		zbuf.resize(W * H);
+		for (uint i = 0; i < zbuf.size(); i++)
+			zbuf[i] = 1e30f;
+	}
 
 	// Camera basis: right, up, forward (right-handed, looking along +forward).
 	Vec3 fwd = normalize(cam.forward);
 	Vec3 right = normalize(fwd.cross(cam.up));
 	Vec3 up = right.cross(fwd);
-	float f = 1.0f / tanf(cam.fovY * 0.5f);
-	float aspect = (float)W / (float)H;
 	Vec3 light = normalize(Vec3(-0.3f, -0.6f, -0.7f));
 
 	for (uint s = 0; s < mesh.sections.size(); s++) {
@@ -71,8 +84,8 @@ void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera
 			p.z = vz;
 			p.behind = vz < 0.01f;
 			if (!p.behind) {
-				p.sx = (vx / vz * f / aspect * 0.5f + 0.5f) * W;
-				p.sy = (0.5f - vy / vz * f * 0.5f) * H;
+				p.sx = (0.5f + 0.5f * cam.projX * vx / vz) * W;
+				p.sy = (0.5f - 0.5f * cam.projY * vy / vz) * H;
 			}
 		}
 		for (uint fi = 0; fi < sec.faces.size(); fi++) {
@@ -105,10 +118,17 @@ void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera
 					if (w0 < 0 || w1 < 0 || w2 < 0)
 						continue;
 					float z = w0 * a.z + w1 * b.z + w2 * c.z;
-					float &zb = zbuf[y * W + x];
-					if (z < zb) {
-						zb = z;
+					if (useScene) {
+						// Occlude against the pre-rendered scene depth.
+						if (depth16(z, cam.farZ) >= (*depth)[y * W + x])
+							continue;
 						screen.setPixel(x, y, col);
+					} else {
+						float &zb = zbuf[y * W + x];
+						if (z < zb) {
+							zb = z;
+							screen.setPixel(x, y, col);
+						}
 					}
 				}
 			}

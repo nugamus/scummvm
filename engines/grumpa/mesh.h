@@ -55,17 +55,31 @@ struct Mesh {
 	bool empty() const { return sections.empty(); }
 };
 
-// A fixed camera for a pre-rendered node: eye position, look direction and vertical FOV.
+// A fixed camera for a pre-rendered view (docs/spec/scene.md, E-0105): eye position, look
+// basis and the per-axis projection scales from the .abi camera block (NDC = proj*v/z).
 struct Camera {
 	Vec3 eye;
 	Vec3 forward, up;
-	float fovY;   // radians
+	float projX, projY;  // camera block[2], block[3]; 1.0 == 90 degrees
+	float farZ;          // camera block[19], the far/range value
 };
 
+// One pre-rendered view of a scene: its id, the camera id and the 26-float camera block
+// (docs/spec/scene.md). Read from a type-0x11 record in Scene_<NNN>.abi.
+struct SceneView {
+	uint32 id = 0;
+	uint32 camId = 0;
+	float cam[26] = {};
+};
+
+/** Build the view camera from its 26-float .abi block (E-0105). */
+Camera cameraFromBlock(const float cam[26]);
+
 /** Rasterise `mesh` (flat-shaded) into `screen` through `cam`, z-testing against `depth`
- *  (16-bit, the scene's .fxi) when `depth` is non-empty. Its own z-buffer otherwise. */
+ *  (16-bit, the scene's .fxi, `dw`x`dh`) when `depth` is non-empty. Its own z-buffer
+ *  otherwise. */
 void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera &cam,
-				const Common::Array<uint16> *depth);
+				const Common::Array<uint16> *depth, int dw = 0, int dh = 0);
 
 } // End of namespace Grumpa
 
