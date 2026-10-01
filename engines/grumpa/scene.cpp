@@ -298,8 +298,15 @@ static bool skipBody(AbiCur &c, uint32 t) {
 Camera cameraFromBlock(const float cam[26]) {
 	Camera c;
 	c.eye = Vec3(cam[13], cam[14], cam[15]);
-	c.forward = Vec3(0.0f, 0.0f, -1.0f);  // orientation-identity views (E-0105)
-	c.up = Vec3(0.0f, 1.0f, 0.0f);
+	// The view has no stored orientation; the camera looks at the scene target (~origin),
+	// confirmed by projecting the 0x1a meshes onto the matching background (E-0115). forward =
+	// normalize(target - eye); use a world up of +Y, except when looking near-vertical (a
+	// top-down view), where +Y is parallel to forward, so use +Z instead.
+	float len = sqrtf(c.eye.dot(c.eye));
+	c.forward = len > 1e-3f ? Vec3(-c.eye.x / len, -c.eye.y / len, -c.eye.z / len)
+							: Vec3(0.0f, 0.0f, -1.0f);
+	c.up = (c.forward.y > 0.99f || c.forward.y < -0.99f) ? Vec3(0.0f, 0.0f, 1.0f)
+														 : Vec3(0.0f, 1.0f, 0.0f);
 	c.projX = cam[2] != 0.0f ? cam[2] : 1.0f;
 	c.projY = cam[3] != 0.0f ? cam[3] : 1.0f;
 	c.farZ = cam[19];
