@@ -242,6 +242,41 @@ void World::apply(int zone, const SetupCall &c) {
 		p->images.insert_at(i, img);
 		break;
 	}
+	case kObjPreAddAniToPuz: {
+		// (object, presentation, puzzle, name, ext, x, y, draw type, priority, frames, fps, flags)
+		Puzzle *p = puzzle(a[2]);
+		Object *o = object(a[0]);
+		if (!p || !o || (uint)a[1] >= o->presentations.size())
+			break;
+		static const char *const exts[] = { "bmp", "tga", "cin", "cnm", "", "bma", "tgc" };
+		Common::SharedPtr<PuzzleImage> img(new PuzzleImage());
+		img->object = a[0];
+		img->presentation = a[1];
+		img->zone = zone;
+		img->file = str(3);
+		img->ext = (uint)a[4] < ARRAYSIZE(exts) ? exts[a[4]] : "";
+		img->x = a[5];
+		img->y = a[6];
+		img->drawType = (byte)a[7];
+		img->priority = a[8];
+		img->animation.reset(new Animation());
+		img->animation->init(a[9], asFloat(a[10]), a[11]);
+		if (!(a[11] & 2))
+			img->animation->restart = false;
+		img->frames.resize(img->animation->frames);
+		uint i = 0;
+		while (i < p->images.size() && p->images[i]->priority <= img->priority)
+			i++;
+		p->images.insert_at(i, img);
+		o->presentations[a[1]].puzzleAnimations.push_back(img->animation);
+		p->animations.push_back(img->animation);
+		break;
+	}
+	case kObjPreSetAniIdeOnPuz:
+		if (Object *o = object(a[0]))
+			if ((uint)a[1] < o->presentations.size() && (uint)a[2] < o->presentations[a[1]].puzzleAnimations.size())
+				o->presentations[a[1]].puzzleAnimations[a[2]]->id = a[3];
+		break;
 	case kObjPreAddTxtToPuz: {
 		Puzzle *p = puzzle(a[2]);
 		Object *o = object(a[0]);
@@ -393,11 +428,13 @@ void World::showPresentation(int id, int presentation, bool shown, uint32 time) 
 			continue;
 		Presentation &pr = o->presentations[i];
 		pr.shown = shown;
-		for (auto &anim : pr.animations) {
-			if (shown)
-				anim->begin(time);
-			else
-				anim->end();
+		for (auto *list : { &pr.puzzleAnimations, &pr.animations }) {
+			for (auto &anim : *list) {
+				if (shown)
+					anim->begin(time);
+				else
+					anim->end();
+			}
 		}
 		// 0x4103d0, 0x411580: a layer whose shown flag changes becomes dirty.
 		for (const LayerRef &ref : pr.layers) {
@@ -413,8 +450,9 @@ void World::showPresentation(int id, int presentation, bool shown, uint32 time) 
 void World::pauseAnimations(int id, int presentation, bool paused) {
 	Object *o = object(id);
 	if (o && (uint)presentation < o->presentations.size())
-		for (auto &anim : o->presentations[presentation].animations)
-			anim->paused = paused;
+		for (auto *list : { &o->presentations[presentation].puzzleAnimations, &o->presentations[presentation].animations })
+			for (auto &anim : *list)
+				anim->paused = paused;
 }
 
 int World::varByte(int id) const {
@@ -547,6 +585,18 @@ void World::draw(Puzzle &p, Resources &res, Graphics::ManagedSurface &dst) {
 	for (auto &img : p.images) {
 		if (!img->active || !shown(img->object, img->presentation))
 			continue;
+		if (img->animation) {
+			// 0x422940: the current frame, only while the animation runs.
+			const Animation &anim = *img->animation;
+			if (!anim.active || anim.frame < 0 || anim.frame >= (int)img->frames.size())
+				continue;
+			Common::SharedPtr<Image> &frame = img->frames[anim.frame];
+			if (!frame)
+				frame.reset(res.loadImage(img->zone, Common::String::format("%s\\%s.%04d.%s", img->file.c_str(), img->file.c_str(), anim.frame + 1, img->ext.c_str()), true, "ANI"));
+			if (frame)
+				frame->draw(dst, img->x, img->y, img->drawType);
+			continue;
+		}
 		if (!img->image)
 			img->image.reset(res.loadImage(img->zone, img->file, true));
 		if (img->image)

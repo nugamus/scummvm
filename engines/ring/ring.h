@@ -47,6 +47,7 @@ class Sounds;
 class World;
 struct HotSpot;
 struct Movability;
+struct Puzzle;
 struct Rotation;
 
 /** The drag control, app+0x99 (spec/cursor.md, "Dragging"). */
@@ -167,6 +168,8 @@ private:
 	void turn(Rotation &r, float alpha, float beta, float ran);
 	/** Draws the current rotation (or puzzle) and puzzle 1, without the cursor. */
 	void drawView();
+	/** The puzzle's animations advance (their events) before it is drawn (spec/animation.md). */
+	void advanceAnimations(Puzzle &p);
 	/** 0x410610's layer part: animations advance (their events), layers follow, patches apply. */
 	void updateLayers(Rotation &r);
 	/** `WM_TIMER`: due timers go to the zone's handler (0x40b4a0). */
