@@ -61,8 +61,12 @@ public:
 	/** Read Scenes/Scene_<num>.abi: its type-0x11 views and type-0x0d sprite props
 	 *  (docs/spec/scene.md). */
 	bool loadScene(int num, SceneData &scene);
-	/** Draw a sprite prop's current frame at its position with the blue colour key (E-0107). */
-	void drawSprite(const SceneSprite &sprite);
+	/** Draw a sprite prop's frame `frame` at its position with the blue colour key (E-0107). */
+	void drawSprite(const SceneSprite &sprite, int frame = 0);
+	/** Enter scene <num>: load its graph and decode its background (view <num>_1). */
+	bool enterScene(int num);
+	/** Redraw the current scene (cached background + each sprite's animated frame) at `now`. */
+	void renderSceneFrame(uint32 now);
 	/** Load the game's hand cursor as the system cursor (E-0005). */
 	void setGameCursor();
 	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */
@@ -84,6 +88,12 @@ private:
 	Graphics::Font *_menuFont = nullptr;
 	int _menuFontSize = 0;
 	Common::Array<Common::Rect> _menuRects;
+
+	// Current scene (docs/spec/scene.md): its graph, the decoded background, and the tick the
+	// scene was entered (for sprite animation timing).
+	SceneData _sceneData;
+	Graphics::ManagedSurface _sceneBg;
+	uint32 _sceneTick0 = 0;
 };
 
 } // End of namespace Grumpa
