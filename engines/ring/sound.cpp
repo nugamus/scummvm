@@ -133,6 +133,8 @@ static Audio::SeekableAudioStream *openSound(const Common::Path &path) {
 		}
 	}
 	n = MIN(n, samples);
+	if (channels == 2)
+		n &= ~1u; // whole stereo frames only (1746.was decodes to an odd count)
 	byte flags = Audio::FLAG_16BITS | (channels == 2 ? Audio::FLAG_STEREO : 0);
 #ifdef SCUMM_LITTLE_ENDIAN
 	flags |= Audio::FLAG_LITTLE_ENDIAN;

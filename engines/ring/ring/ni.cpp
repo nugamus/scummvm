@@ -31,6 +31,7 @@
 #include "ring/ring.h"
 #include "ring/sound.h"
 #include "ring/world.h"
+#include "ring/ring/zone.h"
 #include "ring/ring/zones.h"
 
 namespace Ring {
@@ -48,61 +49,24 @@ enum {
 	// Bytes
 	kGlugFed = 10000, kTilePlaced = 10102, kHoloOn = 10103, kCrossAt12 = 10104, kDamOpen = 10105,
 	kCrossSolved = 10106, kBoilingOn = 10107, kMosaicFirst = 10108, kMosaicCount = 10113,
-	kSpeakerDone = 10200, kFrogTaken = 10300, kMimeState = 10301, kBackFromFO = 10303,
+	kSpeakerDone = 10200, kFrogTaken = 10300, kMimeState = 10301, kBackFromRH = 10303,
 	kLeftOpen = 10420, kRightOpen = 10421, kTearIn = 10430, kHeaterOn = 10431, kHeat = 10432, kHelmetTaken = 10500,
 	// Words and dwords
-	kCrossWord = 10100, kTileWord = 10600, kGlugPlace = 10000, kGlugAlpha = 10001,
-	kScore = 90005 // SY's float
+	kCrossWord = 10100, kTileWord = 10600, kGlugPlace = 10000, kGlugAlpha = 10001
 };
 
-// Shorthands for the zone API (games/ring/docs/ni.md, first paragraph).
-static RingEngine *g_vm;
-static World &w() { return g_vm->world(); }
-static Bag &bag() { return g_vm->bag(); }
-static Sounds &snd() { return g_vm->sounds(); }
-static int byte_(int id) { return w().varByte(id); }
-static void setByte(int id, int v) { w().setVarByte(id, v); }
-static int word(int id) { return w().var(World::kVarWord, id); }
-static void setWord(int id, int v) { w().setVar(World::kVarWord, id, v); }
-static int dword(int id) { return w().var(World::kVarDword, id); }
-static void setDword(int id, int v) { w().setVar(World::kVarDword, id, v); }
-static void score(float n) { w().setVarFloat(kScore, w().varFloat(kScore) + n); }
-static void show(int o, int p = -1) { w().showPresentation(o, p, true, g_system->getMillis()); }
-static void hide(int o, int p = -1) { w().showPresentation(o, p, false); }
-static void accOn(int o, int from = -1, int to = -1) { w().setAccessibilities(o, true, from, to < 0 ? from : to); }
-static void accOff(int o, int from = -1, int to = -1) { w().setAccessibilities(o, false, from, to < 0 ? from : to); }
-static void play(int id, bool loop = false) { snd().play(id, loop); }
-static void stop(int id) { snd().stop(id, 0x400); }
-static bool playing(int id) { return snd().playing(id); }
-static void cin(const char *name) { g_vm->plyCin(name); }
-static void puz(int id) { g_vm->puzSetAct(id); }
-static int held() { return bag().held(); }
-static void drop() { g_vm->dropObject(); }
-static int rnd(int n) { return g_vm->rnd().getRandomNumber(n - 1); }
-
-static void rot(int id, float alpha, float beta, float ran, bool setBeta = true) {
-	if (Rotation *r = w().rotation(id)) {
-		r->setAlpha(alpha);
-		if (setBeta)
-			r->beta = beta;
-		r->ran = ran;
-		g_vm->rotSetAct(id);
-	}
-}
-
-static void movOff(int place, int from = -1, int to = -1) { w().setMovabilities(place, false, from, to < 0 ? from : to); }
-static void movOn(int place, int from = -1, int to = -1) { w().setMovabilities(place, true, from, to < 0 ? from : to); }
+using namespace Api;
 
 // Steps an object's presentations one per frame from `from` to `to` (hide, show, frame).
 static void steps(int object, int from, int to) {
 	for (int i = from; i != to; i += from < to ? 1 : -1) {
 		hide(object);
 		show(object, i);
-		g_vm->renderFrame();
+		g_engine->renderFrame();
 	}
 	hide(object);
 	show(object, to);
-	g_vm->renderFrame();
+	g_engine->renderFrame();
 }
 
 // The car at the rail line's stops: layer 0 (presentations 3..7) or layer 1 (8..12).
@@ -140,20 +104,20 @@ static void heater() {
 		show(kBoiling, 0);
 		snd().setVolume(10412, 80);
 		setByte(kHeat, 0);
-		g_vm->timSto(1);
-		g_vm->timSta(0, 1000);
+		g_engine->timSto(1);
+		g_engine->timSta(0, 1000);
 		setByte(kBoilingOn, 1);
 	} else if (h == 2 && v == 2) {
 		play(10412, true);
 		show(kBoiling, 0);
 		snd().setVolume(10412, 80);
-		g_vm->timSto(0);
+		g_engine->timSto(0);
 		bool wasBoiling = byte_(kBoilingOn) != 0;
 		setByte(kBoilingOn, 0);
 		setByte(kHeat, 0);
 		if (wasBoiling)
-			g_vm->timSto(1);
-		g_vm->timSta(1, 1000);
+			g_engine->timSto(1);
+		g_engine->timSta(1, 1000);
 		hide(kThermometer);
 		show(kThermometer, 6);
 	} else if (h != 2 && byte_(kBoilingOn) == 1) {
@@ -161,8 +125,8 @@ static void heater() {
 		hide(kBoiling);
 		hide(kThermometer);
 		setByte(kBoilingOn, 0);
-		g_vm->timSto(0);
-		g_vm->timSto(1);
+		g_engine->timSto(0);
+		g_engine->timSto(1);
 	}
 }
 
@@ -176,7 +140,6 @@ static void helmetAndFrog() {
 }
 
 void enter(RingEngine *vm, int entry) {
-	g_vm = vm;
 	switch (entry) {
 	case 0: // from AS: the Mime's welcome
 		cin("1540");
@@ -187,7 +150,7 @@ void enter(RingEngine *vm, int entry) {
 		puz(10390);
 		play(10001);
 		break;
-	case 3: // back from FO
+	case 3: // back from RH
 		vm->timStoAll();
 		movOn(10410, 0, 0);
 		cin("1550");
@@ -195,7 +158,7 @@ void enter(RingEngine *vm, int entry) {
 		puz(10392);
 		play(14001, true);
 		play(10021);
-		setByte(kBackFromFO, 1);
+		setByte(kBackFromRH, 1);
 		break;
 	case 10: // resumed after Erda (games/ring/docs/ni.md, spec/bag.md)
 		bag().removeAll();
@@ -226,7 +189,6 @@ void enter(RingEngine *vm, int entry) {
 }
 
 void onClick(RingEngine *vm, int object, int value, int place) {
-	g_vm = vm;
 	int h = held();
 	switch (object) {
 	case kGlug:
@@ -510,7 +472,6 @@ void onClick(RingEngine *vm, int object, int value, int place) {
 }
 
 void onButtonDown(RingEngine *vm, int object, int value) {
-	g_vm = vm;
 	debugC(1, kDebugScript, "NI button down: object %d unk_19 %d", object, value);
 	switch (object) {
 	case kMosaic:
@@ -653,7 +614,6 @@ static int wrap19(int v) {
 }
 
 void onDrag(RingEngine *vm, int object, int value, int phase) {
-	g_vm = vm;
 	Drag &d = vm->drag();
 	int dx = ABS(d.current.x - d.press.x), dy = ABS(d.current.y - d.press.y);
 	bool xMoved = d.current.x != d.previous.x, yMoved = d.current.y != d.previous.y;
@@ -882,7 +842,6 @@ void onDrag(RingEngine *vm, int object, int value, int phase) {
 }
 
 void onAccessibility(RingEngine *vm, int object, int value) {
-	g_vm = vm;
 	if (object == kConsole && value == 0) { // the console's border: leave it
 		Common::Point mouse = vm->mouse();
 		vm->rotSetAct(10101);
@@ -896,7 +855,6 @@ void onAccessibility(RingEngine *vm, int object, int value) {
 }
 
 void onBeforeMove(RingEngine *vm, int from, int to, int value, int kind) {
-	g_vm = vm;
 	if (kind == 0 && from == 10005 && to == 10101) {
 		stop(10901);
 		play(13001 + rnd(9));
@@ -945,7 +903,6 @@ static void music(int to) {
 }
 
 void onAfterMove(RingEngine *vm, int to, int from, int value, int kind) {
-	g_vm = vm;
 	if (value == 100)
 		movOff(to, 0, 0);
 	if (value == 110) {
@@ -1007,7 +964,6 @@ void onAfterMove(RingEngine *vm, int to, int from, int value, int kind) {
 }
 
 void onTimer(RingEngine *vm, int id) {
-	g_vm = vm;
 	if (id == 0) { // boiling
 		int v = byte_(kHeat) + 1;
 		setByte(kHeat, v);
@@ -1031,13 +987,13 @@ void onTimer(RingEngine *vm, int id) {
 			cin("1538");
 			vm->gameOver(4);
 		}
-	} else if (id == 1) { // steady steam: NI is done once back from FO
+	} else if (id == 1) { // steady steam: NI is done once back from RH
 		int v = byte_(kHeat) + 1;
 		setByte(kHeat, v);
-		if (v >= 11 && byte_(kBackFromFO) == 1) {
+		if (v >= 11 && byte_(kBackFromRH) == 1) {
 			vm->timStoAll();
 			snd().stopAll(0x400);
-			w().setVarFloat(kScore, 100.0f);
+			w().setVarFloat(90005, 100.0f);
 			cin("1539");
 			AS::returnFromWorld(vm, 1);
 		}
@@ -1045,7 +1001,6 @@ void onTimer(RingEngine *vm, int id) {
 }
 
 void onAnimation(RingEngine *vm, int id, int frame) {
-	g_vm = vm;
 	auto consoleOpen = [&]() {
 		puz(10100);
 		accOn(kCover1, 0);
@@ -1172,7 +1127,6 @@ void onAnimation(RingEngine *vm, int id, int frame) {
 }
 
 void onSound(RingEngine *vm, int id, int type, int reason, int ended) {
-	g_vm = vm;
 	if (!ended)
 		return;
 	// "a -> p, n": PuzSetAct(p), play(n).

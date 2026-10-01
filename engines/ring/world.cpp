@@ -537,6 +537,24 @@ void World::setVarFloat(int id, float value) {
 		warning("Ring: VarSetFloa: no variable %d", id);
 }
 
+void World::setAnimationFrame(int id, int presentation, int frame) {
+	Object *o = object(id);
+	if (o && (uint)presentation < o->presentations.size())
+		for (auto *list : { &o->presentations[presentation].puzzleAnimations, &o->presentations[presentation].animations })
+			for (auto &anim : *list)
+				if (frame >= 1 && frame <= anim->frames)
+					anim->frame = frame - 1;
+}
+
+void World::setAnimationId(int id, int presentation, int index, int animationId, bool onRotation) {
+	Object *o = object(id);
+	if (!o || (uint)presentation >= o->presentations.size())
+		return;
+	auto &list = onRotation ? o->presentations[presentation].animations : o->presentations[presentation].puzzleAnimations;
+	if ((uint)index < list.size())
+		list[index]->id = animationId;
+}
+
 void World::pauseOnFrame(int id, int presentation, int frame, uint32 ms, int direction) {
 	Object *o = object(id);
 	if (o && (uint)presentation < o->presentations.size())
