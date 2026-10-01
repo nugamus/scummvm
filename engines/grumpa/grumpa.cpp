@@ -54,6 +54,7 @@ Common::Error GrumpaEngine::run() {
 
 	// The game data sits in subdirectories (Bitmaps, Actors, Scenes, ...) of the game dir.
 	SearchMan.addDirectory("gamedir", ConfMan.getPath("path"), 0, 2);
+	setGameCursor();
 
 	_screen.clear();
 	// Boot sequence: the intro film, then the main menu. Selecting "Nytt Spel" enters the

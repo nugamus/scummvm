@@ -58,6 +58,8 @@ public:
 	bool loadDepth(const Common::String &view, Common::Array<uint16> &depth, int &w, int &h);
 	/** Load an actor mesh from Meshes/<name>.anb (frame 0 geometry, E-0014). */
 	bool loadMesh(const Common::String &name, Mesh &mesh);
+	/** Load the game's hand cursor as the system cursor (E-0005). */
+	void setGameCursor();
 	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */
 	bool drawMenu(int selected);
 	/** Play an MPEG-1 film from a Movies_<lang> folder; Esc/click skips. */
