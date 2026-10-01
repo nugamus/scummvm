@@ -202,4 +202,142 @@ void GrumpaEngine::setGameCursor() {
 	cur.free();
 }
 
+// ---- .abi scene-graph reader (docs/spec/scene.md; mirrors tools/parsers/abi.py) ----------
+//
+// A Scene_<NNN>.abi is a flat stream of records `u32 type, u32 id, Serialize(mode 1)` read to
+// EOF (E-0100, E-0104). We walk every record by its byte-length grammar and collect the
+// type-0x11 views (each carrying a camera block). The grammar below is abi.py's, one skip
+// function per type. On any over-read the cursor goes bad and the walk stops.
+
+namespace {
+
+struct AbiCur {
+	const byte *d;
+	uint32 n, o;
+	bool ok;
+	AbiCur(const byte *d_, uint32 n_) : d(d_), n(n_), o(0), ok(true) {}
+	uint32 left() const { return o <= n ? n - o : 0; }
+	void skip(uint32 k) { if (!ok || o + k > n) { ok = false; return; } o += k; }
+	uint32 u32() { if (!ok || o + 4 > n) { ok = false; return 0; } uint32 v = READ_LE_UINT32(d + o); o += 4; return v; }
+	int32 i32() { return (int32)u32(); }
+};
+
+static int32 acount(AbiCur &c) {               // bounded count (abi.py _count)
+	int32 v = c.i32();
+	if (v < 0 || v > 0x100000) { c.ok = false; return 0; }
+	return v;
+}
+static void ec(AbiCur &c) { c.skip(20); }
+static void cc(AbiCur &c) { c.skip(20); int32 k = acount(c); for (int32 i = 0; i < k && c.ok; i++) ec(c); }
+static void ecVec(AbiCur &c) { int32 k = acount(c); for (int32 i = 0; i < k && c.ok; i++) ec(c); }
+static void ccVec(AbiCur &c) { int32 k = acount(c); for (int32 i = 0; i < k && c.ok; i++) cc(c); }
+static void pstr(AbiCur &c) { int32 k = c.i32(); if (k > 0) c.skip(k); }
+static void sub56(AbiCur &c) { c.skip(56); }
+static void sub24(AbiCur &c) { c.skip(24); }
+static void pairVec(AbiCur &c) { int32 k = acount(c); c.skip(8 * (uint32)k); }
+
+// Skip a record body by type; returns false for an unmodelled type (ends the walk).
+static bool skipBody(AbiCur &c, uint32 t) {
+	switch (t) {
+	case 0x05: c.skip(16); pstr(c); pstr(c); pstr(c); pstr(c); c.skip(40); pairVec(c); return true;
+	case 0x07: c.skip(12); ecVec(c); c.skip(4); pstr(c); c.skip(4); c.skip(76); ccVec(c); return true;
+	case 0x0d: {
+		c.skip(12); ecVec(c); c.skip(32); c.skip(4);
+		uint32 gate = c.u32();
+		ccVec(c); sub56(c);
+		if (gate == 1) c.skip(8);
+		ccVec(c); ccVec(c); pstr(c);
+		return true;
+	}
+	case 0x11: c.skip(12); ecVec(c); c.skip(8); ccVec(c); ccVec(c); c.skip(4); c.skip(0x68); return true;
+	case 0x18:
+	case 0x2a: c.skip(12); ecVec(c); c.skip(40); sub56(c); pstr(c); ccVec(c); return true;
+	case 0x19: {
+		c.skip(12); ecVec(c); c.skip(32); c.skip(76); sub56(c); ecVec(c); ccVec(c);
+		int32 k = c.i32();
+		if (k > 0) c.skip(8 * (uint32)k);
+		c.skip(16); c.skip(4);
+		uint32 mode = c.u32();
+		if (mode == 2) {
+			int32 nb = acount(c);
+			for (int32 i = 0; i < nb && c.ok; i++) {
+				c.skip(8);
+				if (c.u32() != 0) pstr(c);
+			}
+		}
+		return true;
+	}
+	case 0x1a: {
+		c.skip(12); ecVec(c); c.skip(72); sub56(c); sub24(c); sub24(c); pairVec(c);
+		for (int i = 0; i < 8 && c.ok; i++) ccVec(c);
+		pstr(c); pstr(c);
+		return true;
+	}
+	case 0x1d: {
+		c.skip(12); ecVec(c); c.skip(8);
+		int32 k = acount(c);
+		for (int32 i = 0; i < k && c.ok; i++) { sub24(c); c.skip(4 * (uint32)acount(c)); }
+		return true;
+	}
+	case 0x1e: c.skip(12); ecVec(c); c.skip(24); return true;
+	case 0x20: c.skip(12); ecVec(c); c.skip(80); return true;
+	case 0x21: c.skip(12); ecVec(c); c.skip(4); ecVec(c); ccVec(c); return true;
+	case 0x22:
+	case 0x25: c.skip(12); ecVec(c); c.skip(8); ccVec(c); return true;
+	case 0x23:
+	case 0x26: c.skip(12); ecVec(c); c.skip(12); ccVec(c); return true;
+	case 0x24:
+	case 0x27: c.skip(12); ecVec(c); c.skip(4); ccVec(c); return true;
+	default: return false;
+	}
+}
+
+} // anonymous namespace
+
+Camera cameraFromBlock(const float cam[26]) {
+	Camera c;
+	c.eye = Vec3(cam[13], cam[14], cam[15]);
+	c.forward = Vec3(0.0f, 0.0f, -1.0f);  // orientation-identity views (E-0105)
+	c.up = Vec3(0.0f, 1.0f, 0.0f);
+	c.projX = cam[2] != 0.0f ? cam[2] : 1.0f;
+	c.projY = cam[3] != 0.0f ? cam[3] : 1.0f;
+	c.farZ = cam[19];
+	return c;
+}
+
+bool GrumpaEngine::loadScene(int num, Common::Array<SceneView> &views) {
+	Common::String name = Common::String::format("Scenes/Scene_%03d.abi", num);
+	Common::File f;
+	if (!f.open(Common::Path(name))) {
+		debug(1, "Grumpa: scene %s not found", name.c_str());
+		return false;
+	}
+	Common::Array<byte> buf(f.size());
+	f.read(buf.begin(), buf.size());
+	AbiCur c(buf.begin(), buf.size());
+	if (c.left() >= 4 && READ_LE_UINT32(buf.begin()) == 0x03)
+		return false;  // a CFXCharacter database, not a scene (Q-0006)
+
+	while (c.left() >= 8 && c.ok) {
+		uint32 t = c.u32();
+		uint32 id = c.u32();
+		if (t == 0x11) {
+			c.skip(12); ecVec(c); c.skip(8); ccVec(c); ccVec(c);
+			SceneView v;
+			v.id = id;
+			v.camId = c.u32();
+			for (int i = 0; i < 26; i++)
+				v.cam[i] = READ_LE_FLOAT(c.d + c.o + i * 4);
+			c.skip(0x68);
+			if (c.ok)
+				views.push_back(v);
+		} else if (!skipBody(c, t)) {
+			warning("Grumpa: scene %s unmodelled type %#x at %#x", name.c_str(), t, c.o - 8);
+			return false;
+		}
+	}
+	debug(1, "Grumpa: scene %s -> %u views", name.c_str(), (uint)views.size());
+	return c.ok;
+}
+
 } // End of namespace Grumpa
