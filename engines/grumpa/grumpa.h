@@ -96,6 +96,8 @@ private:
 	// scene was entered (for sprite animation timing).
 	SceneData _sceneData;
 	Graphics::ManagedSurface _sceneBg;
+	Common::Array<uint16> _sceneDepth;
+	int _depthW = 0, _depthH = 0;
 	uint32 _sceneTick0 = 0;
 };
 
