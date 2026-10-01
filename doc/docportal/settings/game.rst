@@ -679,6 +679,20 @@ Full-screen films
 
 	*fullscreen_films*
 
+.. _gilbert_smooth_text:
+
+Smooth text
+	Draws the text with smooth, anti-aliased edges. The original's text is hard-edged.
+
+	*smooth_text*
+
+.. _gilbert_high_res_text:
+
+High-resolution text
+	Draws the game at twice its size, with the text smooth and sharp at that resolution. The pictures are doubled.
+
+	*high_res_text*
+
 ,,,,,,,,,
 
 .. _Griffon:
