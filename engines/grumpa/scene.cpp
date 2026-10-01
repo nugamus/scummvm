@@ -24,6 +24,7 @@
 #include "common/stream.h"
 #include "graphics/managed_surface.h"
 #include "graphics/surface.h"
+#include "graphics/cursorman.h"
 #include "image/jpeg.h"
 
 #include "grumpa/grumpa.h"
@@ -171,6 +172,34 @@ bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
 		mesh.sections.push_back(sec);
 	}
 	return true;
+}
+
+// Load the game's default pointer (UI/002_Cursor/default_0000.jpg, a white glove on black,
+// E-0005) as the system cursor, with near-black pixels made transparent (the JPEG has no
+// alpha, so the original keys out black).
+void GrumpaEngine::setGameCursor() {
+	Common::File f;
+	if (!f.open(Common::Path("UI/002_Cursor/default_0000.jpg")))
+		return;
+	Image::JPEGDecoder jpeg;
+	Graphics::PixelFormat rgba(4, 8, 8, 8, 8, 0, 8, 16, 24);
+	jpeg.setOutputPixelFormat(rgba);
+	if (!jpeg.loadStream(f))
+		return;
+	const Graphics::Surface *src = jpeg.getSurface();
+	Graphics::Surface cur;
+	cur.create(src->w, src->h, rgba);
+	for (int y = 0; y < src->h; y++) {
+		for (int x = 0; x < src->w; x++) {
+			byte r, g, b, a;
+			rgba.colorToARGB(src->getPixel(x, y), a, r, g, b);
+			a = (MAX(r, MAX(g, b)) < 24) ? 0 : 255;  // key out near-black
+			cur.setPixel(x, y, rgba.ARGBToColor(a, r, g, b));
+		}
+	}
+	CursorMan.replaceCursor(cur, 2, 2, 0, nullptr);
+	CursorMan.showMouse(true);
+	cur.free();
 }
 
 } // End of namespace Grumpa
