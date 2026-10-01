@@ -54,8 +54,10 @@ Common::Error GrumpaEngine::run() {
 	SearchMan.addDirectory("gamedir", ConfMan.getPath("path"), 0, 2);
 
 	_screen.clear();
-	// Boot to the main menu. Selecting "Nytt Spel" enters the first scene view; "Avsluta
-	// Spel" quits. (The intro film and the full scene/game flow come next.)
+	// Boot sequence: the intro film, then the main menu. Selecting "Nytt Spel" enters the
+	// first scene view; "Avsluta Spel" quits.
+	if (!(ConfMan.hasKey("dev_skip_intro") && ConfMan.getBool("dev_skip_intro")))
+		playMovie("grumpa_intro");
 	Common::Array<Common::U32String> items;
 	loadMenuText(items);
 	int sel = 0;
