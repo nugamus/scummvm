@@ -556,6 +556,12 @@ void RingEngine::rotSetAct(int rotation, bool start, bool stop) {
 			r->panorama.reset();
 			return;
 		}
+		// 0x410410: the effects start at strength 0; the juggle's weights (spec/rotation.md).
+		r->strength = 0.0f;
+		r->loadTick = g_system->getMillis();
+		r->jugWeights.resize(32 * 32);
+		for (float &w : r->jugWeights)
+			w = _random.getRandomNumber(32767) * r->jugAmplitude * (1.0f / 32767.0f);
 	}
 	leavePlace();
 	_rotation = rotation;
@@ -881,7 +887,13 @@ void RingEngine::drawView() {
 		}
 		if (now - _panTime >= 17)
 			_panTime = now;
+		// The effects' strength grows by the frame time up to 1 (0x410610).
+		if (r->strength < 1.0f)
+			r->strength = MIN(1.0f, r->strength + (now - _lastRotationFrame) * 0.001f);
+		_lastRotationFrame = now;
 		_view.update(*r, *r->panorama);
+		if (r->juggle)
+			_view.juggle(*r, (now - r->loadTick) * 0.001f);
 		updateLayers(*r);
 		_view.draw(*r->panorama, _screen, 16);
 		// 3D sounds follow the view (0x41ed80, every frame).
@@ -967,6 +979,7 @@ void RingEngine::turn(Rotation &r, float alpha, float beta, float ran) {
 			r.alpha -= 360.0f;
 		r.beta = beta * t + b0 * (1 - t);
 		r.ran = ran * t + r0 * (1 - t);
+		r.strength = 1 - t;
 		drawView();
 		present();
 		pollEvents(16); // one step per frame (Q-0011)
