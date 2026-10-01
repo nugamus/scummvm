@@ -12,6 +12,7 @@ MODULE_OBJS = \
 	sound.o \
 	world.o \
 	ring/as.o \
+	ring/fo.o \
 	ring/n2.o \
 	ring/ni.o \
 	ring/rh.o \

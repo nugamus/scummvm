@@ -292,8 +292,9 @@ void returnFromWorld(RingEngine *vm, int n) {
 	World &w = vm->world();
 	static const int monologue[] = { 80040, 80049, 80058, 80068 };
 	if (n >= 1 && n <= 4) {
-		// ponytail: FO's type 2 volume of 100 (0x406e60) comes with the type volumes
 		vm->setZone(kZoneAS);
+		if (n == 3)
+			vm->sounds().setTypeVolume(2, 100); // FO's ending set it to 0
 		w.setAccessibilities(kObjDial, true, n - 1, n - 1);
 		w.setVarByte(kByteWorldDone - 1 + n, 1);
 		vm->bag().removeAll();

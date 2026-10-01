@@ -255,6 +255,15 @@ void Sounds::setPan(int id, int pan) {
 	}
 }
 
+void Sounds::setTypeVolume(int type, int volume) {
+	for (auto &s : _sounds) {
+		if (s.type == type) {
+			s.typeVolume = CLIP(volume, 0, 100);
+			apply(s);
+		}
+	}
+}
+
 void Sounds::setTypeVolumes(int volume, int dialogue) {
 	for (auto &s : _sounds) {
 		s.typeVolume = CLIP(s.type == kSoundDialogue ? dialogue : volume, 0, 100);
