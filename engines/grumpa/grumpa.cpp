@@ -81,8 +81,13 @@ Common::Error GrumpaEngine::run() {
 					state = kMenu;
 					dirty = true;
 				} else if (event.type == Common::EVENT_LBUTTONUP) {
-					if (handleSceneClick(event.mouse))
-						dirty = true;  // a trigger fired; redraw with the new actor state
+					if (handleSceneClick(event.mouse)) {
+						if (_nextScene >= 0) {  // a go-to-scene trigger (E-0116)
+							enterScene(_nextScene);
+							_nextScene = -1;
+						}
+						dirty = true;  // redraw with the new scene / actor state
+					}
 				}
 				continue;
 			}

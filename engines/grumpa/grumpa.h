@@ -99,6 +99,7 @@ private:
 	Common::Array<uint16> _sceneDepth;
 	int _depthW = 0, _depthH = 0;
 	uint32 _sceneTick0 = 0;
+	int _nextScene = -1;   // set by a go-to-scene trigger (E-0116); loaded by the main loop
 };
 
 } // End of namespace Grumpa
