@@ -27,6 +27,7 @@
 #include "engines/engine.h"
 #include "common/array.h"
 #include "common/str.h"
+#include "common/ustr.h"
 #include "graphics/managed_surface.h"
 
 #include "grumpa/detection.h"
@@ -54,6 +55,9 @@ public:
 	bool loadDepth(const Common::String &view, Common::Array<uint16> &depth, int &w, int &h);
 	/** Load an actor mesh from Meshes/<name>.anb (frame 0 geometry, E-0014). */
 	bool loadMesh(const Common::String &name, Mesh &mesh);
+	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */
+	bool drawMenu(int selected);
+	bool loadMenuText(Common::Array<Common::U32String> &items);
 
 private:
 	const ADGameDescription *_gameDesc;

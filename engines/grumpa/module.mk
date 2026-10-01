@@ -4,7 +4,8 @@ MODULE_OBJS = \
 	grumpa.o \
 	metaengine.o \
 	scene.o \
-	render3d.o
+	render3d.o \
+	menu.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_GRUMPA), DYNAMIC_PLUGIN)
