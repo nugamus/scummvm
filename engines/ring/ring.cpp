@@ -300,9 +300,15 @@ Common::Error RingEngine::run() {
 		script.push_back(step);
 	_scripted = !script.empty(); // the real mouse (moves and buttons) is ignored while scripted
 	uint32 menuStart = g_system->getMillis();
+	uint32 lastRun = menuStart; // "+ms:..." steps run ms after the previous step ran
 	while (!shouldQuit()) {
 		pollEvents();
 		while (!script.empty()) {
+			if (script[0].hasPrefix("+")) {
+				size_t colon = script[0].findFirstOf(':');
+				uint dt = atoi(script[0].c_str() + 1);
+				script[0] = Common::String::format("%u", lastRun + dt - menuStart) + (colon == Common::String::npos ? "" : script[0].substr(colon));
+			}
 			uint ms, x, y;
 			char what[8], file[256];
 			if (sscanf(script[0].c_str(), "%u:snap %255s", &ms, file) == 2) {
@@ -313,15 +319,66 @@ Common::Error RingEngine::run() {
 				if (!out.open(Common::FSNode(Common::Path(file, '/'))) || !::Image::writePNG(out, *_screen.surfacePtr()))
 					warning("Ring: cannot write %s", file);
 				script.remove_at(0);
+				lastRun = g_system->getMillis();
 				continue;
 			}
-			if (sscanf(script[0].c_str(), "%u:%7s %u %u", &ms, what, &x, &y) != 4) {
+			int n = sscanf(script[0].c_str(), "%u:%7s %u %u", &ms, what, &x, &y);
+			if (n < 2) {
 				script.remove_at(0);
 				continue;
 			}
 			if (g_system->getMillis() - menuStart < ms)
 				break;
-			if (!strcmp(what, "key")) {
+			// Handler-level commands: "obj <object> <unk_19>" clicks an object's accessibility in
+			// the current place, "mov <index>" takes one of its movabilities, "hold <object>" puts
+			// an object in hand, "where" logs the zone, place, object in hand and bag.
+			int here = _mode == 1 ? _rotation : _puzzle;
+			Rotation *hereR = _mode == 1 ? _world->rotation(_rotation) : nullptr;
+			Puzzle *hereP = hereR ? nullptr : _world->puzzle(_puzzle);
+			if (!strcmp(what, "obj") && n == 4) {
+				const Common::Array<Common::SharedPtr<Accessibility> > *accs = hereR ? &hereR->accessibilities : hereP ? &hereP->accessibilities : nullptr;
+				const Accessibility *found = nullptr;
+				for (uint i = 0; accs && i < accs->size() && !found; i++)
+					if ((*accs)[i]->object == (int)x && (*accs)[i]->hotSpot.value == (int)y && (*accs)[i]->hotSpot.enabled)
+						found = (*accs)[i].get();
+				if (found)
+					clickObject(_zone, x, y, here);
+				else
+					warning("Ring: dev obj %u %u: no enabled accessibility in %d", x, y, here);
+			} else if (!strcmp(what, "mov") && n >= 3) {
+				Common::Array<Movability> *list = hereR ? &hereR->movabilities : hereP ? &hereP->movabilities : nullptr;
+				if (list && x < list->size() && (*list)[x].hotSpot.enabled) {
+					Movability copy = (*list)[x];
+					move(copy, x);
+				} else {
+					warning("Ring: dev mov %u: no such enabled movability in %d", x, here);
+				}
+			} else if (!strcmp(what, "hold") && n >= 3) {
+				dropObject();
+				holdObject(x);
+			} else if (!strcmp(what, "pres") && n >= 3) {
+				// "pres <object>": its presentations, shown or not, and their animations' state
+				if (Object *o = _world->object(x)) {
+					Common::String line;
+					for (uint i = 0; i < o->presentations.size(); i++) {
+						const Presentation &pr = o->presentations[i];
+						line += Common::String::format(" %u:%s", i, pr.shown ? "shown" : "-");
+						for (auto &a : pr.puzzleAnimations)
+							line += Common::String::format("[%s f%d%s]", a->active ? "on" : "off", a->frame, a->paused ? " paused" : "");
+					}
+					debug("Ring: object %u%s", x, line.c_str());
+				}
+			} else if ((!strcmp(what, "varb") || !strcmp(what, "varw") || !strcmp(what, "vard")) && n >= 3) {
+				World::VarType t = what[3] == 'b' ? World::kVarByte : what[3] == 'w' ? World::kVarWord : World::kVarDword;
+				debug("Ring: %s %u = %d", what, x, _world->var(t, x));
+			} else if (!strcmp(what, "where")) {
+				Common::String bag;
+				for (int id : _bag->contents())
+					bag += Common::String::format(" %d", id);
+				debug("Ring: zone %d %s %d, held %d, bag%s", _zone, _mode == 1 ? "rotation" : "puzzle", here, _bag->held(), bag.c_str());
+			} else if (n < 4) {
+				warning("Ring: dev_input: cannot read '%s'", script[0].c_str());
+			} else if (!strcmp(what, "key")) {
 				key(x);
 			} else {
 				// "down" and "up" press and release the left button, "click" does both, "rclick" is the right button.
@@ -334,6 +391,7 @@ Common::Error RingEngine::run() {
 					_buttons.push_back(Button{ false, _mouse, true });
 			}
 			script.remove_at(0);
+			lastRun = g_system->getMillis();
 		}
 		while (!_keys.empty()) {
 			int k = _keys.remove_at(0);
@@ -376,8 +434,10 @@ Common::Error RingEngine::run() {
 }
 
 void RingEngine::key(int code) {
-	// ponytail: Escape's end of a playing dialogue, the visual object lists and SY's key
-	// handler (the save name) come with dialogues and the save screens (spec/events.md).
+	// Escape ends a playing dialogue (0x406e40(5, 0x1002): its end event, so chains go on).
+	if (code == 27)
+		_sounds->stopType(kSoundDialogue, 0x1002);
+	// ponytail: the visual object lists and SY's key handler (the save name) come with the save screens (spec/events.md)
 	Puzzle *p1 = _world->puzzle(1);
 	Puzzle *p = p1 && p1->mode == 2 ? p1 : _world->puzzle(_puzzle);
 	if (!p)
@@ -742,6 +802,7 @@ void RingEngine::erda() {
 }
 
 void RingEngine::clickObject(int zone, int object, int value, int place) {
+	debugC(1, kDebugInput, "click: object %d unk_19 %d in %d", object, value, place);
 	Object *o = _world->object(object);
 	if (!o)
 		return;
@@ -1040,6 +1101,7 @@ void RingEngine::buttonDown(int x, int y) {
 		}
 	}
 	Object *o = acc ? _world->object(acc->object) : nullptr;
+	debugC(1, kDebugInput, "button down at (%d, %d): object %d unk_19 %d in %d", x, y, o ? o->id : 0, acc ? acc->hotSpot.value : 0, id);
 	if (o && (o->flags & 2)) // 0x40bd40: puzzle 1's go to SY
 		onButtonDown(this, id == 1 && onPuzzle ? kZoneSY : _zone, o->id, acc->hotSpot.value);
 	if (o && (o->flags & 4)) {
