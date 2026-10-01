@@ -98,12 +98,16 @@ GilbertEngine::~GilbertEngine() {
 	delete _sound;
 	for (auto &f : _fonts)
 		delete f._value;
+	for (auto &f : _drawingFonts)
+		delete f._value;
 }
 
 Common::Error GilbertEngine::run() {
 	const Graphics::PixelFormat format(2, 5, 6, 5, 0, 11, 5, 0, 0);
-	initGraphics(kWindowW, kWindowH, &format);
-	_screen.create(640, 480, format);
+	loadOptions();
+	_scale = _options.highResText ? 2 : 1;
+	initGraphics(kWindowW * _scale, kWindowH * _scale, &format);
+	_screen.create(640 * _scale, 480 * _scale, format);
 	_clip = Common::Rect(kClipLeft, kClipTop, kClipRight, kClipBottom);
 	_sound = new Sound(_mixer);
 	_menu = new Menu(this);
@@ -113,7 +117,6 @@ Common::Error GilbertEngine::run() {
 	_book = new Book(this);
 	_dialog = new DialogBox(this);
 	loadSettings();
-	loadOptions();
 	syncSoundSettings();
 	enableKeymaps();
 	loadLanguage();
@@ -246,8 +249,8 @@ void GilbertEngine::loadingStep(int step, uint line) {
 			drawPicture(_interface2[lamps[i].item], lamps[i].x, 244);
 	const Common::U32String text = languageLine(line);
 	const int x = 320 - textWidth(text, 8) / 2;
-	drawText(_screen, text, x, 201, 8, kColourBlack);
-	drawText(_screen, text, x, 200, 8, kColourTan);
+	drawText(text, x, 201, 8, kColourBlack);
+	drawText(text, x, 200, 8, kColourTan);
 	present();
 	const uint32 end = _system->getMillis() + kLoadingWaitMs;
 	setBusy(true);
@@ -313,16 +316,19 @@ void GilbertEngine::playFilmBody(const Common::String &name) {
 					}
 					const Common::Rect dst(kClipLeft + (kWindowW - w) / 2, kClipTop + (kWindowH - h) / 2,
 					                       kClipLeft + (kWindowW + w) / 2, kClipTop + (kWindowH + h) / 2);
+					const Common::Rect d = scaled(dst);
 					if (smooth) {
-						Graphics::Surface *scaled = frame->scale(dst.width(), dst.height(), true);
-						_screen.blitFrom(*scaled, Common::Point(dst.left, dst.top));
-						scaled->free();
-						delete scaled;
+						Graphics::Surface *big = frame->scale(d.width(), d.height(), true);
+						_screen.blitFrom(*big, Common::Point(d.left, d.top));
+						big->free();
+						delete big;
 					} else {
-						_screen.blitFrom(*frame, Common::Rect(frame->w, frame->h), dst);
+						_screen.blitFrom(*frame, Common::Rect(frame->w, frame->h), d);
 					}
-				} else
-					_screen.blitFrom(*frame, Common::Point(127, 80));
+				} else {
+					_screen.blitFrom(*frame, Common::Rect(frame->w, frame->h),
+					                 scaled(Common::Rect(127, 80, 127 + frame->w, 80 + frame->h)));
+				}
 				present();
 			}
 			if (_escHeld)
@@ -552,7 +558,7 @@ void GilbertEngine::exitGame() {
 }
 
 void GilbertEngine::clear() {
-	_screen.fillRect(Common::Rect(640, 480), 0);
+	_screen.fillRect(Common::Rect(_screen.w, _screen.h), 0);
 }
 
 void GilbertEngine::present() {
@@ -561,20 +567,22 @@ void GilbertEngine::present() {
 
 void GilbertEngine::present(int brightness) {
 	_brightness = brightness;
+	const int w = kWindowW * _scale, h = kWindowH * _scale;
+	const int left = kClipLeft * _scale, top = kClipTop * _scale;
 	if (brightness >= 256) {
-		_system->copyRectToScreen(_screen.getBasePtr(kClipLeft, kClipTop), _screen.pitch, 0, 0, kWindowW, kWindowH);
+		_system->copyRectToScreen(_screen.getBasePtr(left, top), _screen.pitch, 0, 0, w, h);
 	} else {
-		Graphics::ManagedSurface dim(kWindowW, kWindowH, _screen.format);
-		for (int y = 0; y < kWindowH; y++) {
-			const uint16 *s = (const uint16 *)_screen.getBasePtr(kClipLeft, kClipTop + y);
+		Graphics::ManagedSurface dim(w, h, _screen.format);
+		for (int y = 0; y < h; y++) {
+			const uint16 *s = (const uint16 *)_screen.getBasePtr(left, top + y);
 			uint16 *d = (uint16 *)dim.getBasePtr(0, y);
-			for (int x = 0; x < kWindowW; x++) {
+			for (int x = 0; x < w; x++) {
 				byte r, g, b;
 				_screen.format.colorToRGB(s[x], r, g, b);
 				d[x] = _screen.format.RGBToColor(r * brightness / 256, g * brightness / 256, b * brightness / 256);
 			}
 		}
-		_system->copyRectToScreen(dim.getPixels(), dim.pitch, 0, 0, kWindowW, kWindowH);
+		_system->copyRectToScreen(dim.getPixels(), dim.pitch, 0, 0, w, h);
 	}
 	drawHotspots();
 	_system->updateScreen();
@@ -594,10 +602,16 @@ void GilbertEngine::drawPattern(Picture *pic, int k, int x, int y) {
 	if (dst.isEmpty())
 		return;
 	const Common::Rect src(pat.left + dst.left - x, pat.top + dst.top - y, pat.left + dst.right - x, pat.top + dst.bottom - y);
-	if (pic->transparent)
-		_screen.transBlitFrom(pic->surface, src, Common::Point(dst.left, dst.top), pic->key);
-	else
-		_screen.blitFrom(pic->surface, src, Common::Point(dst.left, dst.top));
+	if (_scale == 1) {
+		if (pic->transparent)
+			_screen.transBlitFrom(pic->surface, src, Common::Point(dst.left, dst.top), pic->key);
+		else
+			_screen.blitFrom(pic->surface, src, Common::Point(dst.left, dst.top));
+	} else if (pic->transparent) {
+		_screen.transBlitFrom(pic->surface, src, scaled(dst), pic->key);
+	} else {
+		_screen.blitFrom(pic->surface, src, scaled(dst));
+	}
 }
 
 void GilbertEngine::blendPattern(Picture *pic, int k, const Common::Rect &dst, int alpha) {
@@ -608,11 +622,13 @@ void GilbertEngine::blendPattern(Picture *pic, int k, const Common::Rect &dst, i
 		return;
 	Common::Rect area = dst;
 	area.clip(_clip);
+	const Common::Rect big = scaled(dst);
+	area = scaled(area);
 	for (int y = area.top; y < area.bottom; y++) {
-		const int sy = pat.top + (y - dst.top) * pat.height() / dst.height();
+		const int sy = pat.top + (y - big.top) * pat.height() / big.height();
 		uint16 *d = (uint16 *)_screen.getBasePtr(area.left, y);
 		for (int x = area.left; x < area.right; x++, d++) {
-			const int sx = pat.left + (x - dst.left) * pat.width() / dst.width();
+			const int sx = pat.left + (x - big.left) * pat.width() / big.width();
 			const uint16 c = *(const uint16 *)pic->surface.getBasePtr(sx, sy);
 			if (pic->transparent && c == pic->key)
 				continue;
@@ -629,23 +645,19 @@ void GilbertEngine::frameRect(const Common::Rect &r, uint32 rgb) {
 	const uint32 c = _screen.format.RGBToColor(rgb >> 16, (rgb >> 8) & 0xFF, rgb & 0xFF);
 	Common::Rect area = r;
 	area.clip(Common::Rect(640, 480));
-	if (!area.isEmpty())
-		_screen.frameRect(area, c);
-}
-
-void GilbertEngine::drawSurface(const Graphics::ManagedSurface &src, const Common::Rect &srcRect, int x, int y, uint32 key) {
-	Common::Rect dst(x, y, x + srcRect.width(), y + srcRect.height());
-	dst.clip(_clip);
-	if (dst.isEmpty())
+	if (area.isEmpty())
 		return;
-	const Common::Rect s(srcRect.left + dst.left - x, srcRect.top + dst.top - y,
-	                     srcRect.left + dst.right - x, srcRect.top + dst.bottom - y);
-	_screen.transBlitFrom(src, s, Common::Point(dst.left, dst.top), key);
+	area = scaled(area);
+	for (int i = 0; i < _scale; i++) {
+		_screen.frameRect(area, c);
+		area.grow(-1);
+	}
 }
 
 void GilbertEngine::fillAlpha(const Common::Rect &r, uint32 rgb, int alpha) {
 	Common::Rect area = r;
 	area.clip(Common::Rect(640, 480));
+	area = scaled(area);
 	const byte cr = rgb >> 16, cg = (rgb >> 8) & 0xFF, cb = rgb & 0xFF;
 	for (int y = area.top; y < area.bottom; y++) {
 		uint16 *p = (uint16 *)_screen.getBasePtr(area.left, y);
@@ -676,9 +688,96 @@ int GilbertEngine::textWidth(const Common::U32String &text, int size, bool bold)
 	return font(size, bold)->getStringWidth(text);
 }
 
-void GilbertEngine::drawText(Graphics::ManagedSurface &dst, const Common::U32String &text, int x, int y, int size, uint32 rgb, bool bold) {
+void GilbertEngine::drawText(const Common::U32String &text, int x, int y, int size, uint32 rgb, bool bold) {
+	renderText(_screen, text, x * _scale, y * _scale, size, rgb, bold);
+}
+
+// Layout always measures with font(); text is drawn with this one. The original's look is
+// the layout font itself; the smooth_text and high_res_text options draw it anti-aliased, at
+// the page's scale.
+const Graphics::Font *GilbertEngine::drawingFont(int size, bool bold) {
+	if (!_options.smoothText && _scale == 1)
+		return font(size, bold);
+	const int key = size * 2 + (bold ? 1 : 0);
+	if (!_drawingFonts.contains(key)) {
+		Graphics::Font *f = Graphics::loadTTFFontFromArchive(bold ? "LiberationSans-Bold.ttf" : "LiberationSans-Regular.ttf",
+		                                                     size * _scale, Graphics::kTTFSizeModeCharacter, 96, 96,
+		                                                     Graphics::kTTFRenderModeLight);
+		if (!f)
+			error("Gilbert: cannot load Liberation Sans from fonts.dat");
+		_drawingFonts[key] = f;
+	}
+	return _drawingFonts[key];
+}
+
+// Text at a position in `dst`'s own pixels.
+void GilbertEngine::renderText(Graphics::ManagedSurface &dst, const Common::U32String &text, int x, int y, int size, uint32 rgb, bool bold) {
 	const uint32 colour = dst.format.RGBToColor(rgb >> 16, (rgb >> 8) & 0xFF, rgb & 0xFF);
-	font(size, bold)->drawString(&dst, text, x, y, dst.w - x, colour);
+	drawingFont(size, bold)->drawString(&dst, text, x, y, dst.w - x, colour);
+}
+
+void TextPage::text(const Common::U32String &s, int x, int y, int size, uint32 rgb, bool bold) {
+	Item i;
+	i.type = Item::kText;
+	i.text = s;
+	i.x = x;
+	i.y = y;
+	i.size = size;
+	i.rgb = rgb;
+	i.bold = bold;
+	items.push_back(i);
+}
+
+void TextPage::underlineLast(int y, int w) {
+	if (!items.empty()) {
+		items.back().underline = y;
+		items.back().underlineW = w;
+	}
+}
+
+void TextPage::picture(Picture *pic, int x, int y) {
+	Item i;
+	i.type = Item::kPicture;
+	i.picture = pic;
+	i.x = x;
+	i.y = y;
+	items.push_back(i);
+}
+
+void GilbertEngine::drawPage(const TextPage &page, const Common::Rect &src, int x, int y) {
+	Common::Rect view(x, y, x + src.width(), y + src.height());
+	view.clip(_clip);
+	if (view.isEmpty())
+		return;
+	// Drawing into the view's part of the page clips everything to it.
+	const Common::Rect v = scaled(view);
+	Graphics::ManagedSurface sub(_screen, v);
+	const int dx = x - src.left - view.left, dy = y - src.top - view.top;
+	for (const TextPage::Item &i : page.items) {
+		const int ix = i.x + dx, iy = i.y + dy;
+		if (iy > view.height() || iy + 40 < 0)
+			continue;
+		switch (i.type) {
+		case TextPage::Item::kText:
+			renderText(sub, i.text, ix * _scale, iy * _scale, i.size, i.rgb, i.bold);
+			if (i.underline >= 0) {
+				int w = i.underlineW * _scale;
+				if (_scale > 1)
+					w = MIN(drawingFont(i.size, i.bold)->getStringWidth(i.text), (src.right - i.x) * _scale);
+				const int uy = i.underline + dy;
+				sub.fillRect(Common::Rect(ix * _scale, uy * _scale, ix * _scale + w, (uy + 1) * _scale),
+				             sub.format.RGBToColor(i.rgb >> 16, (i.rgb >> 8) & 0xFF, i.rgb & 0xFF));
+			}
+			break;
+		case TextPage::Item::kPicture: {
+			const Graphics::ManagedSurface &p = i.picture->surface;
+			sub.transBlitFrom(p, Common::Rect(p.w, p.h),
+			                  Common::Rect(ix * _scale, iy * _scale, (ix + p.w) * _scale, (iy + p.h) * _scale),
+			                  _screen.format.RGBToColor(0xFF, 0, 0xFF));
+			break;
+		}
+		}
+	}
 }
 
 Common::U32String GilbertEngine::fromWindows1252(const Common::String &s) {
@@ -747,7 +846,7 @@ void GilbertEngine::pollEvents() {
 	Common::Event event;
 	while (_eventMan->pollEvent(event)) {
 		// The window shows the page from the clip rectangle's corner.
-		event.mouse += Common::Point(kClipLeft, kClipTop);
+		event.mouse = Common::Point(event.mouse.x / _scale + kClipLeft, event.mouse.y / _scale + kClipTop);
 		switch (event.type) {
 		case Common::EVENT_MOUSEMOVE:
 			_mouse = event.mouse;
@@ -858,7 +957,7 @@ Common::Array<Common::KeyState> GilbertEngine::takeKeys() {
 
 void GilbertEngine::warpMouse(int x, int y) {
 	_mouse = Common::Point(x, y);
-	_system->warpMouse(x - kClipLeft, y - kClipTop);
+	_system->warpMouse((x - kClipLeft) * _scale, (y - kClipTop) * _scale);
 }
 
 void GilbertEngine::loadOptions() {
@@ -869,6 +968,8 @@ void GilbertEngine::loadOptions() {
 	_options.newTopics = ConfMan.getBool("mark_new_topics");
 	_options.autosave = ConfMan.getBool("autosave_rooms");
 	_options.fullscreenFilms = ConfMan.getBool("fullscreen_films");
+	_options.smoothText = ConfMan.getBool("smooth_text");
+	_options.highResText = ConfMan.getBool("high_res_text");
 }
 
 // The game screens' keys are off in the main menu, where the keys type save names.
@@ -926,7 +1027,7 @@ void GilbertEngine::getHotspotPositions(Common::Array<Graphics::HotspotInfo> &ho
 	else if (_mode == kModeCua)
 		_cua->hotspots(hotspots);
 	for (Graphics::HotspotInfo &h : hotspots)
-		h.position -= Common::Point(kClipLeft, kClipTop);
+		h.position = Common::Point((h.position.x - kClipLeft) * _scale, (h.position.y - kClipTop) * _scale);
 }
 
 // The overlay is drawn again only when the markers change.

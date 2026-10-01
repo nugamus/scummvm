@@ -459,7 +459,7 @@ void Menu::drawRows(int count, int top, int hover, int picked) {
 	for (int k = 1; k <= count; k++) {
 		const int n = top + k;
 		const Common::String text = Common::String::format("%d: ", n) + _vm->slotName(n);
-		_vm->drawText(_vm->screen(), GilbertEngine::fromWindows1252(text), 119, 85 + 30 * k, 8,
+		_vm->drawText(GilbertEngine::fromWindows1252(text), 119, 85 + 30 * k, 8,
 		              k == picked ? kColourYellow : kColourTan);
 	}
 }
@@ -495,7 +495,7 @@ void Menu::drawSavePage() {
 			_fieldAlpha = 80;
 			_fieldStep = -2;
 		}
-		_vm->drawText(_vm->screen(), GilbertEngine::fromWindows1252(_name), 119, 274, 8, kColourTan);
+		_vm->drawText(GilbertEngine::fromWindows1252(_name), 119, 274, 8, kColourTan);
 	}
 	pageButton(kSaveButton, 258, 302, 0x48, 0x4c);
 	pageButton(kUp, 301, 107, 0x64, 0x65);
@@ -527,7 +527,7 @@ void Menu::drawSettingsPage() {
 void Menu::drawHelpPage() {
 	_vm->drawPicture(i2(0x00), 64, 50);
 	_vm->drawPicture(i2(0x6f), 64, 50);
-	_vm->drawSurface(_helpText, Common::Rect(0, 0, 355, 320), 135, 95);
+	_vm->drawPage(_helpText, Common::Rect(0, 0, 355, 320), 135, 95);
 	_vm->drawPicture(_vm->interface1()[0], 64, 50);
 	_vm->drawPicture(i2(0x32), 64, 337);
 	_vm->drawPicture(i2(0x01), 192, 56);
@@ -544,7 +544,7 @@ void Menu::drawHelpPage() {
 
 void Menu::drawAboutPage() {
 	const int t = (int)_scroll;
-	_vm->drawSurface(_creditsText, Common::Rect(0, t, 440, MIN(t + 280, 3000)), 102, 55);
+	_vm->drawPage(_creditsText, Common::Rect(0, t, 440, MIN(t + 280, 3000)), 102, 55);
 	_scroll += 0.5;
 	if (_scroll >= 3000)
 		_scroll = 0;
@@ -552,8 +552,7 @@ void Menu::drawAboutPage() {
 
 // Data/misc/help.txt into a 440x1400 surface (boot.md "Help").
 void Menu::buildHelp() {
-	_helpText.create(440, 1400, _vm->screen().format);
-	_helpText.clear(0);
+	_helpText.clear();
 	Common::File f;
 	if (!f.open("misc/help.txt"))
 		return;
@@ -569,7 +568,8 @@ void Menu::buildHelp() {
 		} else if (c == '$') {
 			bold = true;
 		} else if (c == '\r' || c == '\n') {
-			_vm->drawText(_helpText, GilbertEngine::fromWindows1252(line), 0, y, 8, 0x804040, bold);
+			if (y < 1400)
+				_helpText.text(GilbertEngine::fromWindows1252(line), 0, y, 8, 0x804040, bold);
 			line.clear();
 			y += 10;
 		} else {
@@ -580,8 +580,7 @@ void Menu::buildHelp() {
 
 // Data/misc/credits.txt into a 440x3000 surface (boot.md "About").
 void Menu::buildCredits() {
-	_creditsText.create(440, 3000, _vm->screen().format);
-	_creditsText.clear(0);
+	_creditsText.clear();
 	Common::File f;
 	if (!f.open("misc/credits.txt"))
 		return;
@@ -605,8 +604,10 @@ void Menu::buildCredits() {
 		} else if (c == '\r' || c == '\n') {
 			const Common::U32String text = GilbertEngine::fromWindows1252(line);
 			const int w = _vm->textWidth(text, size);
-			_vm->drawText(_creditsText, text, 221 - w / 2, y + 1, size, 0x031602);
-			_vm->drawText(_creditsText, text, 220 - w / 2, y, size, colour);
+			if (y < 3000) {
+				_creditsText.text(text, 221 - w / 2, y + 1, size, 0x031602);
+				_creditsText.text(text, 220 - w / 2, y, size, colour);
+			}
 			line.clear();
 			y += 10;
 		} else {

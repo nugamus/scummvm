@@ -152,7 +152,7 @@ void DialogBox::draw() {
 	_vm->blendPattern(i2[0xa4], 0, Common::Rect(b.left - 2, b.top - 14, b.left + 1, b.bottom - 8), 255);
 	_vm->blendPattern(i2[0xa4], 0, Common::Rect(b.right - 1, b.top - 14, b.right + 2, b.bottom - 8), 255);
 	for (uint i = 0; i < _lines.size(); i++)
-		_vm->drawText(_vm->screen(), GilbertEngine::fromWindows1252(_lines[i]), b.left + 10, b.top - 6 + 12 * i, 8, kColourTan);
+		_vm->drawText(GilbertEngine::fromWindows1252(_lines[i]), b.left + 10, b.top - 6 + 12 * i, 8, kColourTan);
 	const bool mark = _vm->options().markChoices && !_print;
 	for (uint k = 0; k < _choices.size(); k++) {
 		uint32 colour = 0x7F7F7F;
@@ -160,7 +160,7 @@ void DialogBox::draw() {
 			colour = kColourTan;
 		else if (mark && _vm->isSeen(GilbertEngine::choiceKey(_id, _choices[k])))
 			colour = 0x4C4C4C; // the mark_choices option: picked before
-		_vm->drawText(_vm->screen(), GilbertEngine::fromWindows1252(_choices[k]), b.left + 10, b.top + 20 + 18 * k + _off, 8, colour);
+		_vm->drawText(GilbertEngine::fromWindows1252(_choices[k]), b.left + 10, b.top + 20 + 18 * k + _off, 8, colour);
 	}
 }
 

@@ -28,6 +28,7 @@
 #include "graphics/managed_surface.h"
 
 #include "gilbert/collection.h"
+#include "gilbert/gilbert.h"
 
 namespace Gilbert {
 
@@ -59,7 +60,7 @@ private:
 
 	GilbertEngine *_vm;
 	PictureCollection _images;
-	Graphics::ManagedSurface _surface;
+	TextPage _surface; ///< the list or the page (the original's off-screen surface)
 	bool _page = false;
 	int _book = 1;
 	int _first = 0;
