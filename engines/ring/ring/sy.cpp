@@ -220,8 +220,10 @@ void onClick(RingEngine *vm, int object, int value) {
 	case kObjQuestion:
 		if (value <= 3)
 			closeQuestion(vm, value >= 2 ? 2 : 0);
-		if (value == 2) // 0x431140: a new game starts in zone AS
+		if (value == 2) { // 0x408bc0, 0x431040: the set-ups again, then 0x431140: a new game in zone AS
+			vm->resetWorld();
 			vm->goZone(kZoneAS, 999);
+		}
 		break;
 	default:
 		break;

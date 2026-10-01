@@ -81,6 +81,13 @@ struct Animation {
 	bool active = false, paused = false, justStarted = true;
 	uint32 frameTime = 0, lastStep = 0;
 	int lastReported = -5;
+	int baseMode = 4;                            ///< +0x18: the mode chosen at Init
+	int pauseFrame = 0, pauseState = 0;          ///< +0x42, +0x4a: 0 none, 1 armed, 2 holding
+	uint32 pauseMs = 0, holdStart = 0;           ///< +0x46, the hold's start
+	bool stepped = false;                        ///< +0x60: a step since arming
+
+	/** `aAnimation::PauseExactOnFrame` 0x416af0 (spec/animation.md, "Pausing on a frame"). */
+	void pauseExactOnFrame(int frame, uint32 ms, int direction);
 
 	/** `aAnimation::Init` 0x416450, start frame 1. */
 	void init(int count, float fps, int flags);
@@ -240,12 +247,18 @@ public:
 	void showPresentation(int object, int presentation, bool shown, uint32 time = 0);
 	/** `ObjPrePauAni` / `ObjPreUnPauAni`. */
 	void pauseAnimations(int object, int presentation, bool paused);
+	/** `ObjPrePauFraAni`: every animation of the presentation pauses `ms` on `frame` (1-based). */
+	void pauseOnFrame(int object, int presentation, int frame, uint32 ms, int direction);
 	/** `ObjPreSetTxtToPuz` / `ObjPreSetTxtCooToPuz`: the presentation's `index`-th text. */
 	PuzzleText *text(int object, int presentation, int index);
 	/** `ObjPreSetImgCooOnPuz`: the `index`-th picture of the presentation, on any puzzle. */
 	PuzzleImage *image(int object, int presentation, int index);
-	/** `ObjPreHidDeaPuz`: hides every presentation of the object and frees its pictures. */
-	void hideAndFree(int object);
+	/** `ObjPreHidDeaPuz`: hides the presentation (all when negative) and frees its pictures. */
+	void hideAndFree(int object, int presentation = -1);
+	/** `PuzSetMovOnOrOff` / `RotSetMovOnOrOff`: movabilities `from`..`to` (all when negative) of a puzzle or rotation. */
+	void setMovabilities(int place, bool on, int from = -1, int to = -1);
+	/** `PuzAddBgrImg` while playing: the puzzle's background becomes `file`. */
+	void setBackground(int puzzle, const Common::String &file);
 	/** `ObjSetAccOnOrOff` over all (from < 0) or `from`..`to` of the object's accessibilities. */
 	void setAccessibilities(int object, bool on, int from = -1, int to = -1);
 

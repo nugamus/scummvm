@@ -53,6 +53,8 @@ public:
 	void removeAll();
 	/** `BagIsIn`. */
 	bool has(int object) const;
+	/** The objects, front first (`aList::LoadSave`). */
+	Common::Array<int> contents() const;
 
 	bool shown() const { return _shown; }
 	/** 0x4192e0: shown, the bag animations started. */

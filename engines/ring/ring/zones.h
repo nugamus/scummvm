@@ -40,6 +40,18 @@ void onDrag(RingEngine *vm, int object, int phase);
 void onSound(RingEngine *vm, int id, int type, int reason, int ended);
 }
 
+namespace NI {
+void enter(RingEngine *vm, int entry);
+void onClick(RingEngine *vm, int object, int value, int place);
+void onButtonDown(RingEngine *vm, int object, int value);
+void onDrag(RingEngine *vm, int object, int value, int phase);
+void onAccessibility(RingEngine *vm, int object, int value);
+void onBeforeMove(RingEngine *vm, int from, int to, int value, int kind);
+void onAfterMove(RingEngine *vm, int to, int from, int value, int kind);
+void onTimer(RingEngine *vm, int id);
+void onAnimation(RingEngine *vm, int id, int frame);
+void onSound(RingEngine *vm, int id, int type, int reason, int ended);
+}
 namespace AS {
 /** GameSetZoneAS (0x437ba0): entering the zone at `entry` (999: a new game). */
 void enter(RingEngine *vm, int entry);
