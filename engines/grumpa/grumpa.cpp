@@ -70,6 +70,7 @@ Common::Error GrumpaEngine::run() {
 	enum { kNewGame = 0, kHelp = 4, kCredits = 5, kQuit = 6 };
 	enum { kMenu, kScene } state = kMenu;
 	bool dirty = true;
+	uint32 lastSceneDraw = 0;
 	while (!shouldQuit()) {
 		Common::Event event;
 		while (g_system->getEventManager()->pollEvent(event)) {
@@ -107,8 +108,12 @@ Common::Error GrumpaEngine::run() {
 				if (activate == kQuit)
 					return Common::kNoError;
 				else if (activate == kNewGame) {
-					loadBackground("100_1");
+					// The first scene is the tutorial hut (scene 1); render it live with its
+					// animated sprite props (docs/spec/scene.md). Scene navigation and the
+					// game logic are the next layers.
+					enterScene(1);
 					state = kScene;
+					dirty = true;
 				} else if (activate == kHelp) {
 					showTextScreen("UI/001_Menu/Help.txt");
 					dirty = true;
@@ -121,6 +126,16 @@ Common::Error GrumpaEngine::run() {
 		if (dirty && state == kMenu) {
 			drawMenu(sel);
 			dirty = false;
+		}
+		if (state == kScene) {
+			// Redraw the scene at ~15 fps for the sprite animation (the original ran a 10 ms
+			// timer; the props cycle at a few fps).
+			uint32 now = g_system->getMillis();
+			if (dirty || now - lastSceneDraw >= 66) {
+				renderSceneFrame(now);
+				lastSceneDraw = now;
+				dirty = false;
+			}
 		}
 		g_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0,
 								   kScreenWidth, kScreenHeight);

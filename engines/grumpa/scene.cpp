@@ -22,6 +22,7 @@
 #include "common/debug.h"
 #include "common/file.h"
 #include "common/stream.h"
+#include "common/system.h"
 #include "graphics/managed_surface.h"
 #include "graphics/surface.h"
 #include "graphics/cursorman.h"
@@ -370,15 +371,33 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 	return c.ok;
 }
 
-// Draw a sprite prop's frame-0 JPG at (x, y) with the blue colour key (E-0107): pixels near
+// The file name of a sprite's frame: a name ending in "_<4 digits>.<ext>" animates by
+// substituting the frame number; any other name is static (drawn as-is). E-0107.
+static Common::String spriteFrameName(const Common::String &base, int frame) {
+	int dot = -1;
+	for (int i = (int)base.size() - 1; i >= 0; i--)
+		if (base[i] == '.') { dot = i; break; }
+	if (dot >= 5 && base[dot - 5] == '_') {
+		bool digits = true;
+		for (int i = dot - 4; i < dot; i++)
+			if (base[i] < '0' || base[i] > '9') { digits = false; break; }
+		if (digits)
+			return Common::String(base.c_str(), dot - 4)
+				+ Common::String::format("%04d", frame) + (base.c_str() + dot);
+	}
+	return base;
+}
+
+// Draw a sprite prop's frame `frame` at (x, y) with the blue colour key (E-0107): pixels near
 // pure blue (high B, low R/G) are transparent. flag0==0 sprites (smoke etc.) use a different
 // blend in the original (Q-0009); for now they key the same way.
-void GrumpaEngine::drawSprite(const SceneSprite &sprite) {
+void GrumpaEngine::drawSprite(const SceneSprite &sprite, int frame) {
 	if (sprite.name.empty())
 		return;
+	Common::String file = spriteFrameName(sprite.name, frame);
 	Common::File f;
-	if (!f.open(Common::Path("Bitmaps/" + sprite.name))) {
-		debug(1, "Grumpa: sprite %s not found", sprite.name.c_str());
+	if (!f.open(Common::Path("Bitmaps/" + file))) {
+		debug(2, "Grumpa: sprite %s not found", file.c_str());
 		return;
 	}
 	Image::JPEGDecoder jpeg;
@@ -400,6 +419,42 @@ void GrumpaEngine::drawSprite(const SceneSprite &sprite) {
 				continue;
 			_screen.setPixel(dx, dy, s->getPixel(xx, yy));
 		}
+	}
+}
+
+// Enter scene <num>: read its graph (views + sprites) and decode its background view
+// "<num>_1" into _sceneBg (cached, so animation only re-decodes the small sprites).
+bool GrumpaEngine::enterScene(int num) {
+	_sceneData = SceneData();
+	loadScene(num, _sceneData);
+	Common::String bg = Common::String::format("%d_1", num);
+	_sceneBg.create(kScreenWidth, kScreenHeight, _screen.format);
+	_sceneBg.clear();
+	Common::File f;
+	if (f.open(Common::Path("Bitmaps/" + bg + "_IS.jpg"))) {
+		Image::JPEGDecoder jpeg;
+		jpeg.setOutputPixelFormat(_screen.format);
+		if (jpeg.loadStream(f)) {
+			const Graphics::Surface *s = jpeg.getSurface();
+			_sceneBg.blitFrom(*s, Common::Point((kScreenWidth - s->w) / 2, (kScreenHeight - s->h) / 2));
+		}
+	}
+	_sceneTick0 = g_system->getMillis();
+	debug(1, "Grumpa: entered scene %d (%u sprites)", num, (uint)_sceneData.sprites.size());
+	return true;
+}
+
+// Redraw the current scene: the cached background, then each sprite's current animation frame
+// (frame = elapsed * fps / 1000, wrapped to the frame count). E-0107.
+void GrumpaEngine::renderSceneFrame(uint32 now) {
+	_screen.blitFrom(_sceneBg);
+	uint32 elapsed = now - _sceneTick0;
+	for (uint i = 0; i < _sceneData.sprites.size(); i++) {
+		const SceneSprite &sp = _sceneData.sprites[i];
+		int frame = 0;
+		if (sp.frames > 1 && sp.fps > 0)
+			frame = (int)((elapsed * (uint32)sp.fps / 1000) % (uint32)sp.frames);
+		drawSprite(sp, frame);
 	}
 }
 
