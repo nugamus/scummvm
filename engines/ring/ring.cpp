@@ -253,13 +253,18 @@ Common::Error RingEngine::run() {
 
 	startMenu(false);
 	_buttons.clear();
-	// Development: dev_rotation=<id> starts in the rotation's zone on that rotation (alpha 90, ran 85.3).
-	if (Rotation *r = _world->rotation(ConfMan.getInt("dev_rotation"))) {
+	// Development: dev_place=<id> starts on that rotation (alpha 90, ran 85.3) or puzzle, in its zone.
+	int place = ConfMan.getInt("dev_place");
+	if (Rotation *r = _world->rotation(place)) {
 		_zone = r->zone;
 		_menuZone = 0;
 		r->setAlpha(90.0f);
 		r->ran = 85.3f;
 		rotSetAct(r->id);
+	} else if (Puzzle *p = _world->puzzle(place)) {
+		_zone = p->zone;
+		_menuZone = 0;
+		puzSetAct(p->id);
 	}
 	// Development: dev_input="ms:move x y;ms:click x y;ms:key code 0;..." replays input at ms after the menu opens.
 	Common::StringArray script;
@@ -600,10 +605,23 @@ void RingEngine::drawView() {
 			}
 		}
 	} else if (Puzzle *p = _world->puzzle(_puzzle)) {
+		advanceAnimations(*p);
 		_world->draw(*p, *_resources, _screen);
 	}
-	if (Puzzle *p1 = _world->puzzle(1))
+	if (Puzzle *p1 = _world->puzzle(1)) {
+		advanceAnimations(*p1);
 		_world->draw(*p1, *_resources, _screen);
+	}
+}
+
+void RingEngine::advanceAnimations(Puzzle &p) {
+	// aPuzzle::Update 0x41c320, before the pictures are drawn.
+	uint32 now = g_system->getMillis();
+	for (uint i = 0; i < p.animations.size(); i++) {
+		Common::SharedPtr<Animation> anim = p.animations[i];
+		if (anim->advance(now))
+			onAnimation(this, _zone, anim->id, anim->frame + 1);
+	}
 }
 
 void RingEngine::updateLayers(Rotation &r) {

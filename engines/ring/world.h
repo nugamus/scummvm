@@ -104,7 +104,8 @@ struct Presentation {
 	bool shown = false;
 	Common::Array<Common::SharedPtr<PuzzleText> > texts;
 	Common::Array<LayerRef> layers;
-	Common::Array<Common::SharedPtr<Animation> > animations; ///< its rotation layers' animations
+	Common::Array<Common::SharedPtr<Animation> > animations;       ///< its rotation layers' animations
+	Common::Array<Common::SharedPtr<Animation> > puzzleAnimations; ///< `ObjPreAddAniToPuz`
 };
 
 /** A picture of a presentation on a puzzle (`ObjPreAddImgToPuz`, spec/drawing.md). */
@@ -117,6 +118,10 @@ struct PuzzleImage {
 	byte drawType = 1;
 	int priority = 0;
 	Common::ScopedPtr<Image> image;
+	/** A puzzle animation (spec/animation.md): frames `ANI/<file>/<file>.0001.<ext>`, loaded when first drawn. */
+	Common::SharedPtr<Animation> animation;
+	Common::String ext;
+	Common::Array<Common::SharedPtr<Image> > frames;
 };
 
 /** A way out of a puzzle or rotation (`*AddMovTo*`, spec/api.md "Movability"). */
@@ -143,6 +148,7 @@ struct Puzzle {
 	Common::Array<Common::SharedPtr<PuzzleText> > texts;
 	Common::Array<Movability> movabilities;
 	SoundItems sounds; ///< ambient and 3D sounds (spec/sound.md)
+	Common::Array<Common::SharedPtr<Animation> > animations; ///< its presentations' animations, advanced when drawn
 };
 
 /** A panorama node (`AddRot`, spec/rotation.md). */
