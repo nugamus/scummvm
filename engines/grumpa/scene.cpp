@@ -398,6 +398,22 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			}
 			if (c.ok)
 				scene.triggers.push_back(tr);
+		} else if (t == 0x1a) {
+			// 3D animated-mesh actor (E-0114): flags, transform/command blocks, then the
+			// .anb mesh and .tga texture names.
+			SceneMesh m;
+			m.id = id;
+			c.skip(4);
+			m.active = c.u32() != 0;        // +0x10c
+			m.visible = c.u32() != 0;       // +0x110
+			ecVec(c); c.skip(72); sub56(c); sub24(c); sub24(c); pairVec(c);
+			for (int v = 0; v < 8 && c.ok; v++) ccVec(c);
+			int32 na = c.i32();
+			if (na > 0) { m.anb = Common::String((const char *)(c.d + c.o), na); c.skip(na); }
+			int32 nt = c.i32();
+			if (nt > 0) { m.tga = Common::String((const char *)(c.d + c.o), nt); c.skip(nt); }
+			if (c.ok)
+				scene.meshes.push_back(m);
 		} else if (!skipBody(c, t)) {
 			warning("Grumpa: scene %s unmodelled type %#x at %#x", name.c_str(), t, c.o - 8);
 			return false;
@@ -539,8 +555,19 @@ bool GrumpaEngine::enterScene(int num) {
 			_sceneBg.blitFrom(*s, Common::Point((kScreenWidth - s->w) / 2, (kScreenHeight - s->h) / 2));
 		}
 	}
+	// The scene depth buffer (for occluding the 3D mesh actors), and the mesh geometry.
+	_sceneDepth.clear();
+	_depthW = _depthH = 0;
+	loadDepth(bg, _sceneDepth, _depthW, _depthH);
+	for (uint i = 0; i < _sceneData.meshes.size(); i++) {
+		Common::String base = _sceneData.meshes[i].anb;
+		if (base.size() > 4 && base[base.size() - 4] == '.')  // strip ".anb"/".ANB"
+			base = Common::String(base.c_str(), base.size() - 4);
+		loadMesh(base, _sceneData.meshes[i].mesh);
+	}
 	_sceneTick0 = g_system->getMillis();
-	debug(1, "Grumpa: entered scene %d (%u sprites)", num, (uint)_sceneData.sprites.size());
+	debug(1, "Grumpa: entered scene %d (%u sprites, %u meshes)", num,
+		  (uint)_sceneData.sprites.size(), (uint)_sceneData.meshes.size());
 	return true;
 }
 
@@ -558,6 +585,12 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 			frame = (int)((elapsed * (uint32)sp.fps / 1000) % (uint32)sp.frames);
 		drawSprite(sp, frame);
 	}
+	// 3D animated-mesh actors (type 0x1a, E-0114) are loaded (meshes cached) but not yet drawn
+	// in the live scene: each scene has several views at different eye positions, and the
+	// view that matches the shown background ("<n>_1") is not yet mapped (Scene_061 has 4
+	// views near/far the geometry; picking views[0] renders them off-screen). Once the
+	// view->background mapping is known, draw the active meshes through that view's camera with
+	// depth occlusion (verified via the dev harness). See docs/spec/scene.md.
 }
 
 } // End of namespace Grumpa

@@ -105,11 +105,23 @@ struct SceneTrigger {
 	bool spent = false;
 };
 
+// A 3D animated-mesh actor (type 0x1a, E-0114): an .anb mesh (+ .tga texture) authored in
+// world space, drawn through the view camera. `active` gates whether it is drawn (the scene's
+// default-state objects start active; the rest are shown by commands).
+struct SceneMesh {
+	Common::String anb, tga;
+	uint32 id = 0;
+	bool active = false;
+	bool visible = false;
+	Mesh mesh;   // loaded once on scene entry
+};
+
 // Everything the engine reads from a Scene_<NNN>.abi today.
 struct SceneData {
 	Common::Array<SceneView> views;
 	Common::Array<SceneSprite> sprites;
 	Common::Array<SceneTrigger> triggers;
+	Common::Array<SceneMesh> meshes;
 };
 
 /** Build the view camera from its 26-float .abi block (E-0105). */
