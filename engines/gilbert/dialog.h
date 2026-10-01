@@ -53,6 +53,7 @@ private:
 	GilbertEngine *_vm;
 	bool _open = false;
 	bool _print = false;
+	uint32 _id = 0; ///< the dialogue's ID, for the mark_choices option
 	Common::String _title, _text;
 	Common::Array<Common::String> _choices;
 	Common::Array<Common::String> _lines;

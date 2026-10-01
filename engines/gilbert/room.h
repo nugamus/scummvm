@@ -26,6 +26,8 @@
 #include "common/rect.h"
 #include "common/str.h"
 
+#include "graphics/hotspot_renderer.h"
+
 #include "gilbert/collection.h"
 
 namespace Gilbert {
@@ -66,6 +68,9 @@ public:
 	void rereadRadar();
 	void clearNewTopic() { _newTopic = false; }
 
+	/** The hotspot overlay: one marker per area that can be clicked on screen. */
+	void hotspots(Common::Array<Graphics::HotspotInfo> &list) const;
+
 private:
 	struct Object {
 		int picture;
@@ -81,6 +86,10 @@ private:
 	void moveGilbert(int m);
 	void stepAreaCheck();
 	void fade(bool in);
+	/** With the hotspot overlay: the areas tinted and outlined. */
+	void drawAreas();
+	/** Whether a click at this point walks (rooms.md "Mouse"). */
+	static bool inWalkArea(Common::Point p);
 
 	GilbertEngine *_vm;
 	PictureCollection _objects, _picture, _mask;

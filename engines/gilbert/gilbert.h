@@ -23,6 +23,8 @@
 #define GILBERT_GILBERT_H
 
 #include "common/array.h"
+#include "common/events.h"
+#include "common/hash-str.h"
 #include "common/hashmap.h"
 #include "common/keyboard.h"
 #include "common/rect.h"
@@ -32,9 +34,11 @@
 #include "engines/advancedDetector.h"
 #include "engines/engine.h"
 
+#include "graphics/hotspot_renderer.h"
 #include "graphics/managed_surface.h"
 
 #include "gilbert/collection.h"
+#include "gilbert/detection.h"
 #include "gilbert/logic.h"
 
 namespace Graphics {
@@ -64,6 +68,17 @@ struct Settings {
 	int installationType = -1;
 	int soundVolume = 4;
 	int musicVolume = 5;
+};
+
+/** The launcher's game options, the enhancements (metaengine.cpp). */
+struct Options {
+	bool alwaysRun = false;
+	bool shortcuts = false;
+	bool wheel = false;
+	bool markChoices = false;
+	bool newTopics = false;
+	bool autosave = false;
+	bool fullscreenFilms = false;
 };
 
 class GilbertEngine : public Engine, public LogicListener {
@@ -105,6 +120,28 @@ public:
 
 	Sound *sound() { return _sound; }
 	Settings &settings() { return _settings; }
+	const Options &options() const { return _options; }
+
+	/**
+	 * The keyboard shortcuts and the mouse wheel (options): the action of this tick
+	 * (GilbertAction), kActionNone if none; a screen that acts on it takes it.
+	 */
+	int shortcut() const { return _shortcut; }
+	void takeShortcut() { _shortcut = kActionNone; }
+
+	/**
+	 * What the player has seen, for the options that mark it: dialogue choices picked and
+	 * book topics opened. Kept beside each save in `<target>.game<n>.dat.seen`.
+	 */
+	static Common::String choiceKey(uint32 dialog, const Common::String &text);
+	static Common::String topicKey(int book, uint32 topic);
+	bool isSeen(const Common::String &key) const { return _seen.contains(key); }
+	void markSeen(const Common::String &key) { _seen[key] = true; }
+
+	// ScummVM's hotspot overlay (H): the room's areas, the close-up's objects.
+	void getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) override;
+	void drawHotspots() override;
+	bool hotspotsShown() const { return _showHotspots; }
 	void applyVolumes();
 	void saveSettings();
 
@@ -214,6 +251,11 @@ private:
 	void resetState();
 	void loadLanguage();
 	void loadSettings();
+	void loadOptions();
+	void toggleHotspots();
+	void enableKeymaps();
+	void seedTopics();
+	void autosave();
 
 	const ADGameDescription *_gameDesc;
 	Graphics::ManagedSurface _screen;
@@ -223,6 +265,11 @@ private:
 	Common::Array<Common::String> _language;
 	Common::String _slotNames[51];
 	Settings _settings;
+	Options _options;
+	int _shortcut = kActionNone;
+	Common::HashMap<Common::String, bool> _seen;
+	Common::Array<Graphics::HotspotInfo> _shownHotspots;
+	uint32 _autosaved = 0; ///< the room of the last autosave
 	Sound *_sound = nullptr;
 	Logic *_logic = nullptr;
 	Room *_room = nullptr;

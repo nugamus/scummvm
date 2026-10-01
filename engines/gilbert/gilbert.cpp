@@ -31,6 +31,8 @@
 
 #include "engines/util.h"
 
+#include "backends/keymapper/keymapper.h"
+
 #include "graphics/font.h"
 #include "graphics/fonts/ttf.h"
 #include "graphics/pixelformat.h"
@@ -49,8 +51,12 @@
 
 namespace Gilbert {
 
-// The clip rectangle of every picture draw (boot.md "Conventions").
+// The clip rectangle of every picture draw (boot.md "Conventions"). Nothing is drawn outside
+// it, so the window shows only it: the original's black border is cut off.
 static const int kClipLeft = 64, kClipTop = 50, kClipRight = 576, kClipBottom = 430;
+static const int kWindowW = kClipRight - kClipLeft, kWindowH = kClipBottom - kClipTop;
+// The autosave's slot (the autosave_rooms option).
+static const int kAutosaveSlot = 50;
 // Menu tick (boot.md "Main loop", Q-0207).
 static const uint32 kTickMs = 16;
 // The loading panel's busy wait (boot.md "Loading panel"); its length on the original's
@@ -96,7 +102,7 @@ GilbertEngine::~GilbertEngine() {
 
 Common::Error GilbertEngine::run() {
 	const Graphics::PixelFormat format(2, 5, 6, 5, 0, 11, 5, 0, 0);
-	initGraphics(640, 480, &format);
+	initGraphics(kWindowW, kWindowH, &format);
 	_screen.create(640, 480, format);
 	_clip = Common::Rect(kClipLeft, kClipTop, kClipRight, kClipBottom);
 	_sound = new Sound(_mixer);
@@ -107,6 +113,9 @@ Common::Error GilbertEngine::run() {
 	_book = new Book(this);
 	_dialog = new DialogBox(this);
 	loadSettings();
+	loadOptions();
+	syncSoundSettings();
+	enableKeymaps();
 	loadLanguage();
 	_mouse = Common::Point(320, 240);
 
@@ -143,8 +152,10 @@ Common::Error GilbertEngine::run() {
 		default:
 			break;
 		}
+		autosave();
 		if (_mode != kModeMenu)
 			_keys.clear();
+		_shortcut = kActionNone;
 		previous = now0;
 		next += kTickMs;
 		const uint32 now = _system->getMillis();
@@ -272,7 +283,9 @@ void GilbertEngine::playFilmBody(const Common::String &name) {
 		return;
 	}
 	decoder.setOutputPixelFormat(_screen.format);
-	const bool fullscreen = _settings.fullscreenVideo;
+	decoder.setSoundType(Audio::Mixer::kSFXSoundType);
+	const bool smooth = _options.fullscreenFilms;
+	const bool fullscreen = _settings.fullscreenVideo || smooth;
 	const bool logo = name == "logo1.mpg" || name == "logo2.mpg" || name == "logo3.mpg";
 	if (fullscreen) {
 		clear();
@@ -291,9 +304,24 @@ void GilbertEngine::playFilmBody(const Common::String &name) {
 			const Graphics::Surface *frame = decoder.decodeNextFrame();
 			if (frame) {
 				frames++;
-				if (fullscreen)
-					_screen.blitFrom(*frame, Common::Rect(frame->w, frame->h), Common::Rect(640, 480));
-				else
+				if (fullscreen) {
+					// The window, with the film's proportions.
+					int w = kWindowW, h = frame->h * kWindowW / MAX<int>(frame->w, 1);
+					if (h > kWindowH) {
+						h = kWindowH;
+						w = frame->w * kWindowH / MAX<int>(frame->h, 1);
+					}
+					const Common::Rect dst(kClipLeft + (kWindowW - w) / 2, kClipTop + (kWindowH - h) / 2,
+					                       kClipLeft + (kWindowW + w) / 2, kClipTop + (kWindowH + h) / 2);
+					if (smooth) {
+						Graphics::Surface *scaled = frame->scale(dst.width(), dst.height(), true);
+						_screen.blitFrom(*scaled, Common::Point(dst.left, dst.top));
+						scaled->free();
+						delete scaled;
+					} else {
+						_screen.blitFrom(*frame, Common::Rect(frame->w, frame->h), dst);
+					}
+				} else
 					_screen.blitFrom(*frame, Common::Point(127, 80));
 				present();
 			}
@@ -334,6 +362,13 @@ bool GilbertEngine::saveSlot(int n, const Common::String &name) {
 		return false;
 	iniOut->finalize();
 	_slotNames[n] = name;
+	// What the player has seen (the marking options), beside the original's file.
+	Common::ScopedPtr<Common::OutSaveFile> seen(_saveFileMan->openForSaving(_targetName + "." + file + ".seen", false));
+	if (seen) {
+		for (const auto &k : _seen)
+			seen->writeString(k._key + "\n");
+		seen->finalize();
+	}
 	return true;
 }
 
@@ -348,7 +383,19 @@ bool GilbertEngine::loadSlot(int n) {
 	if (!in || !_logic->load(*in))
 		return false;
 	resetState();
+	_seen.clear();
+	Common::ScopedPtr<Common::InSaveFile> seen(_saveFileMan->openForLoading(_targetName + "." + file + ".seen"));
+	if (seen) {
+		while (!seen->eos()) {
+			const Common::String line = seen->readLine();
+			if (!line.empty())
+				markSeen(line);
+		}
+	} else {
+		seedTopics();
+	}
 	_logic->continueGame();
+	_autosaved = _logic->walkmapId();
 	return true;
 }
 
@@ -395,7 +442,10 @@ bool GilbertEngine::newGame() {
 		return false;
 	}
 	resetState();
+	_seen.clear();
+	seedTopics();
 	_logic->startNewGame();
+	_autosaved = _logic->walkmapId();
 	return true;
 }
 
@@ -428,7 +478,9 @@ void GilbertEngine::walk(int direction) {
 }
 
 bool GilbertEngine::ctrlHeld() const {
-	return _runHeld || (_eventMan->getModifierState() & Common::KBD_CTRL) != 0;
+	const bool held = _runHeld || (_eventMan->getModifierState() & Common::KBD_CTRL) != 0;
+	// Always run (option): Ctrl walks.
+	return _options.alwaysRun ? !held : held;
 }
 
 void GilbertEngine::drawCursor(int n) {
@@ -510,20 +562,21 @@ void GilbertEngine::present() {
 void GilbertEngine::present(int brightness) {
 	_brightness = brightness;
 	if (brightness >= 256) {
-		_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, 640, 480);
+		_system->copyRectToScreen(_screen.getBasePtr(kClipLeft, kClipTop), _screen.pitch, 0, 0, kWindowW, kWindowH);
 	} else {
-		Graphics::ManagedSurface dim(640, 480, _screen.format);
-		for (int y = 0; y < 480; y++) {
-			const uint16 *s = (const uint16 *)_screen.getBasePtr(0, y);
+		Graphics::ManagedSurface dim(kWindowW, kWindowH, _screen.format);
+		for (int y = 0; y < kWindowH; y++) {
+			const uint16 *s = (const uint16 *)_screen.getBasePtr(kClipLeft, kClipTop + y);
 			uint16 *d = (uint16 *)dim.getBasePtr(0, y);
-			for (int x = 0; x < 640; x++) {
+			for (int x = 0; x < kWindowW; x++) {
 				byte r, g, b;
 				_screen.format.colorToRGB(s[x], r, g, b);
 				d[x] = _screen.format.RGBToColor(r * brightness / 256, g * brightness / 256, b * brightness / 256);
 			}
 		}
-		_system->copyRectToScreen(dim.getPixels(), dim.pitch, 0, 0, 640, 480);
+		_system->copyRectToScreen(dim.getPixels(), dim.pitch, 0, 0, kWindowW, kWindowH);
 	}
+	drawHotspots();
 	_system->updateScreen();
 }
 
@@ -693,6 +746,8 @@ void GilbertEngine::readSlotNames() {
 void GilbertEngine::pollEvents() {
 	Common::Event event;
 	while (_eventMan->pollEvent(event)) {
+		// The window shows the page from the clip rectangle's corner.
+		event.mouse += Common::Point(kClipLeft, kClipTop);
 		switch (event.type) {
 		case Common::EVENT_MOUSEMOVE:
 			_mouse = event.mouse;
@@ -730,11 +785,23 @@ void GilbertEngine::pollEvents() {
 			if (event.kbd.keycode == Common::KEYCODE_ESCAPE)
 				_escHeld = false;
 			break;
+		case Common::EVENT_WHEELUP:
+		case Common::EVENT_WHEELDOWN:
+			if (_options.wheel)
+				_shortcut = event.type == Common::EVENT_WHEELUP ? kActionInventoryUp : kActionInventoryDown;
+			break;
 		case Common::EVENT_CUSTOM_ENGINE_ACTION_START:
-			if (event.customType == kActionSkip)
+			if (event.customType == kActionSkip) {
 				_escHeld = true;
-			else if (event.customType == kActionRun)
+				if (_options.shortcuts && !_busy)
+					_shortcut = kActionBack;
+			} else if (event.customType == kActionRun) {
 				_runHeld = true;
+			} else if (event.customType == kActionHotspots) {
+				toggleHotspots();
+			} else if (_options.shortcuts) {
+				_shortcut = event.customType;
+			}
 			break;
 		case Common::EVENT_CUSTOM_ENGINE_ACTION_END:
 			if (event.customType == kActionSkip)
@@ -765,6 +832,7 @@ void GilbertEngine::setMode(int mode) {
 				syncPress(s.screen);
 	}
 	_mode = mode;
+	enableKeymaps();
 }
 
 void GilbertEngine::syncPress(Screen screen) {
@@ -790,7 +858,96 @@ Common::Array<Common::KeyState> GilbertEngine::takeKeys() {
 
 void GilbertEngine::warpMouse(int x, int y) {
 	_mouse = Common::Point(x, y);
-	_system->warpMouse(x, y);
+	_system->warpMouse(x - kClipLeft, y - kClipTop);
+}
+
+void GilbertEngine::loadOptions() {
+	_options.alwaysRun = ConfMan.getBool("always_run");
+	_options.shortcuts = ConfMan.getBool("keyboard_shortcuts");
+	_options.wheel = ConfMan.getBool("wheel_inventory");
+	_options.markChoices = ConfMan.getBool("mark_choices");
+	_options.newTopics = ConfMan.getBool("mark_new_topics");
+	_options.autosave = ConfMan.getBool("autosave_rooms");
+	_options.fullscreenFilms = ConfMan.getBool("fullscreen_films");
+}
+
+// The game screens' keys are off in the main menu, where the keys type save names.
+void GilbertEngine::enableKeymaps() {
+	if (Common::Keymap *k = _eventMan->getKeymapper()->getKeymap("gilbert-play"))
+		k->setEnabled(_mode != kModeMenu);
+}
+
+Common::String GilbertEngine::choiceKey(uint32 dialog, const Common::String &text) {
+	Common::String key = Common::String::format("c %u ", dialog) + text;
+	for (uint i = 0; i < key.size(); i++)
+		if (key[i] == '\n' || key[i] == '\r')
+			key.setChar(' ', i);
+	return key;
+}
+
+Common::String GilbertEngine::topicKey(int book, uint32 topic) {
+	return Common::String::format("t %d %u", book, topic);
+}
+
+// Topics already in the books when a game starts, or in a save from before the marking, are
+// not new.
+void GilbertEngine::seedTopics() {
+	for (int b = 0; b < Database::kBooks; b++)
+		for (const Topic &t : _logic->db().books[b])
+			if (t.shown)
+				markSeen(topicKey(b, t.id));
+}
+
+// The autosave_rooms option: slot 50, each time a room is shown that is not the last
+// autosave's.
+void GilbertEngine::autosave() {
+	if (!_options.autosave || _mode != kModeRoom || !_room->shown() || _dialog->isOpen() || _busy)
+		return;
+	const uint32 room = _logic->walkmapId();
+	if (room == _autosaved || !canSaveGameStateCurrently())
+		return;
+	_autosaved = room;
+	if (!saveSlot(kAutosaveSlot, "Autosave"))
+		warning("Gilbert: autosave failed");
+}
+
+void GilbertEngine::toggleHotspots() {
+	if (ConfMan.hasKey("enable_hotspots") && !ConfMan.getBool("enable_hotspots"))
+		return;
+	showHotspots(!_showHotspots);
+	_shownHotspots.clear();
+}
+
+void GilbertEngine::getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) {
+	if (_dialog->isOpen() || _busy)
+		return;
+	if (_mode == kModeRoom)
+		_room->hotspots(hotspots);
+	else if (_mode == kModeCua)
+		_cua->hotspots(hotspots);
+	for (Graphics::HotspotInfo &h : hotspots)
+		h.position -= Common::Point(kClipLeft, kClipTop);
+}
+
+// The overlay is drawn again only when the markers change.
+void GilbertEngine::drawHotspots() {
+	if (!_showHotspots)
+		return;
+	Common::Array<Graphics::HotspotInfo> list;
+	getHotspotPositions(list);
+	bool same = list.size() == _shownHotspots.size();
+	for (uint i = 0; same && i < list.size(); i++)
+		same = list[i].position == _shownHotspots[i].position && list[i].name == _shownHotspots[i].name;
+	if (same && !_hotspotForceRedraw)
+		return;
+	_shownHotspots = list;
+	if (list.empty()) {
+		_hotspotForceRedraw = false;
+		if (_system->isOverlayVisible())
+			_system->hideOverlay();
+		return;
+	}
+	Engine::drawHotspots();
 }
 
 } // End of namespace Gilbert

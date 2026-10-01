@@ -26,6 +26,8 @@
 #include "common/rect.h"
 #include "common/str.h"
 
+#include "graphics/hotspot_renderer.h"
+
 #include "gilbert/collection.h"
 
 namespace Gilbert {
@@ -50,6 +52,9 @@ public:
 	void mouseDown();
 	void mouseUp();
 
+	/** The hotspot overlay: the objects something happens to. */
+	void hotspots(Common::Array<Graphics::HotspotInfo> &list);
+
 private:
 	struct Entry {
 		uint32 code = 0;
@@ -68,6 +73,8 @@ private:
 	void action(int item);
 	void layout();
 	void drawTooltip(const Common::String &text, int x, int y);
+	/** A point of the object's picture (not a transparent one), for its marker. */
+	Common::Point objectPoint(const Entry &e);
 
 	GilbertEngine *_vm;
 	PictureCollection _pictures;

@@ -242,6 +242,8 @@ void Room::draw() {
 	drawLayer(_picture[0], _ox, _oy, Common::Rect(64, 50, 576, 370));
 	drawObjectsAndGilbert();
 	drawLayer(_mask[0], _ox, _oy, Common::Rect((int)_x, (int)_y, (int)_x + 96, (int)_y + 96));
+	if (_vm->hotspotsShown() && !_vm->dialog()->isOpen())
+		drawAreas();
 	drawPanel();
 	if (!_shown) {
 		fade(true);
@@ -416,9 +418,7 @@ void Room::handleMouse() {
 
 	_pressed = -1;
 	_hover = firstHit();
-	const bool walkArea = Common::Rect(74, 60, 566, 420).contains(m) && !Common::Rect(289, 328, 351, 380).contains(m) &&
-	                      !Common::Rect(509, 336, 539, 366).contains(m) && !Common::Rect(74, 360, 566, 420).contains(m);
-	if (walkArea) {
+	if (inWalkArea(m)) {
 		if (_vm->leftHeld())
 			_vm->logic()->pathNewPath(m.x - _ox, m.y - _oy);
 		const int v = mapCell((m.x - _ox) / 16, (m.y - _oy) / 16);
@@ -449,7 +449,87 @@ void Room::handleMouse() {
 	if (press) {
 		_pressed = firstHit();
 		debugC(1, kDebugScript, "Room: press at (%d, %d): panel item %d", m.x, m.y, _pressed);
+	} else if (_vm->shortcut() == kActionMap || _vm->shortcut() == kActionBook) {
+		// The keyboard shortcuts press the panel's buttons.
+		_pressed = _vm->shortcut() == kActionMap ? kKort : kBook;
+		_vm->takeShortcut();
 	}
+}
+
+bool Room::inWalkArea(Common::Point p) {
+	return Common::Rect(74, 60, 566, 360).contains(p) && !Common::Rect(289, 328, 351, 380).contains(p) &&
+	       !Common::Rect(509, 336, 539, 366).contains(p);
+}
+
+// The areas' cells (control map values 2..31) whose centre a click reaches.
+void Room::hotspots(Common::Array<Graphics::HotspotInfo> &list) const {
+	struct Area {
+		int n = 0;
+		int sx = 0, sy = 0;
+	};
+	Area areas[32];
+	for (int y = 0; y < _mapH; y++)
+		for (int x = 0; x < _mapW; x++) {
+			const int v = mapCell(x, y);
+			const Common::Point c(_ox + x * 16 + 8, _oy + y * 16 + 8);
+			if (v >= 2 && v < 32 && inWalkArea(c)) {
+				areas[v].n++;
+				areas[v].sx += c.x;
+				areas[v].sy += c.y;
+			}
+		}
+	// Each marker on the area's cell nearest to the middle of its cells on screen.
+	for (int v = 2; v < 32; v++) {
+		if (!areas[v].n)
+			continue;
+		const Common::Point mid(areas[v].sx / areas[v].n, areas[v].sy / areas[v].n);
+		Common::Point best;
+		int bestD = -1;
+		for (int y = 0; y < _mapH; y++)
+			for (int x = 0; x < _mapW; x++) {
+				const Common::Point c(_ox + x * 16 + 8, _oy + y * 16 + 8);
+				if (mapCell(x, y) != v || !inWalkArea(c))
+					continue;
+				const int d = ABS(c.x - mid.x) + ABS(c.y - mid.y);
+				if (bestD < 0 || d < bestD) {
+					bestD = d;
+					best = c;
+				}
+			}
+		list.push_back(Graphics::HotspotInfo(best, Common::U32String(), Graphics::kHotspotExit));
+	}
+}
+
+void Room::drawAreas() {
+	const Common::Rect view(64, 50, 576, 370);
+	const uint32 outline = 0xFFFF00;
+	for (int y = 0; y < _mapH; y++)
+		for (int x = 0; x < _mapW; x++) {
+			const int v = mapCell(x, y);
+			if (v < 2)
+				continue;
+			const Common::Rect cell(_ox + x * 16, _oy + y * 16, _ox + x * 16 + 16, _oy + y * 16 + 16);
+			Common::Rect r = cell;
+			r.clip(view);
+			if (r.isEmpty())
+				continue;
+			_vm->fillAlpha(r, outline, 50);
+			// An edge where the next cell is not the same area.
+			const Common::Rect edges[4] = {
+				Common::Rect(cell.left, cell.top, cell.right, cell.top + 1),
+				Common::Rect(cell.left, cell.bottom - 1, cell.right, cell.bottom),
+				Common::Rect(cell.left, cell.top, cell.left + 1, cell.bottom),
+				Common::Rect(cell.right - 1, cell.top, cell.right, cell.bottom)
+			};
+			const int next[4] = { mapCell(x, y - 1), mapCell(x, y + 1), mapCell(x - 1, y), mapCell(x + 1, y) };
+			for (int i = 0; i < 4; i++)
+				if (next[i] != v) {
+					Common::Rect e = edges[i];
+					e.clip(view);
+					if (!e.isEmpty())
+						_vm->fillAlpha(e, outline, 255);
+				}
+		}
 }
 
 // ---------------------------------------------------------------------------

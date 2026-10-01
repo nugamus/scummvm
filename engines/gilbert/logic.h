@@ -128,6 +128,8 @@ public:
 	void walkmapAreaHit(int n);
 	void cuaEnd();
 	void clickObjectInCua(uint32 code);
+	/** Whether something happens to a close-up object: a click, a take, or a use on it. */
+	bool cuaObjectActive(uint32 code);
 	void objectToInventory(uint32 code);
 	void useObjectOnObject(uint32 code, uint32 target);
 
@@ -136,6 +138,7 @@ public:
 	bool inventoryObject(uint i, uint32 &code, uint32 &icon, Common::String &text);
 
 	// Dialogues.
+	uint32 dialogId() const { return _dialog ? _dialog->id : 0; }
 	Common::String dialogTitle() const;
 	Common::String dialogText() const;
 	uint dialogChoiceCount() const;
