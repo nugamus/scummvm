@@ -629,6 +629,13 @@ uint32 Logic::runEvent(const Event &e) {
 		for (Obj &o : _db.inventory)
 			if (!done)
 				done = mark(o);
+		// Bug fix: the original does not refresh the close-up here, so an object made
+		// pickable stays neither takeable nor clickable until something else does
+		// (screens.md "Bug fixes").
+		if (done) {
+			buildCuaObjects(false);
+			updateCua();
+		}
 		break;
 	}
 	case 14: {
