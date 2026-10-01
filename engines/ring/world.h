@@ -172,6 +172,12 @@ struct Rotation {
 	Common::Array<Layer> layers;
 	bool paused = false; ///< +0x28: not drawn and not tracked while set
 	bool frozen = false; ///< +0x67: no looking around with the mouse (set while the bag is open)
+	/** The juggle (`RotSetJugOn`, spec/rotation.md "Juggle"): flag, amplitude, speed. */
+	bool juggle = false;
+	float jugAmplitude = 30.0f, jugSpeed = 0.0f;
+	float strength = 0.0f;              ///< +0x31: the effects' strength, 0 at load, up to 1
+	uint32 loadTick = 0;                ///< 0x495708
+	Common::Array<float> jugWeights;    ///< 32 x 32, filled at the first load
 	// ponytail: the constructor leaves alpha, beta and ran unset (E-0046); the zones set them first
 	float alpha = 0, beta = 0, ran = 85.3f;
 	Common::Array<Common::SharedPtr<Accessibility> > accessibilities;

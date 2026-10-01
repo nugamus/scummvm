@@ -234,6 +234,7 @@ private:
 	int _mode = 2;       ///< 1 rotation, 2 puzzle (0x40b7c0)
 	RotationView _view;
 	uint32 _panTime = 0; ///< looking around advances once per 1/60 s (Q-0011)
+	uint32 _lastRotationFrame = 0; ///< 0x4a17b8
 	Common::Point _mouse;
 	struct Button {
 		bool down;

@@ -78,6 +78,8 @@ public:
 
 	/** 0x40f9e0: clamps the rotation's angles and computes the grid for its camera. */
 	void update(Rotation &r, const Panorama &p);
+	/** The juggle's ripple (spec/rotation.md "Juggle"), after update(), `t` in seconds since the load. */
+	void juggle(const Rotation &r, float t);
 	/** Draws the view with its top at row `top` of `dst` (16-bit). */
 	void draw(const Panorama &p, Graphics::ManagedSurface &dst, int top) const;
 	/** A window position to panorama coordinates in tenths of a degree (0x4119e0, 0x412360). */

@@ -167,6 +167,18 @@ void RotationView::update(Rotation &r, const Panorama &p) {
 	}
 }
 
+void RotationView::juggle(const Rotation &r, float t) {
+	// Weights beyond 32 columns or rows stay 0 (the table's unused part).
+	float su = (float)sin(t * r.jugSpeed * 1.05f) * r.strength, sv = t * r.jugSpeed * 0.95f;
+	for (int j = 0; j <= kRows; j++) {
+		for (int i = 0; i <= kCols; i++) {
+			float w = i < 32 && j < 32 && r.jugWeights.size() == 32 * 32 ? r.jugWeights[j * 32 + i] : 0.0f;
+			_u[j][i] += (int32)(su * w * 65536.0f);
+			_v[j][i] += (int32)((float)cos(sv + w) * r.strength * w * 65536.0f);
+		}
+	}
+}
+
 // Brings `u` within half a panorama of `ref` (0x411810); `full` is 2048 in u's units.
 template<typename T>
 static T unwrap(T u, T ref, T full) {

@@ -188,6 +188,13 @@ void World::apply(int zone, const SetupCall &c) {
 		}
 		break;
 	}
+	case kRotSetJugOn:
+		if (Rotation *r = rotation(a[0])) {
+			r->juggle = true;
+			r->jugAmplitude = asFloat(a[1]);
+			r->jugSpeed = asFloat(a[2]);
+		}
+		break;
 	case kRotSetMovOff:
 		if (Rotation *r = rotation(a[0]))
 			for (int i = a[1]; i <= a[2] && i >= 0 && i < (int)r->movabilities.size(); i++)
