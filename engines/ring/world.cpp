@@ -530,10 +530,44 @@ void World::setVarFloat(int id, float value) {
 		warning("Ring: VarSetFloa: no variable %d", id);
 }
 
+void World::pauseOnFrame(int id, int presentation, int frame, uint32 ms, int direction) {
+	Object *o = object(id);
+	if (o && (uint)presentation < o->presentations.size())
+		for (auto *list : { &o->presentations[presentation].puzzleAnimations, &o->presentations[presentation].animations })
+			for (auto &anim : *list)
+				anim->pauseExactOnFrame(frame, ms, direction);
+}
+
+void Animation::pauseExactOnFrame(int f, uint32 ms, int direction) {
+	int target = f - 1;
+	if (target < 0 || target >= frames)
+		return; // refused
+	pauseMs = ms;
+	pauseFrame = target;
+	pauseState = 1;
+	if (direction == 2)
+		return;
+	// The shorter way to the target, with the original's distances (0x416af0).
+	int back, fwd;
+	if (frame - target < 1) {
+		fwd = target - frame;
+		back = frame - start - target - 1 + frames;
+	} else {
+		back = frame - target;
+		fwd = start - frame - target - 1 + frames;
+	}
+	bool forward = mode == 4 || ((mode == 0x10 || mode == 0x20) && !backward);
+	if (forward && back < fwd)
+		mode = 8;
+	else if (!forward && fwd < back)
+		mode = 4;
+}
+
 void Animation::init(int count, float fps, int flags) {
 	frames = MAX(count, 1);
 	start = 0;
 	mode = flags & 4 ? 4 : flags & 8 ? 8 : flags & 0x10 ? 0x10 : flags & 0x20 ? 0x20 : 0;
+	baseMode = mode;
 	stopAtWrap = (flags & 2) != 0;
 	frame = mode == 8 || mode == 0x20 ? frames - 1 : start;
 	backward = mode == 0x20;
@@ -562,10 +596,23 @@ bool Animation::advance(uint32 time) {
 	} else {
 		if (paused)
 			return false;
+		// 0x416720: holding on the pause frame, or reaching it after a step.
+		if (pauseState == 2) {
+			if (time - holdStart <= pauseMs)
+				return false;
+			mode = baseMode; // 0x416c90 (its event 0x40c910 has only RO's handler)
+			pauseState = 0;
+			stepped = false;
+		} else if (pauseState == 1 && frame == pauseFrame && stepped) {
+			pauseState = 2;
+			holdStart = time;
+			return false;
+		}
 		int step = 0;
 		if (time - lastStep > frameTime) {
 			step = 1;
 			lastStep = time;
+			stepped = true;
 		}
 		bool wrapped = false;
 		if (mode == 4 || (mode >= 0x10 && !backward)) {
@@ -603,12 +650,35 @@ PuzzleImage *World::image(int id, int presentation, int index) {
 	return nullptr;
 }
 
-void World::hideAndFree(int id) {
-	showPresentation(id, -1, false);
-	for (auto &p : _puzzles)
-		for (auto &img : p->images)
-			if (img->object == id)
-				img->image.reset();
+void World::hideAndFree(int id, int presentation) {
+	showPresentation(id, presentation, false);
+	for (auto &p : _puzzles) {
+		for (auto &img : p->images) {
+			if (img->object != id || (presentation >= 0 && img->presentation != presentation))
+				continue;
+			img->image.reset();
+			for (auto &f : img->frames)
+				f.reset();
+		}
+	}
+}
+
+void World::setMovabilities(int place, bool on, int from, int to) {
+	Rotation *r = rotation(place);
+	Puzzle *p = r ? nullptr : puzzle(place);
+	Common::Array<Movability> *list = r ? &r->movabilities : p ? &p->movabilities : nullptr;
+	if (!list)
+		return;
+	for (int i = 0; i < (int)list->size(); i++)
+		if (from < 0 || (i >= from && i <= to))
+			(*list)[i].hotSpot.enabled = on;
+}
+
+void World::setBackground(int id, const Common::String &file) {
+	if (Puzzle *p = puzzle(id)) {
+		p->background = file;
+		p->bgImage.reset();
+	}
 }
 
 void World::setAccessibilities(int id, bool on, int from, int to) {

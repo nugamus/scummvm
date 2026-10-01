@@ -47,6 +47,8 @@ namespace Ring {
 static void onAccessibility(RingEngine *vm, int zone, int object, int value) {
 	if (zone == kZoneSY)
 		SY::onAccessibility(vm, object, value);
+	else if (zone == kZoneNI)
+		NI::onAccessibility(vm, object, value);
 }
 
 static void onNothing(RingEngine *vm, int zone) {
@@ -54,36 +56,51 @@ static void onNothing(RingEngine *vm, int zone) {
 		SY::onNothing(vm);
 }
 
-static void onClick(RingEngine *vm, int zone, int object, int value) {
+static void onClick(RingEngine *vm, int zone, int object, int value, int place) {
 	if (zone == kZoneSY)
 		SY::onClick(vm, object, value);
 	else if (zone == kZoneAS)
 		AS::onClick(vm, object, value);
+	else if (zone == kZoneNI)
+		NI::onClick(vm, object, value, place);
+}
+
+static void onButtonDown(RingEngine *vm, int zone, int object, int value) {
+	if (zone == kZoneNI)
+		NI::onButtonDown(vm, object, value);
 }
 
 static void onTimer(RingEngine *vm, int zone, int id) {
 	if (zone == kZoneAS)
 		AS::onTimer(vm, id);
+	else if (zone == kZoneNI)
+		NI::onTimer(vm, id);
 }
 
 static void onAnimation(RingEngine *vm, int zone, int id, int frame) {
 	if (zone == kZoneAS)
 		AS::onAnimation(vm, id, frame);
+	else if (zone == kZoneNI)
+		NI::onAnimation(vm, id, frame);
 }
 
 static void onBeforeMove(RingEngine *vm, int zone, int from, int to, int index, int value, int kind) {
 	if (zone == kZoneAS)
 		AS::onBeforeMove(vm, from, to, kind);
+	else if (zone == kZoneNI)
+		NI::onBeforeMove(vm, from, to, value, kind);
 }
 
 static void onAfterMove(RingEngine *vm, int zone, int to, int from, int index, int value, int kind) {
 	if (zone == kZoneAS)
 		AS::onAfterMove(vm, to, from, kind);
+	else if (zone == kZoneNI)
+		NI::onAfterMove(vm, to, from, value, kind);
 }
 
 RingEngine::RingEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
-	SearchMan.addDirectory(gameDataDir, 0, 4);
+	SearchMan.addDirectory(gameDataDir, 0, 5); // DATA/<zone>/DIA/<language>/<file>
 }
 
 RingEngine::~RingEngine() {
@@ -258,18 +275,21 @@ Common::Error RingEngine::run() {
 
 	startMenu(false);
 	_buttons.clear();
-	// Development: dev_place=<id> starts on that rotation (alpha 90, ran 85.3) or puzzle, in its zone.
 	// Development: dev_bag=<id>,<id>... puts objects in the bag.
 	for (const Common::String &id : Common::StringTokenizer(ConfMan.get("dev_bag"), ",").split())
 		_bag->add(atoi(id.c_str()));
-	int place = ConfMan.getInt("dev_place");
-	if (Rotation *r = _world->rotation(place)) {
+	// Development: dev_place=<id> starts on that rotation (alpha 90, ran 85.3), dev_place=p<id> on
+	// that puzzle, in its zone (the ids of puzzles and rotations overlap).
+	Common::String placeId = ConfMan.get("dev_place");
+	bool isPuzzle = placeId.hasPrefix("p");
+	int place = atoi(placeId.c_str() + (isPuzzle ? 1 : 0));
+	if (Rotation *r = isPuzzle ? nullptr : _world->rotation(place)) {
 		_zone = r->zone;
 		_menuZone = 0;
 		r->setAlpha(90.0f);
 		r->ran = 85.3f;
 		rotSetAct(r->id);
-	} else if (Puzzle *p = _world->puzzle(place)) {
+	} else if (Puzzle *p = isPuzzle ? _world->puzzle(place) : nullptr) {
 		_zone = p->zone;
 		_menuZone = 0;
 		puzSetAct(p->id);
@@ -335,6 +355,20 @@ Common::Error RingEngine::run() {
 				click(b.pos.x, b.pos.y);
 		}
 		runTimers();
+		if (_gameOver) {
+			// Mode 4 (spec/boot.md "Frame"): the set-ups again, then 0x431190(2, n): SetZone(1),
+			// End.bmp at (0, 16) for 4 s (0x401000), StartMenu(0).
+			_gameOver = 0;
+			resetWorld();
+			setZone(kZoneSY);
+			if (Image *end = _resources->loadImage(kZoneSY, "End.bmp", true)) {
+				end->draw(_screen, 0, 16, 1);
+				delete end;
+				present();
+				wait(4000);
+			}
+			startMenu(false);
+		}
 		frame();
 		g_system->delayMillis(10);
 	}
@@ -481,6 +515,8 @@ void RingEngine::goZone(int zone, int entry) {
 	_menuZone = 0;
 	if (zone == kZoneAS)
 		AS::enter(this, entry);
+	else if (zone == kZoneNI)
+		NI::enter(this, entry);
 	else
 		warning("Ring: zone %d is not implemented yet", zone);
 }
@@ -546,6 +582,94 @@ void RingEngine::runTimers() {
 			onTimer(this, _zone, id);
 }
 
+void RingEngine::renderFrame() {
+	pollEvents();
+	frame();
+}
+
+void RingEngine::renderFor(uint32 ms) {
+	uint32 start = g_system->getMillis();
+	while (g_system->getMillis() - start < ms && !shouldQuit()) {
+		renderFrame();
+		g_system->delayMillis(10);
+	}
+}
+
+void RingEngine::rotSetRolTo(int rotation, float alpha, float beta, float ran) {
+	if (Rotation *r = _world->rotation(rotation))
+		turn(*r, alpha, beta, ran);
+}
+
+void RingEngine::setSoundItem(int owner, int sound, bool on) {
+	// 0x41a220 / 0x41a280: started or stopped at once when the owner is the current place.
+	Rotation *r = _world->rotation(owner);
+	Puzzle *p = r ? nullptr : _world->puzzle(owner);
+	SoundItems *items = r ? &r->sounds : p ? &p->sounds : nullptr;
+	if (!items)
+		return;
+	bool current = (r && _mode == 1 && _rotation == owner) || (p && _puzzle == owner);
+	for (auto &i : *items) {
+		if (i->sound != sound)
+			continue;
+		i->active = on;
+		if (current && on)
+			_sounds->startItem(*i);
+		else if (current)
+			_sounds->stopItem(*i);
+	}
+}
+
+void RingEngine::gameOver(int n) {
+	_gameOver = n;
+	_sounds->stopAll(0x40);
+}
+
+void RingEngine::saveWorldState(const Common::String &file) {
+	WorldState &s = _worldStates[file];
+	s.bag = _bag->contents();
+	s.timers = _timers;
+	s.tick = g_system->getMillis();
+}
+
+bool RingEngine::loadWorldState(const Common::String &file) {
+	if (!_worldStates.contains(file))
+		return false;
+	const WorldState &s = _worldStates[file];
+	_bag->removeAll();
+	for (int i = (int)s.bag.size() - 1; i >= 0; i--)
+		_bag->add(s.bag[i]);
+	// The timers keep the time they had left (aTimer::LoadSave with the tick count).
+	uint32 now = g_system->getMillis();
+	_timers.clear();
+	for (Timer t : s.timers) {
+		t.due = now + (t.due - s.tick);
+		_timers.push_back(t);
+	}
+	// ponytail: the sounds playing when the world was left (0x469790, 0x4696f0) are not replayed
+	return true;
+}
+
+void RingEngine::setMouse(int x, int y) {
+	_mouse = Common::Point(x, y);
+	g_system->warpMouse(x, y);
+}
+
+void RingEngine::resetWorld() {
+	timStoAll();
+	_sounds->stopAll(0x400);
+	_sounds.reset(new Sounds(this));
+	_sounds->setTypeVolumes(_preferences[0], _preferences[1]);
+	_bag.reset();
+	_world.reset(new World());
+	_world->setUp(_sounds.get(), _preferences[2]);
+	_world->loadNames(_languageFolder);
+	_world->setFont(_font.get());
+	_bag.reset(new Bag(*_world, *_resources));
+	_puzzle = _rotation = 0;
+	_cursors->remove(1);
+	_cursors->remove(2);
+}
+
 void RingEngine::setZone(int zone) {
 	_zone = zone;
 	_bag->setErda(zone != kZoneSY && zone != kZoneAS);
@@ -605,8 +729,8 @@ void RingEngine::erda() {
 	int n = _zone >= 0 && _zone <= 8 ? world[_zone] : 0;
 	if (!n)
 		return;
-	// ponytail: saving the world's own state (LoadSaveTimer "alb", "sie", "log", "bru") comes with spec/save.md
-	warning("Ring: leaving zone %d for the hub without saving it (not implemented)", _zone);
+	static const char *const files[] = { "", "", "alb", "alb", "sie", "log", "bru", "", "log" };
+	saveWorldState(files[_zone]);
 	_world->setVar(World::kVarDword, 90012 + n, _zone);
 	_world->setVar(World::kVarByte, 90008 + n, 1);
 	bool onPuzzle = _mode == 2;
@@ -617,13 +741,13 @@ void RingEngine::erda() {
 	AS::returnFromWorld(this, 13);
 }
 
-void RingEngine::clickObject(int zone, int object, int value) {
+void RingEngine::clickObject(int zone, int object, int value, int place) {
 	Object *o = _world->object(object);
 	if (!o)
 		return;
 	int before = _zone;
 	if (o->flags & 1)
-		onClick(this, zone, object, value); // 0x40bbb0
+		onClick(this, zone, object, value, place); // 0x40bbb0
 	if (_zone != before)
 		return; // a zone change is pending (mode 4)
 	if (o->flags & 8) {
@@ -831,6 +955,8 @@ void RingEngine::soundEvent(int id, int type, int reason) {
 		SY::onSound(this, id, type, why, ended);
 	else if (_zone == kZoneAS)
 		AS::onSound(this, id, type, why, ended);
+	else if (_zone == kZoneNI)
+		NI::onSound(this, id, type, why, ended);
 }
 
 void RingEngine::track(int x, int y) {
@@ -891,7 +1017,6 @@ const HotSpot *RingEngine::trackHit(int x, int y) {
 }
 
 void RingEngine::buttonDown(int x, int y) {
-	// ponytail: the button-down event (bit 1) has no handler in the zones done so far
 	if (_bag->shown())
 		return;
 	Puzzle *p1 = _world->puzzle(1);
@@ -915,6 +1040,8 @@ void RingEngine::buttonDown(int x, int y) {
 		}
 	}
 	Object *o = acc ? _world->object(acc->object) : nullptr;
+	if (o && (o->flags & 2)) // 0x40bd40: puzzle 1's go to SY
+		onButtonDown(this, id == 1 && onPuzzle ? kZoneSY : _zone, o->id, acc->hotSpot.value);
 	if (o && (o->flags & 4)) {
 		_drag = Drag();
 		_drag.active = true;
@@ -922,7 +1049,7 @@ void RingEngine::buttonDown(int x, int y) {
 		_drag.value = acc->hotSpot.value;
 		_drag.puzzle = id;
 		_drag.onPuzzle = onPuzzle;
-		_drag.press = _drag.current = at;
+		_drag.press = _drag.current = _drag.previous = _drag.reference = at;
 		_drag.hotSpot = &acc->hotSpot;
 		// Cursors 3 and 4: the object's passive and active drag cursors (0x40b9b0).
 		for (int i = 0; i < 2; i++) {
@@ -943,6 +1070,7 @@ void RingEngine::dragMove(int x, int y) {
 	// The screen position, also against a rotation's hot spot, as 0x409520 does.
 	if (!_drag.active || !(_drag.mode == 2 ? _drag.limit : _drag.hotSpot->rect).contains(x, y))
 		return;
+	_drag.previous = _drag.current;
 	_drag.current = Common::Point(x, y);
 	dragEvent(3);
 }
@@ -950,6 +1078,8 @@ void RingEngine::dragMove(int x, int y) {
 void RingEngine::dragEvent(int phase) {
 	if ((_drag.puzzle == 1 && _drag.onPuzzle) || _zone == kZoneSY)
 		SY::onDrag(this, _drag.object, phase);
+	else if (_zone == kZoneNI)
+		NI::onDrag(this, _drag.object, _drag.value, phase);
 }
 
 void RingEngine::click(int x, int y) {
@@ -989,7 +1119,7 @@ void RingEngine::click(int x, int y) {
 		if (!q)
 			continue;
 		if (const Accessibility *acc = _world->hit(*q, x, y)) {
-			clickObject(q == p1 ? kZoneSY : _zone, acc->object, acc->hotSpot.value);
+			clickObject(q == p1 ? kZoneSY : _zone, acc->object, acc->hotSpot.value, q->id);
 			track(x, y);
 			return;
 		}
@@ -1008,7 +1138,7 @@ void RingEngine::click(int x, int y) {
 		return;
 	Common::Point pt = _view.toPanorama(*r->panorama, x, y);
 	if (const Accessibility *acc = World::hit(r->accessibilities, pt.x, pt.y)) {
-		clickObject(_zone, acc->object, acc->hotSpot.value);
+		clickObject(_zone, acc->object, acc->hotSpot.value, r->id);
 		track(x, y);
 		return;
 	}

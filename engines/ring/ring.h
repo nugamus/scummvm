@@ -23,6 +23,8 @@
 #define RING_RING_H
 
 #include "common/array.h"
+#include "common/hashmap.h"
+#include "common/hash-str.h"
 #include "common/ptr.h"
 #include "common/random.h"
 #include "common/rect.h"
@@ -57,6 +59,8 @@ struct Drag {
 	int object = 0, value = 0, puzzle = 0;
 	bool onPuzzle = true;
 	Common::Point press, current;
+	Common::Point previous;  ///< the position before the last move (0x426140)
+	Common::Point reference; ///< the press position, or a point a handler sets (0x4066b0)
 	int mode = 1; ///< 2: moves count inside `limit` instead of the hot spot
 	Common::Rect limit = Common::Rect(0, 16, 640, 464);
 	const HotSpot *hotSpot = nullptr;
@@ -100,6 +104,27 @@ public:
 	void puzSetAct(int puzzle, bool start = true, bool stop = true);
 	/** `RotSetAct` (0x4025b0, spec/rotation.md): the rotation becomes the current view. */
 	void rotSetAct(int rotation, bool start = true, bool stop = true);
+	/** 0x40f6c0: one frame drawn and the sound ends checked, from inside a handler. */
+	void renderFrame();
+	/** Frames drawn for `ms` milliseconds (the handlers' `GetTickCount` loops). */
+	void renderFor(uint32 ms);
+	/** `RotSetRolTo` 0x405c20: the animated turn of the rotation (spec/rotation.md). */
+	void rotSetRolTo(int rotation, float alpha, float beta, float ran);
+	/** `PuzSet3DSouOn` / `RotSet3DSouOn` / `...Off` and the ambient ones: the item, started or stopped at once in the current place. */
+	void setSoundItem(int owner, int sound, bool on);
+	/** 0x408db0: game over `n` (mode 4); the next frame shows End.bmp and opens the menu (games/ring/docs/ni.md). */
+	void gameOver(int n);
+	/** `SetCursorPos`. */
+	void setMouse(int x, int y);
+	Common::Point mouse() const { return _mouse; }
+	/**
+	 * `LoadSaveTimer(file, mode)` (spec/bag.md, Erda): the timers and the bag of a world
+	 * left through Erda, kept by name (`alb`, `sie`, `log`, `bru`) until it is resumed.
+	 */
+	void saveWorldState(const Common::String &file);
+	bool loadWorldState(const Common::String &file);
+	/** 0x408bc0, 0x431040: every zone set-up runs again from scratch (a new game, a game over). */
+	void resetWorld();
 	/** `GoZone` 0x402280: leaves the place, stops the sounds, enters a zone at an entry point. */
 	void goZone(int zone, int entry);
 	/** `SetZone` 0x402210: the current zone changes; Erda's button is offered outside SY and AS. */
@@ -171,7 +196,7 @@ private:
 	/** `MouseLeftEvent` on release (spec/cursor.md). */
 	void click(int x, int y);
 	/** An accessibility clicked: the object-click event (flag bit 0), then taking it (bit 3). */
-	void clickObject(int zone, int object, int value);
+	void clickObject(int zone, int object, int value, int place);
 	/** Erda's button in the bag: the world is left for the hub, where the player was kept (spec/bag.md). */
 	void erda();
 	/** The drag event (0x40c060) to the zone's handler. */
@@ -228,6 +253,14 @@ private:
 		uint32 period, due;
 	};
 	Common::Array<Timer> _timers;
+	int _gameOver = 0; ///< app+0x70 while mode 4 is pending
+	struct WorldState {
+		Common::Array<int> bag;
+		Common::Array<Timer> timers;
+		uint32 tick = 0;
+	};
+	// ponytail: kept in memory; written to disk with the saved games (spec/save.md, to come)
+	Common::HashMap<Common::String, WorldState> _worldStates;
 	Common::RandomSource _random{ "ring" };
 };
 

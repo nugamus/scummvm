@@ -64,6 +64,13 @@ void Bag::removeAll() {
 	_scroll = 0;
 }
 
+Common::Array<int> Bag::contents() const {
+	Common::Array<int> ids;
+	for (const Item &i : _items)
+		ids.push_back(i.object);
+	return ids;
+}
+
 bool Bag::has(int object) const {
 	for (const Item &i : _items)
 		if (i.object == object)
