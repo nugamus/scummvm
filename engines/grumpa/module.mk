@@ -5,7 +5,8 @@ MODULE_OBJS = \
 	metaengine.o \
 	scene.o \
 	render3d.o \
-	menu.o
+	menu.o \
+	movie.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_GRUMPA), DYNAMIC_PLUGIN)

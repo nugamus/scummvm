@@ -57,6 +57,8 @@ public:
 	bool loadMesh(const Common::String &name, Mesh &mesh);
 	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */
 	bool drawMenu(int selected);
+	/** Play an MPEG-1 film from a Movies_<lang> folder; Esc/click skips. */
+	bool playMovie(const Common::String &name);
 	bool loadMenuText(Common::Array<Common::U32String> &items);
 
 private:
