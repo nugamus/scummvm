@@ -305,7 +305,7 @@ Camera cameraFromBlock(const float cam[26]) {
 	return c;
 }
 
-bool GrumpaEngine::loadScene(int num, Common::Array<SceneView> &views) {
+bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 	Common::String name = Common::String::format("Scenes/Scene_%03d.abi", num);
 	Common::File f;
 	if (!f.open(Common::Path(name))) {
@@ -330,14 +330,77 @@ bool GrumpaEngine::loadScene(int num, Common::Array<SceneView> &views) {
 				v.cam[i] = READ_LE_FLOAT(c.d + c.o + i * 4);
 			c.skip(0x68);
 			if (c.ok)
-				views.push_back(v);
+				scene.views.push_back(v);
+		} else if (t == 0x0d) {
+			// Sprite prop (E-0107): header flags, anim block, gate, then position when gated.
+			SceneSprite sp;
+			sp.id = id;
+			sp.flag0 = (int)c.u32();
+			sp.flag1 = (int)c.u32();
+			c.skip(4);               // h[2] (always 1)
+			ecVec(c);
+			c.skip(8);               // +0x114,+0x314
+			sp.frames = (int)c.u32();  // +0x1e0
+			sp.fps = (int)c.u32();     // +0x1e4
+			c.skip(16);              // +0x1c8,+0x1f8,+0x208,+0x48c (rest of the 8-u32 block)
+			c.skip(4);               // +0x1d4
+			uint32 gate = c.u32();   // +0x20c
+			ccVec(c);
+			sub56(c);
+			if (gate == 1) {
+				sp.x = (int)c.u32();  // +0x190
+				sp.y = (int)c.u32();  // +0x194
+			}
+			ccVec(c); ccVec(c);
+			// trailing pstr: the JPG frame-base name
+			int32 n = c.i32();
+			if (n > 0) {
+				sp.name = Common::String((const char *)(c.d + c.o), n);
+				c.skip(n);
+			}
+			if (c.ok)
+				scene.sprites.push_back(sp);
 		} else if (!skipBody(c, t)) {
 			warning("Grumpa: scene %s unmodelled type %#x at %#x", name.c_str(), t, c.o - 8);
 			return false;
 		}
 	}
-	debug(1, "Grumpa: scene %s -> %u views", name.c_str(), (uint)views.size());
+	debug(1, "Grumpa: scene %s -> %u views, %u sprites", name.c_str(),
+		  (uint)scene.views.size(), (uint)scene.sprites.size());
 	return c.ok;
+}
+
+// Draw a sprite prop's frame-0 JPG at (x, y) with the blue colour key (E-0107): pixels near
+// pure blue (high B, low R/G) are transparent. flag0==0 sprites (smoke etc.) use a different
+// blend in the original (Q-0009); for now they key the same way.
+void GrumpaEngine::drawSprite(const SceneSprite &sprite) {
+	if (sprite.name.empty())
+		return;
+	Common::File f;
+	if (!f.open(Common::Path("Bitmaps/" + sprite.name))) {
+		debug(1, "Grumpa: sprite %s not found", sprite.name.c_str());
+		return;
+	}
+	Image::JPEGDecoder jpeg;
+	jpeg.setOutputPixelFormat(_screen.format);
+	if (!jpeg.loadStream(f))
+		return;
+	const Graphics::Surface *s = jpeg.getSurface();
+	for (int yy = 0; yy < s->h; yy++) {
+		int dy = sprite.y + yy;
+		if (dy < 0 || dy >= kScreenHeight)
+			continue;
+		for (int xx = 0; xx < s->w; xx++) {
+			int dx = sprite.x + xx;
+			if (dx < 0 || dx >= kScreenWidth)
+				continue;
+			byte r, g, b;
+			_screen.format.colorToRGB(s->getPixel(xx, yy), r, g, b);
+			if (b > 200 && r < 96 && g < 96)  // blue colour key
+				continue;
+			_screen.setPixel(dx, dy, s->getPixel(xx, yy));
+		}
+	}
 }
 
 } // End of namespace Grumpa
