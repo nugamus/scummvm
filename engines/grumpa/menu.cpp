@@ -25,8 +25,12 @@
 // 130,200,0), font size 56, then Splash.jpg / Menu.jpg / Grumpa.TTF / Text.txt / ... The
 // item layout (positions) is CFXMenu's; we centre the list on the parchment for now.
 
+#include "common/debug.h"
+#include "common/events.h"
 #include "common/file.h"
+#include "common/rect.h"
 #include "common/str.h"
+#include "common/system.h"
 #include "common/ustr.h"
 #include "graphics/font.h"
 #include "graphics/fonts/ttf.h"
@@ -34,7 +38,6 @@
 #include "graphics/surface.h"
 #include "image/jpeg.h"
 
-#include "common/debug.h"
 #include "grumpa/grumpa.h"
 
 namespace Grumpa {
@@ -42,7 +45,7 @@ namespace Grumpa {
 // Text.txt line indices (Swedish/Nordic): 0 "Laddar Data...", 4..10 the main-menu items.
 static const int kMenuFirst = 4, kMenuCount = 7;
 
-static Common::U32String fromCp1252(const Common::String &s) {
+Common::U32String GrumpaEngine::fromCp1252(const Common::String &s) {
 	// Windows-1252 is Latin-1 for the bytes the game uses (å ä ö ...), so map 1:1.
 	Common::U32String out;
 	for (uint i = 0; i < s.size(); i++)
@@ -50,46 +53,62 @@ static Common::U32String fromCp1252(const Common::String &s) {
 	return out;
 }
 
-bool GrumpaEngine::loadMenuText(Common::Array<Common::U32String> &items) {
+// Grumpa.TTF is a symbol font: its glyphs are at 0xF020..0xF0FF (the MS symbol PUA), not
+// Latin-1, so map each byte i to codepoint 0xF000+i (as Windows GDI does). Cached.
+const Graphics::Font *GrumpaEngine::menuFont(int size) {
+	if (_menuFont && _menuFontSize == size)
+		return _menuFont;
+	delete _menuFont;
+	_menuFont = nullptr;
+	_menuFontSize = size;
+	Common::File ff;
+	if (!ff.open(Common::Path("UI/001_Menu/Grumpa.TTF")))
+		return nullptr;
+	uint32 mapping[256];
+	for (int i = 0; i < 256; i++)
+		mapping[i] = 0xF000 + i;
+	Common::SeekableReadStream *buf = ff.readStream(ff.size());
+	_menuFont = Graphics::loadTTFFont(buf, DisposeAfterUse::YES, size, Graphics::kTTFSizeModeCharacter,
+									  0, 0, Graphics::kTTFRenderModeLight, mapping);
+	return _menuFont;
+}
+
+bool GrumpaEngine::loadTextFile(const Common::String &rel, Common::Array<Common::U32String> &lines) {
 	Common::File f;
-	if (!f.open(Common::Path("UI/001_Menu/Text.txt")) && !f.open(Common::Path("Local_Swedish/Text.txt")))
+	if (!f.open(Common::Path(rel)))
 		return false;
+	while (!f.eos())
+		lines.push_back(fromCp1252(f.readLine()));
+	return true;
+}
+
+bool GrumpaEngine::loadMenuText(Common::Array<Common::U32String> &items) {
 	Common::Array<Common::U32String> lines;
-	while (!f.eos()) {
-		Common::String line = f.readLine();
-		lines.push_back(fromCp1252(line));
-	}
+	if (!loadTextFile("UI/001_Menu/Text.txt", lines) && !loadTextFile("Local_Swedish/Text.txt", lines))
+		return false;
 	for (int i = kMenuFirst; i < kMenuFirst + kMenuCount && i < (int)lines.size(); i++)
 		items.push_back(lines[i]);
 	return !items.empty();
 }
 
-bool GrumpaEngine::drawMenu(int selected) {
+static void drawBackground(Graphics::ManagedSurface &screen, const Common::String &jpg) {
 	Common::File bg;
-	if (bg.open(Common::Path("UI/001_Menu/Menu.jpg"))) {
-		Image::JPEGDecoder jpeg;
-		jpeg.setOutputPixelFormat(_screen.format);
-		if (jpeg.loadStream(bg)) {
-			const Graphics::Surface *s = jpeg.getSurface();
-			_screen.blitFrom(*s, Common::Point((kScreenWidth - s->w) / 2, (kScreenHeight - s->h) / 2));
-		}
+	if (!bg.open(Common::Path(jpg)))
+		return;
+	Image::JPEGDecoder jpeg;
+	jpeg.setOutputPixelFormat(screen.format);
+	if (jpeg.loadStream(bg)) {
+		const Graphics::Surface *s = jpeg.getSurface();
+		screen.blitFrom(*s, Common::Point((screen.w - s->w) / 2, (screen.h - s->h) / 2));
 	}
+}
+
+bool GrumpaEngine::drawMenu(int selected) {
+	drawBackground(_screen, "UI/001_Menu/Menu.jpg");
 	Common::Array<Common::U32String> items;
 	if (!loadMenuText(items))
 		return false;
-	Common::File ff;
-	Graphics::Font *font = nullptr;
-	bool opened = ff.open(Common::Path("UI/001_Menu/Grumpa.TTF"));
-	if (opened) {
-		// Grumpa.TTF is a symbol font: its glyphs are at 0xF020..0xF0FF (the MS symbol PUA),
-		// not Latin-1, so map each byte i to codepoint 0xF000+i (as Windows GDI does).
-		uint32 mapping[256];
-		for (int i = 0; i < 256; i++)
-			mapping[i] = 0xF000 + i;
-		Common::SeekableReadStream *buf = ff.readStream(ff.size());
-		font = Graphics::loadTTFFont(buf, DisposeAfterUse::YES, 40, Graphics::kTTFSizeModeCharacter,
-									 0, 0, Graphics::kTTFRenderModeLight, mapping);
-	}
+	const Graphics::Font *font = menuFont(40);
 	if (!font)
 		return false;
 	uint32 normal = _screen.format.RGBToColor(255, 255, 0);
@@ -98,14 +117,68 @@ bool GrumpaEngine::drawMenu(int selected) {
 	int lineH = font->getFontHeight() + 6;
 	int total = lineH * (int)items.size();
 	int y = (kScreenHeight - 120 - total) / 2 + 40;  // centred on the parchment map area
+	_menuRects.clear();
 	for (uint i = 0; i < items.size(); i++) {
+		int wdt = font->getStringWidth(items[i]);
+		_menuRects.push_back(Common::Rect((kScreenWidth - wdt) / 2, y, (kScreenWidth + wdt) / 2, y + font->getFontHeight()));
 		uint32 col = ((int)i == selected) ? hi : normal;
 		font->drawString(&_screen, items[i], 1, y + 2, kScreenWidth, shadow, Graphics::kTextAlignCenter);
 		font->drawString(&_screen, items[i], 0, y, kScreenWidth, col, Graphics::kTextAlignCenter);
 		y += lineH;
 	}
-	delete font;
 	return true;
+}
+
+int GrumpaEngine::menuItemAt(const Common::Point &p) const {
+	for (uint i = 0; i < _menuRects.size(); i++)
+		if (_menuRects[i].contains(p))
+			return (int)i;
+	return -1;
+}
+
+// A scrolling text screen (Credits "Medverkande", Help "Hjälp") over the parchment.
+void GrumpaEngine::showTextScreen(const Common::String &textFile) {
+	Common::Array<Common::U32String> lines;
+	loadTextFile(textFile, lines);
+	const Graphics::Font *font = menuFont(28);
+	int lineH = font ? font->getFontHeight() + 4 : 30;
+	int scroll = 0;
+	int maxScroll = MAX(0, (int)lines.size() * lineH - (kScreenHeight - 160));
+	bool done = false;
+	while (!done && !shouldQuit()) {
+		Common::Event e;
+		while (g_system->getEventManager()->pollEvent(e)) {
+			if (e.type == Common::EVENT_KEYDOWN) {
+				if (e.kbd.keycode == Common::KEYCODE_ESCAPE || e.kbd.keycode == Common::KEYCODE_RETURN)
+					done = true;
+				else if (e.kbd.keycode == Common::KEYCODE_DOWN)
+					scroll = MIN(scroll + lineH, maxScroll);
+				else if (e.kbd.keycode == Common::KEYCODE_UP)
+					scroll = MAX(scroll - lineH, 0);
+			} else if (e.type == Common::EVENT_LBUTTONUP) {
+				done = true;
+			} else if (e.type == Common::EVENT_WHEELUP) {
+				scroll = MAX(scroll - lineH, 0);
+			} else if (e.type == Common::EVENT_WHEELDOWN) {
+				scroll = MIN(scroll + lineH, maxScroll);
+			}
+		}
+		drawBackground(_screen, "UI/001_Menu/Menu.jpg");
+		if (font) {
+			uint32 col = _screen.format.RGBToColor(255, 255, 0);
+			uint32 sh = _screen.format.RGBToColor(38, 24, 14);
+			int y = 90 - scroll;
+			for (uint i = 0; i < lines.size(); i++, y += lineH) {
+				if (y < 70 || y > kScreenHeight - 80)
+					continue;
+				font->drawString(&_screen, lines[i], 1, y + 1, kScreenWidth, sh, Graphics::kTextAlignCenter);
+				font->drawString(&_screen, lines[i], 0, y, kScreenWidth, col, Graphics::kTextAlignCenter);
+			}
+		}
+		g_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, kScreenWidth, kScreenHeight);
+		g_system->updateScreen();
+		g_system->delayMillis(10);
+	}
 }
 
 } // End of namespace Grumpa

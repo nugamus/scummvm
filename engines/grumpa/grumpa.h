@@ -28,7 +28,10 @@
 #include "common/array.h"
 #include "common/str.h"
 #include "common/ustr.h"
+#include "common/rect.h"
 #include "graphics/managed_surface.h"
+
+namespace Graphics { class Font; }
 
 #include "grumpa/detection.h"
 #include "grumpa/mesh.h"
@@ -59,11 +62,21 @@ public:
 	bool drawMenu(int selected);
 	/** Play an MPEG-1 film from a Movies_<lang> folder; Esc/click skips. */
 	bool playMovie(const Common::String &name);
+	/** Index of the menu item at screen point p (-1 if none); valid after drawMenu. */
+	int menuItemAt(const Common::Point &p) const;
+	/** A scrolling text screen (Credits, Help) over the parchment. */
+	void showTextScreen(const Common::String &textFile);
+	bool loadTextFile(const Common::String &rel, Common::Array<Common::U32String> &lines);
+	const Graphics::Font *menuFont(int size);
+	static Common::U32String fromCp1252(const Common::String &s);
 	bool loadMenuText(Common::Array<Common::U32String> &items);
 
 private:
 	const ADGameDescription *_gameDesc;
 	Graphics::ManagedSurface _screen;
+	Graphics::Font *_menuFont = nullptr;
+	int _menuFontSize = 0;
+	Common::Array<Common::Rect> _menuRects;
 };
 
 } // End of namespace Grumpa

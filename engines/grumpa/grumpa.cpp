@@ -24,6 +24,7 @@
 #include "common/events.h"
 #include "common/fs.h"
 #include "common/system.h"
+#include "graphics/font.h"
 #include "graphics/pixelformat.h"
 
 #include "engines/util.h"
@@ -37,6 +38,7 @@ GrumpaEngine::GrumpaEngine(OSystem *syst, const ADGameDescription *gameDesc)
 }
 
 GrumpaEngine::~GrumpaEngine() {
+	delete _menuFont;
 }
 
 Common::Error GrumpaEngine::run() {
@@ -62,14 +64,25 @@ Common::Error GrumpaEngine::run() {
 	loadMenuText(items);
 	int sel = 0;
 	int count = (int)items.size();
+	// Menu items (Nordic Text.txt order): 0 New Game, 1 Load, 2 Continue, 3 Settings,
+	// 4 Help, 5 Credits, 6 Quit.
+	enum { kNewGame = 0, kHelp = 4, kCredits = 5, kQuit = 6 };
 	enum { kMenu, kScene } state = kMenu;
 	bool dirty = true;
 	while (!shouldQuit()) {
 		Common::Event event;
 		while (g_system->getEventManager()->pollEvent(event)) {
-			if (event.type != Common::EVENT_KEYDOWN || count == 0)
+			if (count == 0)
 				continue;
-			if (state == kMenu) {
+			if (state == kScene) {
+				if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE) {
+					state = kMenu;
+					dirty = true;
+				}
+				continue;
+			}
+			int activate = -1;
+			if (event.type == Common::EVENT_KEYDOWN) {
 				if (event.kbd.keycode == Common::KEYCODE_UP) {
 					sel = (sel + count - 1) % count;
 					dirty = true;
@@ -78,17 +91,30 @@ Common::Error GrumpaEngine::run() {
 					dirty = true;
 				} else if (event.kbd.keycode == Common::KEYCODE_RETURN
 						   || event.kbd.keycode == Common::KEYCODE_KP_ENTER) {
-					if (sel == count - 1) {  // Avsluta Spel (Quit)
-						return Common::kNoError;
-					} else if (sel == 0) {   // Nytt Spel (New Game) -> first scene view
-						loadBackground("100_1");
-						state = kScene;
-						dirty = false;
-					}
+					activate = sel;
 				}
-			} else if (event.kbd.keycode == Common::KEYCODE_ESCAPE) {
-				state = kMenu;
-				dirty = true;
+			} else if (event.type == Common::EVENT_MOUSEMOVE) {
+				int hit = menuItemAt(event.mouse);
+				if (hit >= 0 && hit != sel) {
+					sel = hit;
+					dirty = true;
+				}
+			} else if (event.type == Common::EVENT_LBUTTONUP) {
+				activate = menuItemAt(event.mouse);
+			}
+			if (activate >= 0) {
+				if (activate == kQuit)
+					return Common::kNoError;
+				else if (activate == kNewGame) {
+					loadBackground("100_1");
+					state = kScene;
+				} else if (activate == kHelp) {
+					showTextScreen("UI/001_Menu/Help.txt");
+					dirty = true;
+				} else if (activate == kCredits) {
+					showTextScreen("UI/001_Menu/Credits.txt");
+					dirty = true;
+				}
 			}
 		}
 		if (dirty && state == kMenu) {
