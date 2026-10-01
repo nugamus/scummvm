@@ -233,20 +233,19 @@ bool decodeDib(const Common::Array<byte> &blob, Graphics::ManagedSurface &out) {
 
 } // End of anonymous namespace
 
+// A pattern size of 0 is the whole picture's (formats README "Picture items").
 int Picture::patternCount() const {
-	if (patternW <= 0 || patternH <= 0)
-		return surface.w ? 1 : 0;
-	return (surface.w / patternW) * (surface.h / patternH);
+	const int w = patternW > 0 ? patternW : surface.w, h = patternH > 0 ? patternH : surface.h;
+	return w && h ? (surface.w / w) * (surface.h / h) : 0;
 }
 
 Common::Rect Picture::pattern(int k) const {
-	if (patternW <= 0 || patternH <= 0)
-		return k == 0 ? Common::Rect(surface.w, surface.h) : Common::Rect();
-	const int cols = surface.w / patternW;
+	const int w = patternW > 0 ? patternW : surface.w, h = patternH > 0 ? patternH : surface.h;
 	if (k < 0 || k >= patternCount())
 		return Common::Rect();
-	const int x = (k % cols) * patternW, y = (k / cols) * patternH;
-	return Common::Rect(x, y, x + patternW, y + patternH);
+	const int cols = surface.w / w;
+	const int x = (k % cols) * w, y = (k / cols) * h;
+	return Common::Rect(x, y, x + w, y + h);
 }
 
 bool PictureCollection::load(const Common::Path &path) {
