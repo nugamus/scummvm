@@ -49,6 +49,8 @@ static void onAccessibility(RingEngine *vm, int zone, int object, int value) {
 		SY::onAccessibility(vm, object, value);
 	else if (zone == kZoneNI)
 		NI::onAccessibility(vm, object, value);
+	else if (zone == kZoneN2)
+		N2::onAccessibility(vm, object, value);
 }
 
 static void onNothing(RingEngine *vm, int zone) {
@@ -65,11 +67,15 @@ static void onClick(RingEngine *vm, int zone, int object, int value, int place) 
 		NI::onClick(vm, object, value, place);
 	else if (zone == kZoneRH)
 		RH::onClick(vm, object, value);
+	else if (zone == kZoneN2)
+		N2::onClick(vm, object, value);
 }
 
 static void onButtonDown(RingEngine *vm, int zone, int object, int value) {
 	if (zone == kZoneNI)
 		NI::onButtonDown(vm, object, value);
+	else if (zone == kZoneN2)
+		N2::onButtonDown(vm, object, value);
 }
 
 static void onTimer(RingEngine *vm, int zone, int id) {
@@ -79,6 +85,8 @@ static void onTimer(RingEngine *vm, int zone, int id) {
 		NI::onTimer(vm, id);
 	else if (zone == kZoneRH)
 		RH::onTimer(vm, id);
+	else if (zone == kZoneN2)
+		N2::onTimer(vm, id);
 }
 
 static void onAnimation(RingEngine *vm, int zone, int id, int frame) {
@@ -88,6 +96,8 @@ static void onAnimation(RingEngine *vm, int zone, int id, int frame) {
 		NI::onAnimation(vm, id, frame);
 	else if (zone == kZoneRH)
 		RH::onAnimation(vm, id, frame);
+	else if (zone == kZoneN2)
+		N2::onAnimation(vm, id, frame);
 }
 
 static void onBeforeMove(RingEngine *vm, int zone, int from, int to, int index, int value, int kind) {
@@ -97,6 +107,8 @@ static void onBeforeMove(RingEngine *vm, int zone, int from, int to, int index, 
 		NI::onBeforeMove(vm, from, to, value, kind);
 	else if (zone == kZoneRH)
 		RH::onBeforeMove(vm, from);
+	else if (zone == kZoneN2)
+		N2::onBeforeMove(vm, from, to, kind);
 }
 
 static void onAfterMove(RingEngine *vm, int zone, int to, int from, int index, int value, int kind) {
@@ -106,6 +118,8 @@ static void onAfterMove(RingEngine *vm, int zone, int to, int from, int index, i
 		NI::onAfterMove(vm, to, from, value, kind);
 	else if (zone == kZoneRH)
 		RH::onAfterMove(vm, to, kind);
+	else if (zone == kZoneN2)
+		N2::onAfterMove(vm, to, value, kind);
 }
 
 RingEngine *g_engine = nullptr;
@@ -601,6 +615,8 @@ void RingEngine::goZone(int zone, int entry) {
 		NI::enter(this, entry);
 	else if (zone == kZoneRH)
 		RH::enter(this, entry);
+	else if (zone == kZoneN2)
+		N2::enter(this, entry);
 	else
 		warning("Ring: zone %d is not implemented yet", zone);
 }
@@ -700,6 +716,21 @@ void RingEngine::setSoundItem(int owner, int sound, bool on) {
 			_sounds->startItem(*i);
 		else if (current)
 			_sounds->stopItem(*i);
+	}
+}
+
+void RingEngine::setSoundItemVolume(int owner, int sound, int volume) {
+	Rotation *r = _world->rotation(owner);
+	Puzzle *p = r ? nullptr : _world->puzzle(owner);
+	SoundItems *items = r ? &r->sounds : p ? &p->sounds : nullptr;
+	if (!items)
+		return;
+	for (auto &i : *items) {
+		if (i->sound == sound) {
+			i->volume = volume;
+			if (_sounds->playing(sound))
+				_sounds->setVolume(sound, volume);
+		}
 	}
 }
 
@@ -1064,6 +1095,8 @@ void RingEngine::soundEvent(int id, int type, int reason) {
 		NI::onSound(this, id, type, why, ended);
 	else if (_zone == kZoneRH)
 		RH::onSound(this, id, type, why, ended);
+	else if (_zone == kZoneN2)
+		N2::onSound(this, id, type, why, ended);
 }
 
 void RingEngine::track(int x, int y) {
@@ -1188,6 +1221,8 @@ void RingEngine::dragEvent(int phase) {
 		SY::onDrag(this, _drag.object, phase);
 	else if (_zone == kZoneNI)
 		NI::onDrag(this, _drag.object, _drag.value, phase);
+	else if (_zone == kZoneN2)
+		N2::onDrag(this, _drag.object, _drag.value, phase);
 }
 
 void RingEngine::click(int x, int y) {
