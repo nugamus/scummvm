@@ -54,10 +54,44 @@ Common::Error GrumpaEngine::run() {
 	SearchMan.addDirectory("gamedir", ConfMan.getPath("path"), 0, 2);
 
 	_screen.clear();
+	// Boot to the main menu. Selecting "Nytt Spel" enters the first scene view; "Avsluta
+	// Spel" quits. (The intro film and the full scene/game flow come next.)
+	Common::Array<Common::U32String> items;
+	loadMenuText(items);
+	int sel = 0;
+	int count = (int)items.size();
+	enum { kMenu, kScene } state = kMenu;
+	bool dirty = true;
 	while (!shouldQuit()) {
 		Common::Event event;
 		while (g_system->getEventManager()->pollEvent(event)) {
-			// Engine::shouldQuit() picks up quit/return-to-launcher events.
+			if (event.type != Common::EVENT_KEYDOWN || count == 0)
+				continue;
+			if (state == kMenu) {
+				if (event.kbd.keycode == Common::KEYCODE_UP) {
+					sel = (sel + count - 1) % count;
+					dirty = true;
+				} else if (event.kbd.keycode == Common::KEYCODE_DOWN) {
+					sel = (sel + 1) % count;
+					dirty = true;
+				} else if (event.kbd.keycode == Common::KEYCODE_RETURN
+						   || event.kbd.keycode == Common::KEYCODE_KP_ENTER) {
+					if (sel == count - 1) {  // Avsluta Spel (Quit)
+						return Common::kNoError;
+					} else if (sel == 0) {   // Nytt Spel (New Game) -> first scene view
+						loadBackground("100_1");
+						state = kScene;
+						dirty = false;
+					}
+				}
+			} else if (event.kbd.keycode == Common::KEYCODE_ESCAPE) {
+				state = kMenu;
+				dirty = true;
+			}
+		}
+		if (dirty && state == kMenu) {
+			drawMenu(sel);
+			dirty = false;
 		}
 		g_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0,
 								   kScreenWidth, kScreenHeight);
