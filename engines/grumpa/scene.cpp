@@ -537,9 +537,18 @@ bool GrumpaEngine::handleSceneClick(const Common::Point &p) {
 		debug(1, "Grumpa: trigger %u fired (%u commands)", tr.id, (uint)tr.cmds.size());
 		// Apply only the immediate, unconditional commands for now; timed (when>=0) and
 		// condition-guarded commands need the tick queue and variable actors (Q-0010).
-		for (uint j = 0; j < tr.cmds.size(); j++)
-			if (tr.cmds[j].when == -1 && !tr.cmds[j].hasCond)
-				applyCommand(_sceneData, tr.cmds[j]);
+		for (uint j = 0; j < tr.cmds.size(); j++) {
+			const SceneCommand &cmd = tr.cmds[j];
+			if (cmd.when != -1 || cmd.hasCond)
+				continue;
+			// Navigation: a command to the scene manager (id 185) opcode 31 goes to the scene
+			// in arg1 (E-0116); the main loop performs the load.
+			if (cmd.targetId == 185 && cmd.opcode == 31) {
+				_nextScene = cmd.arg1;
+				continue;
+			}
+			applyCommand(_sceneData, cmd);
+		}
 		return true;
 	}
 	return false;
