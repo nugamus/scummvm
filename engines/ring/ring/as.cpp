@@ -24,6 +24,7 @@
 #include "common/system.h"
 #include "common/textconsole.h"
 
+#include "ring/bag.h"
 #include "ring/resources.h"
 #include "ring/ring.h"
 #include "ring/sound.h"
@@ -34,16 +35,13 @@ namespace Ring {
 namespace AS {
 
 enum {
-	kObjSoundPoints = 80012, kObjSky16 = 80016, kObjDial = 80018, kObjWorlds = 80019,
+	kObjRingPlace = 80007, kObjDeath = 80020, kObjSoundPoints = 80012, kObjSky16 = 80016, kObjDial = 80018, kObjWorlds = 80019,
 	kObjDialButtons = 80021, kObjSky = 80022,
 	kRotIsland = 80001, kRotChamber = 80101,
 	kByteSway = 80001, kByteTarget = 80004, kByteFrame = 80005,
 	kFloatSign = 80001, kFloatAmount = 80002,
 	kByteWorldDone = 90001 ///< + 0..3: NI, N2, FO, WA done (SY's variables)
 };
-
-// ponytail: the inventory (bag, object in hand) comes with its spec; nothing is in hand yet
-static bool holding(RingEngine *) { return false; }
 
 static void showRotation(RingEngine *vm, int id, float alpha, float beta, float ran, bool setBeta = true) {
 	if (Rotation *r = vm->world().rotation(id)) {
@@ -92,10 +90,17 @@ void enter(RingEngine *vm, int entry) {
 void onClick(RingEngine *vm, int object, int value) {
 	World &w = vm->world();
 	Sounds &snd = vm->sounds();
-	// ponytail: with an object in hand every click drops it, and Death on the ring's place
-	// (80007) ends the game (BagRemAll, stop 0x400, TimStoAll, GoZone(7, 6)): with the inventory
-	if (holding(vm))
+	// With an object in hand every click drops it; Death on the ring's place ends the game.
+	if (int held = vm->bag().held()) {
+		if (object == kObjRingPlace && held == kObjDeath) {
+			vm->bag().removeAll();
+			snd.stopAll(0x400);
+			vm->timStoAll();
+			vm->goZone(kZoneAS, 6);
+		}
+		vm->dropObject();
 		return;
+	}
 	switch (object) {
 	case kObjSoundPoints: {
 		static const int sounds[] = { 80028, 80025, 80021, 80024, 80022, 80026, 80027, 80023 };
@@ -287,11 +292,14 @@ void returnFromWorld(RingEngine *vm, int n) {
 	World &w = vm->world();
 	static const int monologue[] = { 80040, 80049, 80058, 80068 };
 	if (n >= 1 && n <= 4) {
-		// ponytail: BagRemAll, Death (BagAdd(80020)) once all four are done and FO's type 2
-		// volume of 100 (0x406e60) come with the inventory and the type volumes
+		// ponytail: FO's type 2 volume of 100 (0x406e60) comes with the type volumes
 		vm->setZone(kZoneAS);
 		w.setAccessibilities(kObjDial, true, n - 1, n - 1);
 		w.setVarByte(kByteWorldDone - 1 + n, 1);
+		vm->bag().removeAll();
+		if (w.varByte(kByteWorldDone) == 1 && w.varByte(kByteWorldDone + 1) == 1 && w.varByte(kByteWorldDone + 2) == 1 &&
+			w.varByte(kByteWorldDone + 3) == 1)
+			vm->bag().add(kObjDeath);
 		w.showPresentation(kObjDial, n + 1, true, g_system->getMillis());
 		showRotation(vm, kRotChamber, 90.0f, 0.0f, 85.3f, false);
 		vm->sounds().play(monologue[n - 1], false);
@@ -302,11 +310,12 @@ void returnFromWorld(RingEngine *vm, int n) {
 	} else if (n == 5) {
 		vm->goZone(kZoneAS, 5);
 	} else if (n == 13) {
-		// ponytail: BagRemAll and hiding the inventory (0x419350) come with the inventory
+		vm->bag().removeAll();
 		vm->timStoAll();
 		vm->sounds().stopAll(0x400);
 		vm->setZone(kZoneAS);
 		showRotation(vm, kRotChamber, 90.0f, 0.0f, 85.3f, false);
+		vm->bag().hide(); // 0x419350
 		startTimers(vm);
 	}
 }

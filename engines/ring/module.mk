@@ -1,6 +1,7 @@
 MODULE := engines/ring
 
 MODULE_OBJS = \
+	bag.o \
 	codec.o \
 	cursor.o \
 	metaengine.o \

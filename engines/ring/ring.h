@@ -41,6 +41,7 @@ class WinFont;
 
 namespace Ring {
 
+class Bag;
 class Cursors;
 class Resources;
 class Sounds;
@@ -79,6 +80,15 @@ public:
 	World &world() { return *_world; }
 	Cursors &cursors() { return *_cursors; }
 	Sounds &sounds() { return *_sounds; }
+	Bag &bag() { return *_bag; }
+	/** An object goes in hand with its cursors (0x40b860, spec/bag.md). */
+	void holdObject(int object);
+	/** 0x406570: the object in hand is dropped, its cursors go. */
+	void dropObject();
+	/** The right button (0x40afe0): the bag opens or closes. */
+	void toggleBag();
+	/** 0x419350 and 0x40ded0: the bag closes and the rotation it froze may be looked around again. */
+	void hideBag();
 	/** The zones' rand(). */
 	Common::RandomSource &rnd() { return _random; }
 	/** The current zone (app+0x6e). */
@@ -92,8 +102,8 @@ public:
 	void rotSetAct(int rotation, bool start = true, bool stop = true);
 	/** `GoZone` 0x402280: leaves the place, stops the sounds, enters a zone at an entry point. */
 	void goZone(int zone, int entry);
-	/** `SetZone`: only the current zone changes. */
-	void setZone(int zone) { _zone = zone; }
+	/** `SetZone` 0x402210: the current zone changes; Erda's button is offered outside SY and AS. */
+	void setZone(int zone);
 	/** The current rotation, 0 when a puzzle is shown (0x402730). */
 	int currentRotation() const { return _mode == 1 ? _rotation : 0; }
 	/** `PlyCin` 0x401490: `DATA\<zone>\PLA\<name>.cnm` with sound channel 0 (spec/video.md). */
@@ -160,6 +170,10 @@ private:
 	void dragMove(int x, int y);
 	/** `MouseLeftEvent` on release (spec/cursor.md). */
 	void click(int x, int y);
+	/** An accessibility clicked: the object-click event (flag bit 0), then taking it (bit 3). */
+	void clickObject(int zone, int object, int value);
+	/** Erda's button in the bag: the world is left for the hub, where the player was kept (spec/bag.md). */
+	void erda();
 	/** The drag event (0x40c060) to the zone's handler. */
 	void dragEvent(int phase);
 	/** Through movability `index` of the current rotation or puzzle (spec/rotation.md). */
@@ -183,6 +197,9 @@ private:
 	Common::ScopedPtr<World> _world;
 	Common::ScopedPtr<Cursors> _cursors;
 	Common::ScopedPtr<Sounds> _sounds;
+	Common::ScopedPtr<Bag> _bag;
+	int _bagRotation = 0;      ///< 0x495244: the rotation the open bag froze
+	bool _bagWasFrozen = false; ///< 0x495570: its +0x67 before
 	Common::ScopedPtr<Graphics::WinFont> _font;
 	Common::String _messageTitle, _messageText;
 	int _zone = 1;
@@ -196,6 +213,7 @@ private:
 	struct Button {
 		bool down;
 		Common::Point pos;
+		bool right;
 	};
 	Common::Array<Button> _buttons; ///< left button presses and releases not handled yet
 	bool _buttonDown = false;

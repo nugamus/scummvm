@@ -24,13 +24,14 @@
 
 namespace Ring {
 
-void Cursors::add(int id, const Common::String &name, int kind, int frames, float fps) {
+void Cursors::add(int id, const Common::String &name, int kind, int frames, float fps, const char *folder) {
 	if (find(id))
 		return; // "id already exist"
 	Cursor c;
 	c.id = id;
 	c.kind = kind;
 	c.name = name;
+	c.folder = folder;
 	if (kind == 4) {
 		c.frames = MAX(frames, 1);
 		c.frameMs = (uint32)(1000.0f / fps); // truncated, as __ftol does
@@ -84,7 +85,7 @@ void Cursors::draw(Resources &res, Graphics::ManagedSurface &dst, int x, int y, 
 		for (int f = 0; f < (c.kind == 4 ? c.frames : 1); f++) {
 			Common::String file = c.kind == 4 ? Common::String::format("%s\\%s.%04d.tga", c.name.c_str(), c.name.c_str(), f + 1)
 											  : c.name + ".tga";
-			c.images.push_back(Common::SharedPtr<Image>(res.loadImage(kZoneSY, file, true, "CURSOR")));
+			c.images.push_back(Common::SharedPtr<Image>(res.loadImage(kZoneSY, file, true, c.folder)));
 		}
 	}
 	if (c.kind == 4) {
