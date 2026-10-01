@@ -79,7 +79,8 @@ struct SceneSprite {
 	Common::String name;   // frame-0 JPG base, e.g. "cannons_0000.jpg"
 	uint32 id = 0;
 	int x = 0, y = 0;
-	int flag0 = 0, flag1 = 0;
+	bool active = false;   // +0x10c: animating/updating (E-0111)
+	bool visible = false;  // +0x110: drawn
 	int frames = 0, fps = 0;
 };
 
