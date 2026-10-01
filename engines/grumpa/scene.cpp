@@ -336,9 +336,9 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			// Sprite prop (E-0107): header flags, anim block, gate, then position when gated.
 			SceneSprite sp;
 			sp.id = id;
-			sp.flag0 = (int)c.u32();
-			sp.flag1 = (int)c.u32();
-			c.skip(4);               // h[2] (always 1)
+			c.skip(4);                      // +0x108 (parent/link)
+			sp.active = c.u32() != 0;       // +0x10c
+			sp.visible = c.u32() != 0;      // +0x110
 			ecVec(c);
 			c.skip(8);               // +0x114,+0x314
 			sp.frames = (int)c.u32();  // +0x1e0
@@ -451,8 +451,10 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 	uint32 elapsed = now - _sceneTick0;
 	for (uint i = 0; i < _sceneData.sprites.size(); i++) {
 		const SceneSprite &sp = _sceneData.sprites[i];
+		if (!sp.visible)  // hidden until a command shows it (E-0111)
+			continue;
 		int frame = 0;
-		if (sp.frames > 1 && sp.fps > 0)
+		if (sp.active && sp.frames > 1 && sp.fps > 0)  // only animate active sprites
 			frame = (int)((elapsed * (uint32)sp.fps / 1000) % (uint32)sp.frames);
 		drawSprite(sp, frame);
 	}
