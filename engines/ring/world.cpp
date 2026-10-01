@@ -334,9 +334,15 @@ void World::apply(int zone, const SetupCall &c) {
 		pauseAnimations(a[0], a[1], true);
 		break;
 	case kVarDefByte:
-		if (!_bytes.contains(a[0]))
-			_bytes[a[0]] = (int8)a[1];
+	case kVarDefWord:
+	case kVarDefDwrd: {
+		VarType t = c.call == kVarDefByte ? kVarByte : c.call == kVarDefWord ? kVarWord : kVarDword;
+		if (!_ints[t].contains(a[0])) {
+			_ints[t][a[0]] = 0;
+			setVar(t, a[0], a[1]);
+		}
 		break;
+	}
 	case kVarDefFloa:
 		if (!_floats.contains(a[0]))
 			_floats[a[0]] = asFloat(a[1]);
@@ -455,19 +461,21 @@ void World::pauseAnimations(int id, int presentation, bool paused) {
 				anim->paused = paused;
 }
 
-int World::varByte(int id) const {
-	if (!_bytes.contains(id)) {
-		warning("Ring: VarGetByte: no variable %d", id);
+static const char *const kVarNames[] = { "Byte", "Word", "Dwrd" };
+
+int World::var(VarType type, int id) const {
+	if (!_ints[type].contains(id)) {
+		warning("Ring: VarGet%s: no variable %d", kVarNames[type], id);
 		return 0;
 	}
-	return _bytes.getVal(id);
+	return _ints[type].getVal(id);
 }
 
-void World::setVarByte(int id, int value) {
-	if (_bytes.contains(id))
-		_bytes[id] = (int8)value;
+void World::setVar(VarType type, int id, int value) {
+	if (!_ints[type].contains(id))
+		warning("Ring: VarSet%s: no variable %d", kVarNames[type], id);
 	else
-		warning("Ring: VarSetByte: no variable %d", id);
+		_ints[type][id] = type == kVarByte ? (int8)value : type == kVarWord ? (int16)value : value;
 }
 
 float World::varFloat(int id) const {

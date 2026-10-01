@@ -123,6 +123,11 @@ public:
 		if (_pending)
 			stepTransition(k);
 	}
+	/** 0x41a820 on `GoZone`: the place lists are forgotten, so the next place starts afresh. */
+	void clearPlaces() {
+		_old = _new = nullptr;
+		_pending = false;
+	}
 	/** The finish of a transition without a ride video (0x41b130, 0x41aee0(2), steps 3). */
 	void finishTransition();
 	/** Starts / stops an item (0x41a350 / 0x41a3b0), without events. */

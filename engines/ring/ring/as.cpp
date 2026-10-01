@@ -117,10 +117,13 @@ void onClick(RingEngine *vm, int object, int value) {
 		static const int world[] = { 1, 2, 1, 3, 2, 4 };
 		static const int zone[] = { 0, kZoneNI, kZoneN2, kZoneFO, kZoneWA };
 		if (value >= 0 && value < 6 && w.varByte(kByteWorldDone - 1 + world[value]) == 0) {
-			// ponytail: the worlds' own entries (0x44a7d0, 0x436270, 0x443710, 0x43ad00: entry 0
-			// the first time, else the resume entry 10 from SY's dwords) come with those zones
+			// 0x44a7d0, 0x436270, 0x443710, 0x43ad00: entered before, the world resumes (E-0091)
+			int n = world[value];
 			vm->timStoAll();
-			vm->goZone(zone[world[value]], 0);
+			if (w.varByte(90008 + n) == 0)
+				vm->goZone(zone[n], 0);
+			else
+				vm->goZone(w.var(World::kVarDword, 90012 + n), 10);
 		}
 		break;
 	}
