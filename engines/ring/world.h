@@ -291,6 +291,8 @@ public:
 	void setVarByte(int id, int value) { setVar(kVarByte, id, value); }
 	float varFloat(int id) const;
 	void setVarFloat(int id, float value);
+	/** `VarGetStrg` (0x4062e0). */
+	Common::String varString(int id) const;
 
 private:
 	void apply(int zone, const SetupCall &c);
@@ -301,8 +303,8 @@ private:
 	const Graphics::Font *_font = nullptr;
 	Sounds *_sounds = nullptr;
 	int _lr = -1;
-	// ponytail: strings come with the zones that read them
 	Common::HashMap<int, int32> _ints[3]; ///< by VarType, the values truncated to the type
+	Common::HashMap<int, Common::String> _strings;
 	Common::HashMap<int, float> _floats;
 };
 

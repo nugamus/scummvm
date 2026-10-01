@@ -112,6 +112,8 @@ public:
 	void rotSetRolTo(int rotation, float alpha, float beta, float ran);
 	/** `PuzSet3DSouOn` / `RotSet3DSouOn` / `...Off` and the ambient ones: the item, started or stopped at once in the current place. */
 	void setSoundItem(int owner, int sound, bool on);
+	/** `PuzSet3DSouVol` (0x404d70) and the like: the item's volume, applied at once when it plays. */
+	void setSoundItemVolume(int owner, int sound, int volume);
 	/** 0x408db0: game over `n` (mode 4); the next frame shows End.bmp and opens the menu (games/ring/docs/ni.md). */
 	void gameOver(int n);
 	/** `SetCursorPos`. */

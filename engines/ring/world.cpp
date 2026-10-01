@@ -387,6 +387,10 @@ void World::apply(int zone, const SetupCall &c) {
 		}
 		break;
 	}
+	case kVarDefStrg:
+		if (!_strings.contains(a[0]))
+			_strings[a[0]] = str(1);
+		break;
 	case kVarDefFloa:
 		if (!_floats.contains(a[0]))
 			_floats[a[0]] = asFloat(a[1]);
@@ -520,6 +524,14 @@ void World::setVar(VarType type, int id, int value) {
 		warning("Ring: VarSet%s: no variable %d", kVarNames[type], id);
 	else
 		_ints[type][id] = type == kVarByte ? (int8)value : type == kVarWord ? (int16)value : value;
+}
+
+Common::String World::varString(int id) const {
+	if (!_strings.contains(id)) {
+		warning("Ring: VarGetStrg: no variable %d", id);
+		return Common::String();
+	}
+	return _strings.getVal(id);
 }
 
 float World::varFloat(int id) const {
