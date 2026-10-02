@@ -176,12 +176,14 @@ bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
 	return true;
 }
 
-// Load the game's default pointer (UI/002_Cursor/default_0000.jpg, a white glove on black,
-// E-0005) as the system cursor, with near-black pixels made transparent (the JPEG has no
-// alpha, so the original keys out black).
-void GrumpaEngine::setGameCursor() {
+// Set the system cursor to UI/002_Cursor/<name>_0000.jpg (the game's cursor set, 002_Cursor.atx:
+// default, grabing, pointpush, pull, push, stop, attack, itemglitter, ...). The JPEGs key out
+// their blue background (E-0107). Cached by name so hover updates are cheap.
+void GrumpaEngine::setCursorImage(const Common::String &name) {
+	if (name == _cursorName)
+		return;
 	Common::File f;
-	if (!f.open(Common::Path("UI/002_Cursor/default_0000.jpg")))
+	if (!f.open(Common::Path("UI/002_Cursor/" + name + "_0000.jpg")))
 		return;
 	Image::JPEGDecoder jpeg;
 	Graphics::PixelFormat rgba(4, 8, 8, 8, 8, 0, 8, 16, 24);
@@ -199,9 +201,28 @@ void GrumpaEngine::setGameCursor() {
 			cur.setPixel(x, y, rgba.ARGBToColor(a, r, g, b));
 		}
 	}
-	CursorMan.replaceCursor(cur, 2, 2, 0, nullptr);
+	CursorMan.replaceCursor(cur, src->w / 2, src->h / 2, 0, nullptr);
 	CursorMan.showMouse(true);
 	cur.free();
+	_cursorName = name;
+}
+
+void GrumpaEngine::setGameCursor() {
+	setCursorImage("default");
+}
+
+// Hover feedback: over a clickable trigger show the "grabing" hand so exits/interactions are
+// discoverable; otherwise the default pointer.
+void GrumpaEngine::updateHoverCursor(const Common::Point &p) {
+	bool overTrigger = false;
+	for (uint i = 0; i < _sceneData.triggers.size(); i++) {
+		const SceneTrigger &tr = _sceneData.triggers[i];
+		if (!tr.spent && tr.poly.size() >= 3 && pointInPoly(tr.poly, p)) {
+			overTrigger = true;
+			break;
+		}
+	}
+	setCursorImage(overTrigger ? "grabing" : "default");
 }
 
 // ---- .abi scene-graph reader (docs/spec/scene.md; mirrors tools/parsers/abi.py) ----------
