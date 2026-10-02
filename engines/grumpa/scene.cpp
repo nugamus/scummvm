@@ -179,6 +179,8 @@ bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
 // Set the system cursor to UI/002_Cursor/<name>_0000.jpg (the game's cursor set, 002_Cursor.atx:
 // default, grabing, pointpush, pull, push, stop, attack, itemglitter, ...). The JPEGs key out
 // their blue background (E-0107). Cached by name so hover updates are cheap.
+static bool pointInPoly(const Common::Array<Common::Point> &poly, const Common::Point &p);
+
 void GrumpaEngine::setCursorImage(const Common::String &name) {
 	if (name == _cursorName)
 		return;
