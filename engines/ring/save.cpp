@@ -22,11 +22,16 @@
 // Saved games (spec/save.md): ScummVM saves holding the original's records in its order,
 // puzzles, rotations, objects, variables, the bag, the timers, the place, the sounds, then
 // the worlds left through Erda. A load runs the set-ups again and overlays the records, then
-// makes the saved place current as entry 1000 does.
+// makes the saved place current as entry 1000 does. Before the records: the save screen's
+// description line, the typed name and the 260 x 480 picture (games/ring/docs/sy.md).
 
 #include "common/memstream.h"
+#include "common/savefile.h"
 #include "common/serializer.h"
 #include "common/system.h"
+#include "common/ustr.h"
+
+#include "engines/metaengine.h"
 
 #include "ring/bag.h"
 #include "ring/resources.h"
@@ -188,6 +193,107 @@ void Sounds::syncState(Common::Serializer &s, Common::Array<Common::Pair<int, bo
 	}
 }
 
+void RingEngine::snapshot() {
+	Common::MemoryWriteStreamDynamic out(DisposeAfterUse::YES);
+	Common::Serializer s(nullptr, &out);
+	syncGame(s);
+	_snapGame = Common::Array<byte>(out.getData(), out.size());
+	_snapScreen.copyFrom(_screen);
+}
+
+Common::String RingEngine::describeSave() const {
+	// 0x4020b0: the character of the zone the menu came from; _strtime, _strdate (E-0258).
+	static const char *const kCharacters[] = { "", "", "Alberich", "Alberich", "Siegmund", "Loge", "Br\xfcnnhilde", "Dril", "Loge" };
+	int zone = _menuZone ? _menuZone : _zone;
+	TimeDate t;
+	g_system->getTimeAndDate(t);
+	return Common::String::format("%s  %02d:%02d:%02d   %02d/%02d/%02d", zone >= 0 && zone <= 8 ? kCharacters[zone] : "",
+								  t.tm_hour, t.tm_min, t.tm_sec, t.tm_mon + 1, t.tm_mday, t.tm_year % 100);
+}
+
+Image *RingEngine::savePicture() const {
+	// aImage::Zoom(0.40645, 1.0): 260 x 480, (x, y) from (trunc(x / 0.40645), y), the last row left black (E-0265).
+	if (_snapScreen.empty())
+		return nullptr;
+	Image *img = new Image();
+	img->surface.create(260, 480, _snapScreen.format);
+	img->surface.clear();
+	for (int y = 0; y < 479; y++)
+		for (int x = 0; x < 260; x++)
+			img->surface.setPixel(x, y, _snapScreen.getPixel((int)(x / (double)0.40645f), y));
+	return img;
+}
+
+Common::Error RingEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
+	// From ScummVM's menu in play: the game and the screen as they are now.
+	if (!_menuZone) {
+		snapshot();
+		_saveDescription = describeSave();
+		_saveName = Common::U32String(desc).encode(Common::kWindows1252);
+	}
+	return Engine::saveGameState(slot, desc, isAutosave);
+}
+
+bool RingEngine::saveToFreeSlot(const Common::String &description, const Common::String &name) {
+	// The save screen's OK (sy.md): the game F12 left, in the first free slot.
+	int slot = 0;
+	while (slot == getAutosaveSlot() || _saveFileMan->exists(getSaveStateName(slot)))
+		slot++;
+	if (_snapGame.empty() || slot > getMetaEngine()->getMaximumSaveSlot())
+		return false;
+	_saveDescription = description;
+	_saveName = name;
+	const Common::String &shown = name.empty() ? description : name;
+	return saveGameState(slot, Common::U32String(shown, Common::kWindows1252).encode()).getCode() == Common::kNoError;
+}
+
+bool RingEngine::continueGame() {
+	if (_snapGame.empty())
+		return false;
+	_pendingLoad = _snapGame;
+	return true;
+}
+
+static bool readHead(Common::SeekableReadStream &in, Common::String &description, Common::String &name, Image **picture) {
+	Common::Serializer s(&in, nullptr);
+	uint32 version = 0;
+	s.syncAsUint32LE(version);
+	if (version != kSaveVersion) {
+		warning("Ring: unknown save version %u", version);
+		return false;
+	}
+	s.syncString(description);
+	s.syncString(name);
+	uint16 w = in.readUint16LE(), h = in.readUint16LE();
+	if (!picture || !w || !h) {
+		in.skip(w * h * 2);
+		return !in.err();
+	}
+	Image *img = new Image();
+	img->surface.create(w, h, g_engine->screen().format);
+	for (int y = 0; y < h; y++)
+		for (int x = 0; x < w; x++)
+			img->surface.setPixel(x, y, in.readUint16LE());
+	*picture = img;
+	return !in.err();
+}
+
+bool RingEngine::readSave(int slot, Common::String &description, Common::String &name, Image **picture) {
+	Common::ScopedPtr<Common::InSaveFile> in(_saveFileMan->openForLoading(getSaveStateName(slot)));
+	return in && readHead(*in, description, name, picture);
+}
+
+Common::Array<int> RingEngine::saveSlots() const {
+	Common::Array<int> slots;
+	for (const SaveStateDescriptor &d : getMetaEngine()->listSaves(_targetName.c_str()))
+		slots.push_back(d.getSaveSlot());
+	return slots;
+}
+
+void RingEngine::deleteSave(int slot) {
+	_saveFileMan->removeSavefile(getSaveStateName(slot));
+}
+
 bool RingEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 	return _world && !_menuZone && _zone != kZoneSY && !_drag.active && !_bag->shown() && !_gameOver;
 }
@@ -271,14 +377,25 @@ void RingEngine::syncGame(Common::Serializer &s) {
 
 Common::Error RingEngine::saveGameStream(Common::WriteStream *stream, bool isAutosave) {
 	Common::Serializer s(nullptr, stream);
-	s.setVersion(kSaveVersion);
 	uint32 version = kSaveVersion;
 	s.syncAsUint32LE(version);
-	syncGame(s);
+	s.syncString(_saveDescription);
+	s.syncString(_saveName);
+	Common::ScopedPtr<Image> picture(savePicture());
+	stream->writeUint16LE(picture ? picture->surface.w : 0);
+	stream->writeUint16LE(picture ? picture->surface.h : 0);
+	if (picture)
+		for (int y = 0; y < picture->surface.h; y++)
+			for (int x = 0; x < picture->surface.w; x++)
+				stream->writeUint16LE(picture->surface.getPixel(x, y));
+	stream->write(_snapGame.data(), _snapGame.size());
 	return Common::kNoError;
 }
 
 Common::Error RingEngine::loadGameStream(Common::SeekableReadStream *stream) {
+	Common::String description, name;
+	if (!readHead(*stream, description, name, nullptr))
+		return Common::kReadingFailed;
 	// Applied in the main loop (a load from the menu can come from inside a zone handler).
 	_pendingLoad.resize(stream->size() - stream->pos());
 	stream->read(_pendingLoad.data(), _pendingLoad.size());
@@ -288,13 +405,6 @@ Common::Error RingEngine::loadGameStream(Common::SeekableReadStream *stream) {
 void RingEngine::applyLoad() {
 	Common::MemoryReadStream stream(_pendingLoad.data(), _pendingLoad.size());
 	Common::Serializer s(&stream, nullptr);
-	uint32 version = 0;
-	s.syncAsUint32LE(version);
-	if (version != kSaveVersion) {
-		warning("Ring: unknown save version %u", version);
-		_pendingLoad.clear();
-		return;
-	}
 	// The set-ups again (0x408bc0, 0x431040), then the records over them.
 	resetWorld();
 	_drag = Drag();
@@ -302,9 +412,6 @@ void RingEngine::applyLoad() {
 	_pendingLoad.clear();
 	// Entry 1000: the place made current without zone code, the sounds that were playing.
 	int puzzle = _puzzle, rotation = _rotation, mode = _mode;
-	bool frozen = false;
-	if (Rotation *r = _world->rotation(rotation))
-		frozen = r->frozen;
 	setZone(_zone);
 	_menuZone = 0;
 	_sounds->stopAll(8);
@@ -317,7 +424,7 @@ void RingEngine::applyLoad() {
 		r->alpha = a;
 		r->beta = b;
 		r->ran = ran;
-		r->frozen = frozen;
+		r->frozen = _bagWasFrozen; // trailer byte 0x10
 	}
 	_sounds->setTypeVolumes(_preferences[0], _preferences[1]); // aPre.ini again
 	for (auto &p : _playingOnLoad)

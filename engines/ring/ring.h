@@ -48,6 +48,7 @@ class WinFont;
 namespace Ring {
 
 class Bag;
+struct Image;
 class Cursors;
 class Resources;
 class Sounds;
@@ -87,6 +88,26 @@ public:
 	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
 	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave = false) override;
 	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
+	/** In play: the game and the screen taken now, the description line built. */
+	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
+
+	/** `StartMenu(1)`'s save (sy.md, "Flow"): the game and the screen as they are, kept for continue and the save screen. */
+	void snapshot();
+	/** The save screen's description, "<character>  <time>   <date>" (E-0258). */
+	Common::String describeSave() const;
+	/** The kept screen as the save screen's picture, 260 x 480 (E-0265); nullptr without one. */
+	Image *savePicture() const;
+	/** The save screen's OK: the kept game in the first free slot with its two lines and picture. */
+	bool saveToFreeSlot(const Common::String &description, const Common::String &name);
+	/** Continue: the kept game loaded again; false without one. */
+	bool continueGame();
+	/** A slot's description line, typed name and (when asked) picture, for the load screen. */
+	bool readSave(int slot, Common::String &description, Common::String &name, Image **picture);
+	/** The slots holding saves, ascending. */
+	Common::Array<int> saveSlots() const;
+	void deleteSave(int slot);
+	const Graphics::ManagedSurface &snapScreen() const { return _snapScreen; }
+	Graphics::WinFont *font() const { return _font.get(); }
 
 	Graphics::ManagedSurface &screen() { return _screen; }
 	Resources &resources() { return *_resources; }
@@ -287,13 +308,15 @@ private:
 	bool _takeAllowed = true; ///< app+0x74
 	bool _listAllowed = true; ///< app+0x78
 	Common::Array<byte> _pendingLoad;
+	Common::Array<byte> _snapGame;        ///< the game as F12 (or a save in play) left it
+	Graphics::ManagedSurface _snapScreen; ///< the screen then (0x49556c)
+	Common::String _saveDescription, _saveName; ///< Windows-1252, as typed
 	Common::Array<Common::Pair<int, bool> > _playingOnLoad;
 	struct WorldState {
 		Common::Array<int> bag;
 		Common::Array<Timer> timers;
 		uint32 tick = 0;
 	};
-	// ponytail: kept in memory; written to disk with the saved games (spec/save.md, to come)
 	Common::HashMap<Common::String, WorldState> _worldStates;
 	Common::RandomSource _random{ "ring" };
 };

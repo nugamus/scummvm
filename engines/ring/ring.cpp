@@ -43,6 +43,9 @@
 
 namespace Ring {
 
+// F12 (VK_F12 0x7b, a WM_KEYDOWN, not a character): StartMenu(1) (spec/boot.md, "Input").
+static const int kKeyF12 = 0x100 | 0x7b;
+
 // The zone's handlers; puzzle 1's events always go to SY (spec/events.md).
 static void onAccessibility(RingEngine *vm, int zone, int object, int value) {
 	if (zone == kZoneSY)
@@ -185,7 +188,9 @@ void RingEngine::pollEvents(uint32 ms) {
 			// WM_CHAR characters and Delete reach 0x40b060 (spec/events.md, "Keys").
 			if (event.kbd.keycode == Common::KEYCODE_ESCAPE)
 				_escapeDown = true;
-			if (event.kbd.keycode == Common::KEYCODE_DELETE)
+			if (event.kbd.keycode == Common::KEYCODE_F12)
+				_keys.push_back(kKeyF12);
+			else if (event.kbd.keycode == Common::KEYCODE_DELETE)
 				_keys.push_back(0x2e);
 			else if (event.kbd.ascii && event.kbd.ascii < 256)
 				_keys.push_back(event.kbd.ascii);
@@ -511,9 +516,16 @@ void RingEngine::key(int code) {
 	// Escape ends a playing dialogue (0x406e40(5, 0x1002): its end event, so chains go on).
 	if (code == 27)
 		_sounds->stopType(kSoundDialogue, 0x1002);
-	// ponytail: the visual object lists and SY's key handler (the save name) come with the save screens (spec/events.md)
+	if (code == kKeyF12) {
+		startMenu(true);
+		return;
+	}
+	// The lists take no keys (0x46f030); SY's key handler runs unless a dialogue is up.
 	Puzzle *p1 = _world->puzzle(1);
-	Puzzle *p = p1 && p1->mode == 2 ? p1 : _world->puzzle(_puzzle);
+	bool dialogue = p1 && p1->mode == 2;
+	if (!dialogue && _zone == kZoneSY)
+		SY::onKey(this, code);
+	Puzzle *p = dialogue ? p1 : _world->puzzle(_puzzle);
 	if (!p)
 		return;
 	for (const auto &acc : p->accessibilities) {
@@ -990,7 +1002,13 @@ bool RingEngine::puzSetMod(int puzzle, int mode, int object) {
 void RingEngine::startMenu(bool fromGame) {
 	if (_menuZone)
 		return;
-	// ponytail: from the game, the snapshot save and the thumbnail come with spec/save.md
+	if (fromGame) {
+		// Busy cursor, one frame, the bag hidden, the game kept as `SaveGame` and the screen copied.
+		_cursors->set(0x33);
+		renderFrame();
+		_bag->hide();
+		snapshot();
+	}
 	_bag->hide();
 	dropObject();
 	_sounds->stopAll(4); // 0x406ea0(4)
@@ -1063,6 +1081,8 @@ void RingEngine::drawView() {
 	} else if (Puzzle *p = _world->puzzle(_puzzle)) {
 		advanceAnimations(*p);
 		_world->draw(*p, *_resources, _screen);
+		if (_zone == kZoneSY)
+			SY::draw(this, _screen);
 	}
 	if (Puzzle *p1 = _world->puzzle(1)) {
 		advanceAnimations(*p1);
@@ -1250,6 +1270,9 @@ const HotSpot *RingEngine::trackHit(int x, int y) {
 			return &m->hotSpot;
 		}
 	} else if (Puzzle *p = _world->puzzle(_puzzle)) {
+		// Its visual object lists first (0x41d7a0).
+		if (_zone == kZoneSY && SY::listTrack(this, x, y))
+			return nullptr;
 		if (const Accessibility *acc = _world->hit(*p, x, y)) {
 			_cursors->set(held ? 2 : acc->hotSpot.cursor);
 			onAccessibility(this, _zone, acc->object, acc->hotSpot.value);
@@ -1383,6 +1406,8 @@ void RingEngine::click(int x, int y) {
 	for (Puzzle *q : { p1, p }) {
 		if (!q)
 			continue;
+		if (q == p && _zone == kZoneSY && SY::listClick(this, x, y))
+			return;
 		if (const Accessibility *acc = _world->hit(*q, x, y)) {
 			clickObject(q == p1 ? kZoneSY : _zone, acc->object, acc->hotSpot.value, q->id);
 			track(x, y);

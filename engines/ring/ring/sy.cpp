@@ -19,9 +19,13 @@
  *
  */
 
-// Zone SY: the main menu and the dialogues (games/ring/docs/sy.md).
+// Zone SY: the main menu, the dialogues and the system screens (games/ring/docs/sy.md).
 
+#include "common/hashmap.h"
+#include "common/hash-str.h"
 #include "common/textconsole.h"
+
+#include "graphics/fonts/winfont.h"
 
 #include "ring/cursor.h"
 #include "ring/resources.h"
@@ -35,7 +39,10 @@ namespace SY {
 enum {
 	kObjExit = 2, kObjWarning = 3, kObjQuestion = 4,
 	kObjNewGame = 90000, kObjPreferences, kObjLoad, kObjSave, kObjContinue, kObjStatus, kObjQuit,
-	kObjPrefCancel = 90101, kObjPrefOK, kObjSubtitles, kObjStereo, kObjVolume, kObjDialogueVolume, kObjCredits
+	kObjPrefCancel = 90101, kObjPrefOK, kObjSubtitles, kObjStereo, kObjVolume, kObjDialogueVolume, kObjCredits,
+	kObjLoadCancel = 90207, kObjLoadOK = 90208, kObjSaveOK = 90309, kObjSaveCancel = 90310, kObjSaveName = 90313,
+	kObjStatusOK = 90401, kObjScores = 90402,
+	kPuzLoad = 90002, kPuzSave = 90003, kPuzStatus = 90004
 };
 
 // The preferences screen's working values (sy.md, "Preferences").
@@ -75,8 +82,15 @@ void onAccessibility(RingEngine *vm, int object, int value) {
 		w.showPresentation(kObjPrefOK, 0, object == kObjPrefOK);
 	} else if (object == kObjStereo) {
 		w.showPresentation(kObjStereo, 2, true);
+	} else if (object == kObjLoadCancel || object == kObjLoadOK) {
+		w.showPresentation(kObjLoadCancel, 0, object == kObjLoadCancel);
+		w.showPresentation(kObjLoadOK, 0, object == kObjLoadOK);
+	} else if (object == kObjSaveOK || object == kObjSaveCancel) {
+		w.showPresentation(kObjSaveOK, 0, object == kObjSaveOK);
+		w.showPresentation(kObjSaveCancel, 0, object == kObjSaveCancel);
+	} else if (object == kObjStatusOK) {
+		w.showPresentation(kObjStatusOK, 0, true);
 	}
-	// ponytail: the load, save and status screens light their own pictures (sy.md, to come)
 }
 
 void onNothing(RingEngine *vm) {
@@ -169,6 +183,231 @@ static void askQuestion(RingEngine *vm, int kind, const char *key) {
 	vm->world().setAccessibilities(kObjQuestion, true, kind, kind + 1);
 }
 
+// The warning (0x40dfd0) and its closing (0x40e060).
+static void showWarning(RingEngine *vm, const char *key) {
+	vm->message(key);
+	if (!vm->puzSetMod(1, 2, kObjWarning))
+		return;
+	setLines(vm, kObjWarning);
+	vm->world().showPresentation(kObjWarning, 0, true);
+	vm->world().setAccessibilities(kObjWarning, true);
+}
+
+static void closeWarning(RingEngine *vm) {
+	vm->world().hideAndFree(kObjWarning);
+	vm->world().setAccessibilities(kObjWarning, false);
+	vm->puzSetMod(1, 1, 0);
+}
+
+// The load screen's list: visual object 1 of puzzle 90002 with the set-up's values (sy.md,
+// "Load"; E-0263, E-0266). Its entries are ScummVM's slots, newest on top.
+struct SaveEntry {
+	int slot;
+	Common::String description, name;
+};
+static Common::Array<SaveEntry> s_saves;
+static int s_first, s_selected = -1;
+static int s_hover; ///< 1 up, 2 down: the mouse is on that usable arrow
+static Common::ScopedPtr<Image> s_picture; ///< the selected entry's
+static Common::String s_name, s_description; ///< the save screen's
+static int s_bars[4]; ///< the game status bars' lengths
+
+enum { kRows = 4, kRowStep = 45 };
+static const Common::Rect kUp(320, 339, 360, 379), kDown(320, 370, 360, 410);
+
+static int rowCentre(int r) {
+	return 127 + kRowStep / 2 + kRowStep * r;
+}
+
+static Common::Rect rowRect(int r) {
+	int top = rowCentre(r) - 35 / 2;
+	return Common::Rect(335, top, 635, top + 35);
+}
+
+static bool canUp() {
+	return s_first > 0;
+}
+
+static bool canDown() {
+	return s_first + kRows < (int)s_saves.size();
+}
+
+static Image *visual(RingEngine *vm, const char *name) {
+	// Loose files in DATA\SY\VISUAL (load-from 'e'), drawn with draw type 3.
+	static Common::HashMap<Common::String, Common::SharedPtr<Image> > cache;
+	if (!cache.contains(name))
+		cache[name].reset(vm->resources().loadImage(kZoneSY, name, false, "VISUAL"));
+	return cache[name].get();
+}
+
+static void openLoad(RingEngine *vm) {
+	s_saves.clear();
+	for (int slot : vm->saveSlots()) {
+		SaveEntry e;
+		e.slot = slot;
+		if (vm->readSave(slot, e.description, e.name, nullptr))
+			s_saves.insert_at(0, e); // aList::Add puts each at the top
+	}
+	s_first = 0;
+	s_selected = -1;
+	s_picture.reset();
+	vm->puzSetAct(kPuzLoad);
+}
+
+static void select(RingEngine *vm, int entry) {
+	s_selected = entry;
+	Image *picture = nullptr;
+	Common::String description, name;
+	vm->readSave(s_saves[entry].slot, description, name, &picture);
+	s_picture.reset(picture);
+}
+
+bool listTrack(RingEngine *vm, int x, int y) {
+	// 0x46bd80: a usable arrow or a row takes the cursor 57; a usable arrow shows its _gur picture.
+	s_hover = 0;
+	if (vm->currentPlace() != kPuzLoad)
+		return false;
+	if (canUp() && kUp.contains(x, y))
+		s_hover = 1;
+	else if (canDown() && kDown.contains(x, y))
+		s_hover = 2;
+	bool row = false;
+	for (int r = 0; r < kRows && s_first + r < (int)s_saves.size(); r++)
+		row = row || rowRect(r).contains(x, y);
+	if (!s_hover && !row)
+		return false;
+	vm->cursors().set(57);
+	return true;
+}
+
+bool listClick(RingEngine *vm, int x, int y) {
+	// 0x46bc50; the event it raises (0x40d1f0) no zone handles.
+	if (vm->currentPlace() != kPuzLoad)
+		return false;
+	if (canUp() && kUp.contains(x, y)) {
+		s_first--;
+		return true;
+	}
+	if (canDown() && kDown.contains(x, y)) {
+		s_first++;
+		return true;
+	}
+	for (int r = 0; r < kRows && s_first + r < (int)s_saves.size(); r++) {
+		if (rowRect(r).contains(x, y)) {
+			select(vm, s_first + r);
+			return true;
+		}
+	}
+	return false;
+}
+
+void draw(RingEngine *vm, Graphics::ManagedSurface &dst) {
+	int puzzle = vm->currentPlace();
+	if (puzzle == kPuzStatus) {
+		// 0x46ec60: GDI rectangles, filled RGB(255, 150, 0), outlined with the default (black) pen.
+		static const int ys[4] = { 343, 343 + 28 + 1, 343 + 56 + 1, 343 + 84 - 1 };
+		for (int k = 0; k < 4; k++) {
+			if (s_bars[k] <= 0)
+				continue;
+			Common::Rect r(295, ys[k], 295 + s_bars[k], ys[k] + 4);
+			dst.fillRect(r, dst.format.RGBToColor(255, 150, 0));
+			dst.frameRect(r, dst.format.RGBToColor(0, 0, 0));
+		}
+		return;
+	}
+	if (puzzle != kPuzLoad)
+		return;
+	// 0x46bf90: the arrows, the rows (icon and two lines), the selected entry's picture.
+	Image *up = visual(vm, !canUp() ? "up_gun.tga" : s_hover == 1 ? "up_gur.tga" : "up_gua.tga");
+	Image *down = visual(vm, !canDown() ? "down_gun.tga" : s_hover == 2 ? "down_gur.tga" : "down_gua.tga");
+	if (up)
+		up->draw(dst, 330, 349, 3);
+	if (down)
+		down->draw(dst, 330, 380, 3);
+	Graphics::WinFont *font = vm->font();
+	Image *selectedIcon = visual(vm, "load_gua.tga");
+	int iconHeight = selectedIcon ? selectedIcon->surface.h : 0;
+	for (int r = 0; r < kRows && s_first + r < (int)s_saves.size(); r++) {
+		int i = s_first + r;
+		bool selected = i == s_selected;
+		if (Image *icon = selected ? selectedIcon : visual(vm, "load_gun.tga"))
+			icon->draw(dst, 311, 137 + kRowStep / 2 + kRowStep * r - iconHeight / 2, 3);
+		if (!font)
+			continue;
+		uint32 colour = selected ? dst.format.RGBToColor(245, 235, 50) : dst.format.RGBToColor(255, 95, 0);
+		int h = font->getFontHeight();
+		int y = rowCentre(r) - h / 2;
+		font->drawString(&dst, s_saves[i].description, 335, y, dst.w - 335, colour);
+		font->drawString(&dst, s_saves[i].name, 335, y + h + 3, dst.w - 335, colour);
+	}
+	if (s_picture)
+		s_picture->draw(dst, 0, 0, 1);
+}
+
+// The save screen's name and caret (E-0262).
+static void setName(RingEngine *vm) {
+	World &w = vm->world();
+	if (PuzzleText *t = w.text(kObjSaveName, 0, 0)) {
+		t->text = s_name;
+		t->x = 344;
+		t->y = 181;
+	}
+	if (PuzzleImage *caret = w.image(kObjSaveName, 0, 0)) {
+		caret->x = (vm->font() ? vm->font()->getStringWidth(s_name) : 0) + 346;
+		caret->y = 181;
+	}
+}
+
+static void openSave(RingEngine *vm) {
+	s_name.clear();
+	setName(vm);
+	s_description = vm->describeSave();
+	if (PuzzleText *t = vm->world().text(kObjSaveName, 0, 1)) {
+		t->text = s_description;
+		t->x = 344;
+		t->y = 155;
+	}
+	// osc.bmp: the F12 screen, 260 x 480; without one nothing is drawn.
+	if (PuzzleImage *osc = vm->world().image(kObjSaveName, 0, 1)) {
+		osc->image.reset(vm->savePicture());
+		osc->active = osc->image != nullptr;
+	}
+	vm->puzSetAct(kPuzSave);
+}
+
+static void openStatus(RingEngine *vm) {
+	// 0x46ed40: the four characters' scores, SY floats 90005..90008, clamped to 0..100.
+	for (int k = 0; k < 4; k++) {
+		float v = CLIP(vm->world().varFloat(90005 + k), 0.0f, 100.0f);
+		if (PuzzleText *t = vm->world().text(kObjScores, 0, k))
+			t->text = Common::String::format("%3.1f", v);
+		s_bars[k] = (int)ceil(300 * v * 0.01);
+	}
+	vm->puzSetAct(kPuzStatus);
+}
+
+void onKey(RingEngine *vm, int code) {
+	// 0x433d30: Delete on the load screen, typing on the save screen.
+	int puzzle = vm->currentRotation() ? 0 : vm->currentPlace();
+	if (puzzle == kPuzLoad && code == 0x2e) {
+		askQuestion(vm, 4, "DoYouWantToDeleteSavedGame");
+		return;
+	}
+	if (puzzle != kPuzSave || code == 13)
+		return;
+	if (code == 8) {
+		if (!s_name.empty())
+			s_name.deleteLastChar();
+	} else if (code == 27) {
+		s_name.clear();
+	} else if (vm->font() && vm->font()->getStringWidth(s_name) >= 280) {
+		return;
+	} else {
+		s_name += (char)code;
+	}
+	setName(vm);
+}
+
 void onClick(RingEngine *vm, int object, int value) {
 	switch (object) {
 	case kObjNewGame:
@@ -196,14 +435,50 @@ void onClick(RingEngine *vm, int object, int value) {
 		vm->credits();
 		break;
 	case kObjLoad:
+		openLoad(vm);
+		break;
 	case kObjSave:
-		vm->puzSetAct(object);
+		openSave(vm);
 		break;
 	case kObjStatus:
-		vm->puzSetAct(90004);
+		openStatus(vm);
 		break;
 	case kObjContinue:
-		warning("Ring: continuing a game is not implemented yet");
+		// The game F12 left (`LoadSave("SaveGame", 1)`).
+		if (!vm->continueGame())
+			showWarning(vm, "CanNotCountineGame");
+		break;
+	case kObjLoadOK:
+		if (s_selected < 0) {
+			showWarning(vm, "SelectGame");
+			break;
+		}
+		// ponytail: a failed load keeps the load screen with the warning; the original returns to the F12 game first
+		if (vm->loadGameState(s_saves[s_selected].slot).getCode() != Common::kNoError) {
+			showWarning(vm, "CanNotLoadGame");
+			break;
+		}
+		s_saves.clear();
+		s_picture.reset();
+		break;
+	case kObjLoadCancel:
+		vm->puzSetAct(kObjNewGame);
+		s_saves.clear();
+		s_picture.reset();
+		break;
+	case kObjSaveOK:
+		// The F12 game in a new slot, then that game goes on.
+		if (vm->saveToFreeSlot(s_description, s_name))
+			vm->continueGame();
+		else
+			showWarning(vm, "CanNotSaveGame");
+		break;
+	case kObjSaveCancel:
+	case kObjStatusOK:
+		vm->puzSetAct(kObjNewGame);
+		break;
+	case kObjWarning:
+		closeWarning(vm);
 		break;
 	case kObjQuit:
 		vm->requestClose();
@@ -223,6 +498,20 @@ void onClick(RingEngine *vm, int object, int value) {
 		if (value == 2) { // 0x408bc0, 0x431040: the set-ups again, then 0x431140: a new game in zone AS
 			vm->resetWorld();
 			vm->goZone(kZoneAS, 999);
+		}
+		if (value == 4) { // delete the selected save
+			closeQuestion(vm, 4);
+			if (s_selected < 0) {
+				showWarning(vm, "SelectGame");
+				break;
+			}
+			vm->deleteSave(s_saves[s_selected].slot);
+			s_saves.remove_at(s_selected);
+			s_selected = -1;
+			s_picture.reset();
+			s_first = MAX(0, MIN(s_first, (int)s_saves.size() - kRows));
+		} else if (value == 5) {
+			closeQuestion(vm, 4);
 		}
 		break;
 	default:
