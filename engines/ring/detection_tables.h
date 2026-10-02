@@ -38,6 +38,24 @@ const PlainGameDescriptor ringGames[] = {
 		lang, Common::kPlatformWindows, ADGF_UNSTABLE | ADGF_DVD, GUIO1(GUIO_NOMIDI) \
 	}
 
+#define RING_CD(lang, sy, symd5, sysize) \
+	{ \
+		"ring", "CD", \
+		AD_ENTRY3s("RING.EXE", "daa9454d0a6383d8c69172a3873713a5", 712192, \
+				   "DATA/AS.AT2", "5f65ee721fdf50bc074dd25bb28592fb", 1533273, \
+				   sy, symd5, sysize), \
+		lang, Common::kPlatformWindows, ADGF_UNSTABLE | ADGF_CD, GUIO1(GUIO_NOMIDI) \
+	}
+
+#define RING_ISO(lang, sy, symd5, sysize) \
+	{ \
+		"ring", "ISO", \
+		AD_ENTRY3s("RING.EXE", "88a6962191f6c5aa35c93d49115a59ce", 663552, \
+				   "DATA/AS.AT2", "5f65ee721fdf50bc074dd25bb28592fb", 1533273, \
+				   sy, symd5, sysize), \
+		lang, Common::kPlatformWindows, ADGF_UNSTABLE | ADGF_CD, GUIO1(GUIO_NOMIDI) \
+	}
+
 const ADGameDescription gameDescriptions[] = {
 	RING_DVD(Common::EN_ANY, "DATA/ENG/SY.AT2", "26dad59f1c5f374172042848d6ac0c95", 12211188),
 	RING_DVD(Common::FR_FRA, "DATA/FRA/SY.AT2", "50c8c8eb1fb5020b433eefe830f89fcf", 12247853),
@@ -47,9 +65,20 @@ const ADGameDescription gameDescriptions[] = {
 	RING_DVD(Common::ES_ESP, "DATA/SPA/SY.AT2", "8f7585ec1969d8e6ac9c6a9a5f2ef9cd", 12248009),
 	RING_DVD(Common::SV_SWE, "DATA/SWE/SY.AT2", "499b2b38d7a64e7241ec54d607944c87", 12250280),
 
+	// The CD version (6 discs) and the ISO version (4 discs): every disc copied into one folder
+	// (spec/editions.md, "Discs and folders"); English, French and German only.
+	RING_CD(Common::EN_ANY, "DATA/ENG/SY.AT2", "26dad59f1c5f374172042848d6ac0c95", 12211188),
+	RING_CD(Common::FR_FRA, "DATA/FRA/SY.AT2", "50c8c8eb1fb5020b433eefe830f89fcf", 12247853),
+	RING_CD(Common::DE_DEU, "DATA/GER/SY.AT2", "9e458bb847b75ec2eba4c4bb270a988e", 12248323),
+	RING_ISO(Common::EN_ANY, "DATA/ENG/SY.AT2", "611266f1e782c344c180d39dcda170e4", 13146193),
+	RING_ISO(Common::FR_FRA, "DATA/FRA/SY.AT2", "73f21eaa50a4f6ffa8bf65f78e66b850", 13189839),
+	RING_ISO(Common::DE_DEU, "DATA/GER/SY.AT2", "73f21eaa50a4f6ffa8bf65f78e66b850", 13191355),
+
 	AD_TABLE_END_MARKER
 };
 
 #undef RING_DVD
+#undef RING_CD
+#undef RING_ISO
 
 } // End of namespace Ring

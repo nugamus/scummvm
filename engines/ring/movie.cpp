@@ -37,8 +37,8 @@ namespace Ring {
 
 bool playMovie(RingEngine *vm, const Common::Path &path, int soundChannel, float rate) {
 	Common::File f;
-	if (!f.open(path)) {
-		warning("Ring: cannot open video %s", path.toString().c_str());
+	if (!f.open(vm->mediaPath(path))) {
+		warning("Ring: cannot open video %s", vm->mediaPath(path).toString().c_str());
 		return false;
 	}
 	byte hdr[0x40];

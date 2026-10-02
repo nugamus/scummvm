@@ -497,7 +497,7 @@ void onClick(RingEngine *vm, int object, int value) {
 			closeQuestion(vm, value >= 2 ? 2 : 0);
 		if (value == 2) { // 0x408bc0, 0x431040: the set-ups again, then 0x431140: a new game in zone AS
 			vm->resetWorld();
-			vm->goZone(kZoneAS, 999);
+			vm->goZone(kZoneAS, vm->edition() == kEditionISO ? 998 : 999); // the ISO's plays the intro
 		}
 		if (value == 4) { // delete the selected save
 			closeQuestion(vm, 4);
