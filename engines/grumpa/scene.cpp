@@ -27,6 +27,7 @@
 #include "graphics/surface.h"
 #include "graphics/cursorman.h"
 #include "image/jpeg.h"
+#include "image/tga.h"
 
 #include "grumpa/grumpa.h"
 
@@ -576,10 +577,22 @@ bool GrumpaEngine::enterScene(int num) {
 	_depthW = _depthH = 0;
 	loadDepth(bg, _sceneDepth, _depthW, _depthH);
 	for (uint i = 0; i < _sceneData.meshes.size(); i++) {
-		Common::String base = _sceneData.meshes[i].anb;
+		SceneMesh &m = _sceneData.meshes[i];
+		Common::String base = m.anb;
 		if (base.size() > 4 && base[base.size() - 4] == '.')  // strip ".anb"/".ANB"
 			base = Common::String(base.c_str(), base.size() - 4);
-		loadMesh(base, _sceneData.meshes[i].mesh);
+		loadMesh(base, m.mesh);
+		// The actor's texture (E-0114), converted to the screen format for direct sampling.
+		Common::File tf;
+		if (!m.tga.empty() && tf.open(Common::Path("Bitmaps/" + m.tga))) {
+			Image::TGADecoder tga;
+			if (tga.loadStream(tf)) {
+				Graphics::Surface *conv = tga.getSurface()->convertTo(_screen.format);
+				m.texture.copyFrom(*conv);
+				conv->free();
+				delete conv;
+			}
+		}
 	}
 	_sceneTick0 = g_system->getMillis();
 	debug(1, "Grumpa: entered scene %d (%u sprites, %u meshes)", num,

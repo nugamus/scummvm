@@ -57,8 +57,9 @@ static inline uint16 depth16(float vz, float farZ) {
 }
 
 void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera &cam,
-				const Common::Array<uint16> *depth, int dw, int dh) {
+				const Common::Array<uint16> *depth, int dw, int dh, const Graphics::Surface *tex) {
 	const int W = screen.w, H = screen.h;
+	const bool textured = tex && tex->getPixels() && tex->w > 0 && tex->h > 0;
 	const bool useScene = depth && !depth->empty() && dw == W && dh == H;
 	Common::Array<float> zbuf;
 	if (!useScene) {
@@ -100,6 +101,15 @@ void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera
 			byte r = (byte)(200 * lit), g = (byte)(150 * lit), bl = (byte)(110 * lit);
 			uint32 col = screen.format.RGBToColor(r, g, bl);
 
+			// Perspective-correct texture coordinates (u/z, v/z, 1/z interpolated).
+			float au = 0, av = 0, bu = 0, bv = 0, cu = 0, cv = 0;
+			if (textured) {
+				au = sec.u[face.uv[0]]; av = sec.v[face.uv[0]];
+				bu = sec.u[face.uv[1]]; bv = sec.v[face.uv[1]];
+				cu = sec.u[face.uv[2]]; cv = sec.v[face.uv[2]];
+			}
+			float aiz = 1.0f / a.z, biz = 1.0f / b.z, ciz = 1.0f / c.z;
+
 			int minx = (int)floorf(MIN(a.sx, MIN(b.sx, c.sx)));
 			int maxx = (int)ceilf(MAX(a.sx, MAX(b.sx, c.sx)));
 			int miny = (int)floorf(MIN(a.sy, MIN(b.sy, c.sy)));
@@ -118,18 +128,29 @@ void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera
 					if (w0 < 0 || w1 < 0 || w2 < 0)
 						continue;
 					float z = w0 * a.z + w1 * b.z + w2 * c.z;
-					if (useScene) {
-						// Occlude against the pre-rendered scene depth.
-						if (depth16(z, cam.farZ) >= (*depth)[y * W + x])
-							continue;
-						screen.setPixel(x, y, col);
-					} else {
-						float &zb = zbuf[y * W + x];
-						if (z < zb) {
-							zb = z;
-							screen.setPixel(x, y, col);
-						}
+					bool pass;
+					if (useScene)
+						pass = depth16(z, cam.farZ) < (*depth)[y * W + x];
+					else
+						pass = z < zbuf[y * W + x];
+					if (!pass)
+						continue;
+					uint32 pix = col;
+					if (textured) {
+						// Perspective-correct UV, then sample and modulate by the lighting.
+						float iz = w0 * aiz + w1 * biz + w2 * ciz;
+						float u = (w0 * au * aiz + w1 * bu * biz + w2 * cu * ciz) / iz;
+						float v = (w0 * av * aiz + w1 * bv * biz + w2 * cv * ciz) / iz;
+						int tu = (int)(u * tex->w) % tex->w, tv = (int)(v * tex->h) % tex->h;
+						if (tu < 0) tu += tex->w;
+						if (tv < 0) tv += tex->h;
+						byte tr, tg, tb;
+						screen.format.colorToRGB(tex->getPixel(tu, tv), tr, tg, tb);
+						pix = screen.format.RGBToColor((byte)(tr * lit), (byte)(tg * lit), (byte)(tb * lit));
 					}
+					if (!useScene)
+						zbuf[y * W + x] = z;
+					screen.setPixel(x, y, pix);
 				}
 			}
 		}

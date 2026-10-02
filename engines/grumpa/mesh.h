@@ -113,7 +113,8 @@ struct SceneMesh {
 	uint32 id = 0;
 	bool active = false;
 	bool visible = false;
-	Mesh mesh;   // loaded once on scene entry
+	Mesh mesh;                   // loaded once on scene entry
+	Graphics::Surface texture;   // .tga, converted to the screen format on scene entry
 };
 
 // Everything the engine reads from a Scene_<NNN>.abi today.
@@ -127,11 +128,13 @@ struct SceneData {
 /** Build the view camera from its 26-float .abi block (E-0105). */
 Camera cameraFromBlock(const float cam[26]);
 
-/** Rasterise `mesh` (flat-shaded) into `screen` through `cam`, z-testing against `depth`
- *  (16-bit, the scene's .fxi, `dw`x`dh`) when `depth` is non-empty. Its own z-buffer
- *  otherwise. */
+/** Rasterise `mesh` into `screen` through `cam`, z-testing against `depth` (16-bit, the
+ *  scene's .fxi, `dw`x`dh`) when `depth` is non-empty (its own z-buffer otherwise). When
+ *  `tex` is non-null (in `screen`'s format) the mesh is textured (perspective-correct UVs);
+ *  otherwise it is flat-shaded. */
 void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera &cam,
-				const Common::Array<uint16> *depth, int dw = 0, int dh = 0);
+				const Common::Array<uint16> *depth, int dw = 0, int dh = 0,
+				const Graphics::Surface *tex = nullptr);
 
 } // End of namespace Grumpa
 
