@@ -22,6 +22,10 @@
 #ifndef RING_RING_ZONES_H
 #define RING_RING_ZONES_H
 
+namespace Graphics {
+class ManagedSurface;
+}
+
 namespace Ring {
 
 class RingEngine;
@@ -38,6 +42,13 @@ void onClick(RingEngine *vm, int object, int value);
 void onDrag(RingEngine *vm, int object, int phase);
 /** The sound event (0x433cf0). */
 void onSound(RingEngine *vm, int id, int type, int reason, int ended);
+/** SY's key handler (0x433d30): Delete on the load screen, the save screen's name. */
+void onKey(RingEngine *vm, int code);
+/** The load screen's list (0x46bd80 / 0x46bc50): true when the mouse is on it. */
+bool listTrack(RingEngine *vm, int x, int y);
+bool listClick(RingEngine *vm, int x, int y);
+/** The load screen's list and the game status bars, drawn with their puzzle. */
+void draw(RingEngine *vm, Graphics::ManagedSurface &dst);
 }
 
 namespace NI {

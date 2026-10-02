@@ -23,6 +23,9 @@
 
 #include "engines/advancedDetector.h"
 
+#include "graphics/scaler.h"
+#include "graphics/thumbnail.h"
+
 #include "ring/detection.h"
 #include "ring/ring.h"
 
@@ -35,6 +38,18 @@ public:
 	Common::Error createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override {
 		*engine = new Ring::RingEngine(syst, desc);
 		return Common::kNoError;
+	}
+
+	void getSavegameThumbnail(Graphics::Surface &thumb) override {
+		// The screen F12 left (the save screen covers the game).
+		if (Ring::g_engine && !Ring::g_engine->snapScreen().empty()) {
+			Graphics::Surface *small = Ring::g_engine->snapScreen().rawSurface().scale(kThumbnailWidth, kThumbnailHeight2, true);
+			thumb.copyFrom(*small);
+			small->free();
+			delete small;
+		} else {
+			MetaEngine::getSavegameThumbnail(thumb);
+		}
 	}
 };
 
