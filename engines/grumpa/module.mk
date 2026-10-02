@@ -6,7 +6,9 @@ MODULE_OBJS = \
 	scene.o \
 	render3d.o \
 	menu.o \
-	movie.o
+	movie.o \
+	character.o \
+	dialogue.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_GRUMPA), DYNAMIC_PLUGIN)
