@@ -19,6 +19,9 @@
  *
  */
 
+#include "backends/keymapper/keymap.h"
+#include "backends/keymapper/keymapper.h"
+
 #include "common/config-manager.h"
 #include "common/events.h"
 #include "common/file.h"
@@ -178,6 +181,7 @@ bool RingEngine::hasFeature(EngineFeature f) const {
 
 void RingEngine::present() {
 	g_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, _screen.w, _screen.h);
+	drawHotspots();
 	g_system->updateScreen();
 }
 
@@ -191,6 +195,8 @@ void RingEngine::pollEvents(uint32 ms) {
 				_keys.push_back(27);
 			} else if (event.customType == kActionMenu) {
 				_keys.push_back(kKeyF12);
+			} else if (event.customType == kActionHotspots) {
+				toggleHotspots();
 			}
 		} else if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_END && event.customType == kActionSkip) {
 			_escapeDown = false;
@@ -452,6 +458,8 @@ Common::Error RingEngine::run() {
 			} else if ((!strcmp(what, "varb") || !strcmp(what, "varw") || !strcmp(what, "vard")) && n >= 3) {
 				World::VarType t = what[3] == 'b' ? World::kVarByte : what[3] == 'w' ? World::kVarWord : World::kVarDword;
 				debug("Ring: %s %u = %d", what, x, _world->var(t, x));
+			} else if (!strcmp(what, "hot")) {
+				toggleHotspots();
 			} else if (!strcmp(what, "where")) {
 				Common::String bag;
 				for (int id : _bag->contents())
@@ -1040,6 +1048,10 @@ void RingEngine::frame() {
 	if (_buttonDown)
 		dragMove(_mouse.x, _mouse.y);
 	track(_mouse.x, _mouse.y);
+	drawHotspotRegions();
+	// H types a letter on the save screen, so the overlay's key is off there.
+	if (Common::Keymap *keymap = g_system->getEventManager()->getKeymapper()->getKeymap("ring-play"))
+		keymap->setEnabled(!(_mode == 2 && _puzzle == 90003));
 	_sounds->dialogueFrame(_screen, _font.get(), _preferences[3] != 0);
 	_cursors->draw(*_resources, _screen, _mouse.x, _mouse.y, g_system->getMillis());
 	present();
