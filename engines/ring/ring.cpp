@@ -871,6 +871,7 @@ void RingEngine::resetWorld() {
 	_puzzle = _rotation = 0;
 	_cursors->remove(1);
 	_cursors->remove(2);
+	_worldStates.clear(); // the worlds left through Erda belong to the old game
 }
 
 void RingEngine::setZone(int zone) {
