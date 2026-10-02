@@ -33,6 +33,7 @@
 #include "engines/advancedDetector.h"
 #include "engines/engine.h"
 
+#include "graphics/hotspot_renderer.h"
 #include "graphics/managed_surface.h"
 
 #include "ring/rotation.h"
@@ -50,7 +51,8 @@ namespace Ring {
 /** The keymapper's engine actions (metaengine.cpp). */
 enum Action {
 	kActionSkip = 1, ///< Escape
-	kActionMenu      ///< F12
+	kActionMenu,     ///< F12
+	kActionHotspots  ///< H: the hotspot overlay
 };
 
 class Bag;
@@ -114,6 +116,11 @@ public:
 	void deleteSave(int slot);
 	const Graphics::ManagedSurface &snapScreen() const { return _snapScreen; }
 	Graphics::WinFont *font() const { return _font.get(); }
+
+	/** The hotspot overlay (hotspots.cpp), a development view. */
+	void getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) override;
+	void drawHotspots() override;
+	void toggleHotspots();
 
 	Graphics::ManagedSurface &screen() { return _screen; }
 	Resources &resources() { return *_resources; }
@@ -271,6 +278,11 @@ private:
 	void runTimers();
 	/** A key (0x40b060): clicks the hot spot that has it (spec/events.md, "Keys"). */
 	void key(int code);
+	/** The hot spot under a window position, as the tracking finds it (0 for none). */
+	int hotSpotAt(int x, int y);
+	Graphics::HotspotInfo hotSpotInfo(int id, const Common::Point &at);
+	/** The overlay's regions tinted and outlined on the frame, and its markers collected. */
+	void drawHotspotRegions();
 
 	const ADGameDescription *_gameDescription;
 	Graphics::ManagedSurface _screen;
@@ -314,6 +326,7 @@ private:
 	bool _takeAllowed = true; ///< app+0x74
 	bool _listAllowed = true; ///< app+0x78
 	Common::Array<byte> _pendingLoad;
+	Common::Array<Graphics::HotspotInfo> _hotspotList, _shownHotspots;
 	Common::Array<byte> _snapGame;        ///< the game as F12 (or a save in play) left it
 	Graphics::ManagedSurface _snapScreen; ///< the screen then (0x49556c)
 	Common::String _saveDescription, _saveName; ///< Windows-1252, as typed

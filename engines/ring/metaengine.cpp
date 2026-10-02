@@ -25,10 +25,12 @@
 #include "backends/keymapper/keymap.h"
 #include "backends/keymapper/standard-actions.h"
 
+#include "common/config-manager.h"
 #include "common/translation.h"
 
 #include "engines/advancedDetector.h"
 
+#include "graphics/hotspot_renderer.h"
 #include "graphics/scaler.h"
 #include "graphics/thumbnail.h"
 
@@ -39,6 +41,15 @@ class RingMetaEngine : public AdvancedMetaEngine<ADGameDescription> {
 public:
 	const char *getName() const override {
 		return "ring";
+	}
+
+	void registerDefaultSettings(const Common::String &target) const override {
+		AdvancedMetaEngine<ADGameDescription>::registerDefaultSettings(target);
+		// ScummVM's hotspot overlay marks objects with squares in this game unless the player
+		// chose another marker (the game's options, or the global ones).
+		if (!target.empty() && ConfMan.hasGameDomain(target) && !ConfMan.hasKey("hotspot_marker", target) &&
+		    !ConfMan.hasKey("hotspot_marker", Common::ConfigManager::kApplicationDomain))
+			ConfMan.setInt("hotspot_marker", Graphics::kMarkerSquare, target);
 	}
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override {
@@ -69,7 +80,16 @@ public:
 		act->addDefaultInputMapping("F12");
 		act->addDefaultInputMapping("JOY_X");
 		keymap->addAction(act);
-		return Keymap::arrayOf(keymap);
+		// Off on the save screen, where the keys type the name.
+		Keymap *play = new Keymap(Keymap::kKeymapTypeGame, "ring-play", _("Game screen keymappings"));
+		act = new Action(kStandardActionToggleHotspots, _("Show hotspots"));
+		act->setCustomEngineActionEvent(Ring::kActionHotspots);
+		act->addDefaultInputMapping("h");
+		play->addAction(act);
+		KeymapArray keymaps;
+		keymaps.push_back(keymap);
+		keymaps.push_back(play);
+		return keymaps;
 	}
 
 	void getSavegameThumbnail(Graphics::Surface &thumb) override {

@@ -4,6 +4,7 @@ MODULE_OBJS = \
 	bag.o \
 	codec.o \
 	cursor.o \
+	hotspots.o \
 	metaengine.o \
 	movie.o \
 	resources.o \
