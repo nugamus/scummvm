@@ -170,7 +170,7 @@ RingEngine::~RingEngine() {
 }
 
 bool RingEngine::hasFeature(EngineFeature f) const {
-	return f == kSupportsReturnToLauncher;
+	return f == kSupportsReturnToLauncher || f == kSupportsLoadingDuringRuntime || f == kSupportsSavingDuringRuntime;
 }
 
 void RingEngine::present() {
@@ -338,6 +338,9 @@ Common::Error RingEngine::run() {
 
 	startMenu(false);
 	_buttons.clear();
+	// A game chosen in the launcher.
+	if (ConfMan.hasKey("save_slot"))
+		loadGameState(ConfMan.getInt("save_slot"));
 	// Development: dev_bag=<id>,<id>... puts objects in the bag.
 	for (const Common::String &id : Common::StringTokenizer(ConfMan.get("dev_bag"), ",").split())
 		_bag->add(atoi(id.c_str()));
@@ -416,6 +419,10 @@ Common::Error RingEngine::run() {
 				} else {
 					warning("Ring: dev mov %u: no such enabled movability in %d", x, here);
 				}
+			} else if (!strcmp(what, "save") && n >= 3) {
+				saveGameState(x, "dev"); // "save <slot>", "load <slot>"
+			} else if (!strcmp(what, "load") && n >= 3) {
+				loadGameState(x);
 			} else if (!strcmp(what, "zone") && n == 4) {
 				goZone(x, y); // "zone <zone> <entry>": GoZone
 			} else if (!strcmp(what, "hold") && n >= 3) {
@@ -477,6 +484,8 @@ Common::Error RingEngine::run() {
 			else
 				click(b.pos.x, b.pos.y);
 		}
+		if (!_pendingLoad.empty())
+			applyLoad();
 		runTimers();
 		if (_gameOver) {
 			// Mode 4 (spec/boot.md "Frame"): the set-ups again, then 0x431190(2, n): SetZone(1),

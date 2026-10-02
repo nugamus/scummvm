@@ -24,12 +24,17 @@
 
 #include "audio/mixer.h"
 #include "common/array.h"
+#include "common/util.h"
 #include "common/ptr.h"
 #include "common/str.h"
 
 namespace Graphics {
 class Font;
 class ManagedSurface;
+}
+
+namespace Common {
+class Serializer;
 }
 
 namespace Ring {
@@ -91,6 +96,8 @@ public:
 	/** `SouSet_406e20`: the sound's own volume. */
 	void setVolume(int id, int volume);
 	void setPan(int id, int pan);
+	/** Saved games: every sound's volumes and pan; the playing ones (id, loop) to play again. */
+	void syncState(Common::Serializer &s, Common::Array<Common::Pair<int, bool> > &playing);
 	/** 0x406e60: the type volume of every sound of `type`. */
 	void setTypeVolume(int type, int volume);
 	/** The preferences' volumes: `volume` for every type but 5, `dialogue` for 5. */
@@ -142,6 +149,7 @@ private:
 		Common::String file;
 		int own = 100, typeVolume = 100, pan = 0;
 		bool started = false;
+		bool loop = false;
 		Audio::SoundHandle handle;
 	};
 	struct Line {

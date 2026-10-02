@@ -193,6 +193,7 @@ void Sounds::play(int id, bool loop) {
 	}
 	startStream(*s, loop);
 	s->started = true;
+	s->loop = loop;
 	if (s->type == kSoundDialogue)
 		_dialogues.back().clock = g_system->getMillis();
 }

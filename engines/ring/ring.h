@@ -37,6 +37,10 @@
 
 #include "ring/rotation.h"
 
+namespace Common {
+class Serializer;
+}
+
 namespace Graphics {
 class WinFont;
 }
@@ -79,6 +83,10 @@ public:
 
 	Common::Error run() override;
 	bool hasFeature(EngineFeature f) const override;
+	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
+	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
+	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave = false) override;
+	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
 
 	Graphics::ManagedSurface &screen() { return _screen; }
 	Resources &resources() { return *_resources; }
@@ -222,6 +230,10 @@ private:
 	void turn(Rotation &r, float alpha, float beta, float ran);
 	/** Draws the current rotation (or puzzle) and puzzle 1, without the cursor. */
 	void drawView();
+	/** Saved games (save.cpp, spec/save.md). */
+	void syncGame(Common::Serializer &s);
+	/** A loaded game applied in the main loop: the set-ups again, the records, entry 1000. */
+	void applyLoad();
 	/** Raises a hold-on-frame event an animation left (0x40c910). */
 	void holdEvent(Animation &anim);
 	/** The puzzle's animations advance (their events) before it is drawn (spec/animation.md). */
@@ -274,6 +286,8 @@ private:
 	int _gameOver = 0; ///< app+0x70 while mode 4 is pending
 	bool _takeAllowed = true; ///< app+0x74
 	bool _listAllowed = true; ///< app+0x78
+	Common::Array<byte> _pendingLoad;
+	Common::Array<Common::Pair<int, bool> > _playingOnLoad;
 	struct WorldState {
 		Common::Array<int> bag;
 		Common::Array<Timer> timers;
