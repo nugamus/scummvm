@@ -47,6 +47,12 @@ class WinFont;
 
 namespace Ring {
 
+/** The keymapper's engine actions (metaengine.cpp). */
+enum Action {
+	kActionSkip = 1, ///< Escape
+	kActionMenu      ///< F12
+};
+
 class Bag;
 struct Image;
 class Cursors;
