@@ -85,6 +85,7 @@ struct Animation {
 	int pauseFrame = 0, pauseState = 0;          ///< +0x42, +0x4a: 0 none, 1 armed, 2 holding
 	uint32 pauseMs = 0, holdStart = 0;           ///< +0x46, the hold's start
 	bool stepped = false;                        ///< +0x60: a step since arming
+	int holdEvent = 0;                           ///< 0x40c910 to raise: 1 the hold starts, 2 it ends
 
 	/** `aAnimation::PauseExactOnFrame` 0x416af0 (spec/animation.md, "Pausing on a frame"). */
 	void pauseExactOnFrame(int frame, uint32 ms, int direction);
@@ -121,6 +122,7 @@ struct PuzzleImage {
 	int zone = 0;
 	Common::String file;
 	int x = 0, y = 0;
+	int originX = 0, originY = 0; ///< as declared (`ObjPreSetImgOriCooOnPuz`)
 	bool active = true;
 	byte drawType = 1;
 	int priority = 0;
@@ -263,6 +265,9 @@ public:
 	PuzzleText *text(int object, int presentation, int index);
 	/** `ObjPreSetImgCooOnPuz`: the `index`-th picture of the presentation, on any puzzle. */
 	PuzzleImage *image(int object, int presentation, int index);
+	/** `ObjPreSetImgCooOnPuz` (0x4037c0): every picture of the presentation to (x, y); `ObjPreSetImgOriCooOnPuz` (0x403810) back. */
+	void movePictures(int object, int presentation, int x, int y);
+	void restorePictures(int object, int presentation);
 	/** `ObjPreHidDeaPuz`: hides the presentation (all when negative) and frees its pictures. */
 	void hideAndFree(int object, int presentation = -1);
 	/** `PuzSetMovOnOrOff` / `RotSetMovOnOrOff`: movabilities `from`..`to` (all when negative) of a puzzle or rotation. */
