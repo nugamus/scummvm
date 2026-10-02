@@ -117,6 +117,10 @@ public:
 	void setSoundItemVolume(int owner, int sound, int volume);
 	/** 0x408db0: game over `n` (mode 4); the next frame shows End.bmp and opens the menu (games/ring/docs/ni.md). */
 	void gameOver(int n);
+	/** 0x431350: the credits, `cre_01.bma` .. `cre_11.bma` scrolled (games/ring/docs/sy.md). */
+	void credits();
+	/** `ScrollImage` 0x401260: 1 after a full scroll and `holdMs`, 2 when Escape ended it. */
+	int scrollImage(const Common::String &name, uint32 holdMs);
 	/** `SetCursorPos`. */
 	void setMouse(int x, int y);
 	/** Clears app+0x74 from a click handler: the clicked object (flag 8) does not go in hand (spec/bag.md "Taking"). */

@@ -813,6 +813,45 @@ float RingEngine::rotGetAlp(int rotation) {
 	return a > 360.0f ? a - 360.0f : a;
 }
 
+void RingEngine::credits() {
+	_sounds->stopAll(0x400);
+	setZone(kZoneWA); // 51002 is WA's sound
+	_sounds->play(51002, true);
+	setZone(kZoneSY);
+	for (int i = 1; i <= 11; i++)
+		if (scrollImage(Common::String::format("cre_%02d.bma", i), i == 11 ? 5000 : 0) == 2)
+			break;
+	_sounds->stop(51002, 0x400);
+}
+
+int RingEngine::scrollImage(const Common::String &name, uint32 holdMs) {
+	while (_escapeDown && !shouldQuit())
+		pollEvents(10);
+	Common::ScopedPtr<Image> img(_resources->loadImage(kZoneSY, name, false));
+	if (!img)
+		return 0;
+	// One row per frame (Q-0080: 1/60 s); the window's top is row i.
+	int h = img->surface.h, i = 0;
+	bool escaped = false;
+	uint32 next = g_system->getMillis();
+	for (; i < h - 448 && !shouldQuit(); i++) {
+		if (_escapeDown) {
+			while (_escapeDown && !shouldQuit())
+				pollEvents(10);
+			escaped = true;
+			break;
+		}
+		_screen.blitFrom(img->surface, Common::Rect(0, i, MIN<int>(640, img->surface.w), i + 448), Common::Point(0, 16));
+		present();
+		next += 17;
+		while ((int32)(next - g_system->getMillis()) > 0 && !shouldQuit())
+			pollEvents(2);
+	}
+	if (i == h - 448)
+		wait(holdMs);
+	return escaped ? 2 : 1;
+}
+
 void RingEngine::setMouse(int x, int y) {
 	_mouse = Common::Point(x, y);
 	g_system->warpMouse(x, y);
