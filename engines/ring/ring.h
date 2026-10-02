@@ -50,6 +50,7 @@ class Sounds;
 class World;
 struct HotSpot;
 struct Movability;
+struct Animation;
 struct Puzzle;
 struct Rotation;
 
@@ -217,6 +218,8 @@ private:
 	void turn(Rotation &r, float alpha, float beta, float ran);
 	/** Draws the current rotation (or puzzle) and puzzle 1, without the cursor. */
 	void drawView();
+	/** Raises a hold-on-frame event an animation left (0x40c910). */
+	void holdEvent(Animation &anim);
 	/** The puzzle's animations advance (their events) before it is drawn (spec/animation.md). */
 	void advanceAnimations(Puzzle &p);
 	/** 0x410610's layer part: animations advance (their events), layers follow, patches apply. */

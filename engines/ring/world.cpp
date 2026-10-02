@@ -274,8 +274,8 @@ void World::apply(int zone, const SetupCall &c) {
 		img->presentation = a[1];
 		img->zone = zone;
 		img->file = str(3);
-		img->x = a[4];
-		img->y = a[5];
+		img->x = img->originX = a[4];
+		img->y = img->originY = a[5];
 		img->active = a[6] != 0;
 		img->drawType = (byte)a[7];
 		img->priority = a[8];
@@ -299,8 +299,8 @@ void World::apply(int zone, const SetupCall &c) {
 		img->zone = zone;
 		img->file = str(3);
 		img->ext = (uint)a[4] < ARRAYSIZE(exts) ? exts[a[4]] : "";
-		img->x = a[5];
-		img->y = a[6];
+		img->x = img->originX = a[5];
+		img->y = img->originY = a[6];
 		img->drawType = (byte)a[7];
 		img->priority = a[8];
 		img->animation.reset(new Animation());
@@ -376,6 +376,15 @@ void World::apply(int zone, const SetupCall &c) {
 		break;
 	case kObjPrePauAni:
 		pauseAnimations(a[0], a[1], true);
+		break;
+	case kObjPreAniSetStaFra:
+		// `SetStartFrame` 0x416bd0 on the presentation's animations (spec/animation.md).
+		if (Object *o = object(a[0]))
+			if ((uint)a[1] < o->presentations.size())
+				for (auto *list : { &o->presentations[a[1]].puzzleAnimations, &o->presentations[a[1]].animations })
+					for (auto &anim : *list)
+						if (a[2] >= 1 && a[2] <= anim->frames)
+							anim->start = a[2] - 1;
 		break;
 	case kVarDefByte:
 	case kVarDefWord:
@@ -644,12 +653,14 @@ bool Animation::advance(uint32 time) {
 		if (pauseState == 2) {
 			if (time - holdStart <= pauseMs)
 				return false;
-			mode = baseMode; // 0x416c90 (its event 0x40c910 has only RO's handler)
+			mode = baseMode; // 0x416c90, with the event 0x40c910(2, id)
 			pauseState = 0;
 			stepped = false;
+			holdEvent = 2;
 		} else if (pauseState == 1 && frame == pauseFrame && stepped) {
 			pauseState = 2;
 			holdStart = time;
+			holdEvent = 1; // 0x40c910(1, id)
 			return false;
 		}
 		int step = 0;
@@ -703,6 +714,28 @@ void World::hideAndFree(int id, int presentation) {
 			img->image.reset();
 			for (auto &f : img->frames)
 				f.reset();
+		}
+	}
+}
+
+void World::movePictures(int id, int presentation, int x, int y) {
+	for (auto &p : _puzzles) {
+		for (auto &img : p->images) {
+			if (img->object == id && img->presentation == presentation) {
+				img->x = x;
+				img->y = y;
+			}
+		}
+	}
+}
+
+void World::restorePictures(int id, int presentation) {
+	for (auto &p : _puzzles) {
+		for (auto &img : p->images) {
+			if (img->object == id && img->presentation == presentation) {
+				img->x = img->originX;
+				img->y = img->originY;
+			}
 		}
 	}
 }

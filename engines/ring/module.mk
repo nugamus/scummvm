@@ -18,7 +18,8 @@ MODULE_OBJS = \
 	ring/rh.o \
 	ring/ro.o \
 	ring/setup.o \
-	ring/sy.o
+	ring/sy.o \
+	ring/wa.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_RING), DYNAMIC_PLUGIN)

@@ -73,6 +73,8 @@ static void onClick(RingEngine *vm, int zone, int object, int value, int place) 
 		FO::onClick(vm, object, value);
 	else if (zone == kZoneRO)
 		RO::onClick(vm, object, value);
+	else if (zone == kZoneWA)
+		WA::onClick(vm, object, value);
 }
 
 static void onBagClick(RingEngine *vm, int zone, int object) {
@@ -117,6 +119,8 @@ static void onAnimation(RingEngine *vm, int zone, int id, int frame) {
 		FO::onAnimation(vm, id, frame);
 	else if (zone == kZoneRO)
 		RO::onAnimation(vm, id, frame);
+	else if (zone == kZoneWA)
+		WA::onAnimation(vm, id, frame);
 }
 
 static void onBeforeMove(RingEngine *vm, int zone, int from, int to, int index, int value, int kind) {
@@ -132,6 +136,8 @@ static void onBeforeMove(RingEngine *vm, int zone, int from, int to, int index, 
 		FO::onBeforeMove(vm, from, to, kind);
 	else if (zone == kZoneRO)
 		RO::onBeforeMove(vm, from, to, kind);
+	else if (zone == kZoneWA)
+		WA::onBeforeMove(vm, from, to, kind);
 }
 
 static void onAfterMove(RingEngine *vm, int zone, int to, int from, int index, int value, int kind) {
@@ -147,6 +153,8 @@ static void onAfterMove(RingEngine *vm, int zone, int to, int from, int index, i
 		FO::onAfterMove(vm, to, from, kind);
 	else if (zone == kZoneRO)
 		RO::onAfterMove(vm, to, from, kind);
+	else if (zone == kZoneWA)
+		WA::onAfterMove(vm, to, from, kind);
 }
 
 RingEngine *g_engine = nullptr;
@@ -648,6 +656,8 @@ void RingEngine::goZone(int zone, int entry) {
 		FO::enter(this, entry);
 	else if (zone == kZoneRO)
 		RO::enter(this, entry);
+	else if (zone == kZoneWA)
+		WA::enter(this, entry);
 	else
 		warning("Ring: zone %d is not implemented yet", zone);
 }
@@ -907,8 +917,10 @@ void RingEngine::clickObject(int zone, int object, int value, int place) {
 	if (_zone != before)
 		return; // a zone change is pending (mode 4)
 	if (o->flags & 8) {
-		// 0x40bed0 (only FO and WA handle it), then, unless a handler cleared app+0x74, the
+		// 0x40bed0 (only WA acts on it), then, unless a handler cleared app+0x74, the
 		// clicked object goes in hand.
+		if (zone == kZoneWA)
+			WA::onTake(this, object, value);
 		if (_takeAllowed) {
 			dropObject();
 			holdObject(object);
@@ -1009,6 +1021,14 @@ void RingEngine::drawView() {
 	}
 }
 
+void RingEngine::holdEvent(Animation &anim) {
+	// 0x40c910: a hold on a frame starts (1) or ends (2); only WA handles it (E-0224).
+	int phase = anim.holdEvent;
+	anim.holdEvent = 0;
+	if (phase && _zone == kZoneWA)
+		WA::onHold(this, phase, anim.id);
+}
+
 void RingEngine::advanceAnimations(Puzzle &p) {
 	// aPuzzle::Update 0x41c320, before the pictures are drawn.
 	uint32 now = g_system->getMillis();
@@ -1016,6 +1036,7 @@ void RingEngine::advanceAnimations(Puzzle &p) {
 		Common::SharedPtr<Animation> anim = p.animations[i];
 		if (anim->advance(now))
 			onAnimation(this, _zone, anim->id, anim->frame + 1);
+		holdEvent(*anim);
 	}
 }
 
@@ -1025,6 +1046,8 @@ void RingEngine::updateLayers(Rotation &r) {
 		Common::SharedPtr<Animation> anim = r.layers[i].animation;
 		if (anim && anim->advance(now))
 			onAnimation(this, _zone, anim->id, anim->frame + 1);
+		if (anim)
+			holdEvent(*anim);
 	}
 	// An animated layer takes its animation's state: stopped hides it (0x4103d0), running sets its frame (0x411530).
 	for (uint i = 0; i < r.layers.size(); i++) {
@@ -1132,6 +1155,8 @@ void RingEngine::soundEvent(int id, int type, int reason) {
 		FO::onSound(this, id, type, why, ended);
 	else if (_zone == kZoneRO)
 		RO::onSound(this, id, type, why, ended);
+	else if (_zone == kZoneWA)
+		WA::onSound(this, id, type, why, ended);
 }
 
 void RingEngine::track(int x, int y) {

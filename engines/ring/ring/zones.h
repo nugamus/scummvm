@@ -95,6 +95,16 @@ void onTimer(RingEngine *vm, int id);
 void onAnimation(RingEngine *vm, int id, int frame);
 void onSound(RingEngine *vm, int id, int type, int reason, int ended);
 }
+namespace WA {
+void enter(RingEngine *vm, int entry);
+void onClick(RingEngine *vm, int object, int value);
+void onTake(RingEngine *vm, int object, int value);
+void onHold(RingEngine *vm, int phase, int id);
+void onBeforeMove(RingEngine *vm, int from, int to, int kind);
+void onAfterMove(RingEngine *vm, int to, int from, int kind);
+void onAnimation(RingEngine *vm, int id, int frame);
+void onSound(RingEngine *vm, int id, int type, int reason, int ended);
+}
 namespace AS {
 /** GameSetZoneAS (0x437ba0): entering the zone at `entry` (999: a new game). */
 void enter(RingEngine *vm, int entry);
