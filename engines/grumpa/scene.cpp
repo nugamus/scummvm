@@ -195,7 +195,7 @@ void GrumpaEngine::setGameCursor() {
 		for (int x = 0; x < src->w; x++) {
 			byte r, g, b, a;
 			rgba.colorToARGB(src->getPixel(x, y), a, r, g, b);
-			a = (MAX(r, MAX(g, b)) < 24) ? 0 : 255;  // key out near-black
+			a = (b > 200 && r < 96 && g < 96) ? 0 : 255;  // key out the blue background (E-0107)
 			cur.setPixel(x, y, rgba.ARGBToColor(a, r, g, b));
 		}
 	}
