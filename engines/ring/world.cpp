@@ -534,6 +534,13 @@ Common::String World::varString(int id) const {
 	return _strings.getVal(id);
 }
 
+void World::setVarString(int id, const Common::String &value) {
+	if (_strings.contains(id))
+		_strings[id] = value;
+	else
+		warning("Ring: VarSetStrg: no variable %d", id);
+}
+
 float World::varFloat(int id) const {
 	if (!_floats.contains(id)) {
 		warning("Ring: VarGetFloa: no variable %d", id);

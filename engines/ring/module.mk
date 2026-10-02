@@ -16,6 +16,7 @@ MODULE_OBJS = \
 	ring/n2.o \
 	ring/ni.o \
 	ring/rh.o \
+	ring/ro.o \
 	ring/setup.o \
 	ring/sy.o
 

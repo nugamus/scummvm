@@ -293,8 +293,9 @@ public:
 	void setVarByte(int id, int value) { setVar(kVarByte, id, value); }
 	float varFloat(int id) const;
 	void setVarFloat(int id, float value);
-	/** `VarGetStrg` (0x4062e0). */
+	/** `VarGetStrg` (0x4062e0) / `VarSetStrg` (0x4062b0). */
 	Common::String varString(int id) const;
+	void setVarString(int id, const Common::String &value);
 
 private:
 	void apply(int zone, const SetupCall &c);
