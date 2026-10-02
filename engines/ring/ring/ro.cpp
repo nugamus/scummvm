@@ -36,7 +36,7 @@ enum {
 	kFirePower = 40000, kEgg = 40010, kTiles = 40011, kRing = 40012, kCrown = 40013, kLever = 40060,
 	kDial = 40101, kPipe = 40201, kKeys = 40202, kCave = 40203,
 	// Bytes, strings
-	kFireUsed = 40000, kGrid = 40500, kDials = 40601, kTilesSolved = 40701, kDialsSolved = 40702,
+	kFireUsed = 40000, kGrid = 40501, kDials = 40601, kTilesSolved = 40701, kDialsSolved = 40702,
 	kCrownPlaced = 40703, kRingPlaced = 40801, kPipesSolved = 40802, kLeverByte = 40804, kTileSize = 40805,
 	kSwitch = 40200, kPlayed = 40901, kKeysPlayed = 40902, kSwitchFrame = 40901, kPipeFrame = 40911
 };
