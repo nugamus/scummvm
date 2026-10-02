@@ -48,6 +48,13 @@ class WinFont;
 
 namespace Ring {
 
+/** The edition (spec/editions.md); the game logic is the DVD's in all of them. */
+enum Edition {
+	kEditionDVD,
+	kEditionCD,
+	kEditionISO
+};
+
 /** The keymapper's engine actions (metaengine.cpp). */
 enum Action {
 	kActionSkip = 1, ///< Escape
@@ -116,6 +123,12 @@ public:
 	void deleteSave(int slot);
 	const Graphics::ManagedSurface &snapScreen() const { return _snapScreen; }
 	Graphics::WinFont *font() const { return _font.get(); }
+
+	Edition edition() const { return _edition; }
+	/** A DVD file name as this edition names the file (spec/editions.md, "Names"); case-blind. */
+	Common::String mediaName(const Common::String &file) const;
+	/** A path whose last component is a DVD file name, as this edition names it. */
+	Common::Path mediaPath(const Common::Path &path) const;
 
 	/** The hotspot overlay (hotspots.cpp), a development view. */
 	void getHotspotPositions(Common::Array<Graphics::HotspotInfo> &hotspots) override;
@@ -276,6 +289,8 @@ private:
 	void updateLayers(Rotation &r);
 	/** `WM_TIMER`: due timers go to the zone's handler (0x40b4a0). */
 	void runTimers();
+	/** The game-over picture: End.bmp, on the ISO one per zone and cause (spec/editions.md). */
+	const char *endPicture(int zone, int cause) const;
 	/** A key (0x40b060): clicks the hot spot that has it (spec/events.md, "Keys"). */
 	void key(int code);
 	/** The hot spot under a window position, as the tracking finds it (0 for none). */
@@ -323,6 +338,9 @@ private:
 	};
 	Common::Array<Timer> _timers;
 	int _gameOver = 0; ///< app+0x70 while mode 4 is pending
+	int _gameOverZone = 0; ///< the zone it came from (the ISO's pictures)
+	Edition _edition = kEditionDVD;
+	Common::HashMap<Common::String, Common::String, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _mediaNames;
 	bool _takeAllowed = true; ///< app+0x74
 	bool _listAllowed = true; ///< app+0x78
 	Common::Array<byte> _pendingLoad;

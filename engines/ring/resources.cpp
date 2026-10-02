@@ -28,6 +28,7 @@
 #include "ring/codec.h"
 #include "ring/detection.h"
 #include "ring/resources.h"
+#include "ring/ring.h"
 
 namespace Ring {
 
@@ -95,7 +96,7 @@ Image *Resources::loadImage(int zone, const Common::String &name, bool fromArchi
 		debugC(1, kDebugLoad, "%s is not in the %s archive, trying the loose file", name.c_str(), zoneFolder(zone));
 	}
 	Common::File f;
-	Common::Path path = Common::Path("DATA").appendComponent(zoneFolder(zone)).appendComponent(folder).join(Common::Path(name, '\\'));
+	Common::Path path = Common::Path("DATA").appendComponent(zoneFolder(zone)).appendComponent(folder).join(Common::Path(g_engine->mediaName(name), '\\'));
 	if (!f.open(path)) {
 		warning("Ring: cannot open image %s", path.toString().c_str());
 		return nullptr;

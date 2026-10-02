@@ -147,7 +147,7 @@ void Sounds::startStream(Sound &s, bool loop) {
 	Common::Path path = Common::Path("DATA").appendComponent(zoneFolder(_vm->zone())).appendComponent("SOUND");
 	if (s.type == kSoundDialogue)
 		path = path.appendComponent(_vm->languageFolder());
-	path = path.appendComponent(s.file);
+	path = path.appendComponent(_vm->mediaName(s.file));
 	Audio::SeekableAudioStream *stream = openSound(path);
 	if (!stream) {
 		warning("Ring: cannot play sound %d (%s)", s.id, path.toString().c_str());
@@ -353,7 +353,7 @@ bool Sounds::readDialogue(Dialogue &d, const Sound &s) {
 	Common::String stem = s.file.substr(0, s.file.size() - 3);
 	Common::Path dir = Common::Path("DATA").appendComponent(zoneFolder(_vm->zone())).appendComponent("DIA").appendComponent(_vm->languageFolder());
 	Common::File f;
-	if (!f.open(dir.appendComponent(stem + "dia"))) {
+	if (!f.open(dir.appendComponent(_vm->mediaName(stem + "dia")))) {
 		warning("Ring: no dialogue text for sound %d", s.id);
 		return false;
 	}
@@ -378,7 +378,7 @@ bool Sounds::readDialogue(Dialogue &d, const Sound &s) {
 	}
 
 	// .dan: N, N × (level, object, presentation), then (start, end, level) to the end.
-	if (!f.open(dir.appendComponent(stem + "dan")))
+	if (!f.open(dir.appendComponent(_vm->mediaName(stem + "dan"))))
 		return true;
 	Common::String text = f.readString(0, f.size());
 	const char *p = text.c_str();

@@ -35,6 +35,7 @@
 #include "image/png.h"
 
 #include "ring/bag.h"
+#include "ring/medianames.h"
 #include "ring/cursor.h"
 #include "ring/detection.h"
 #include "ring/movie.h"
@@ -167,8 +168,24 @@ RingEngine *g_engine = nullptr;
 
 RingEngine::RingEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc) {
 	g_engine = this;
+	if (!strcmp(gameDesc->extra, "CD"))
+		_edition = kEditionCD;
+	else if (!strcmp(gameDesc->extra, "ISO"))
+		_edition = kEditionISO;
+	if (_edition != kEditionDVD)
+		for (const auto &n : kMediaNames)
+			_mediaNames[n.dvd] = n.name;
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addDirectory(gameDataDir, 0, 5); // DATA/<zone>/DIA/<language>/<file>
+}
+
+Common::String RingEngine::mediaName(const Common::String &file) const {
+	auto it = _mediaNames.find(file);
+	return it == _mediaNames.end() ? file : it->_value;
+}
+
+Common::Path RingEngine::mediaPath(const Common::Path &path) const {
+	return path.getParent().appendComponent(mediaName(path.baseName()));
 }
 
 RingEngine::~RingEngine() {
@@ -507,10 +524,11 @@ Common::Error RingEngine::run() {
 		if (_gameOver) {
 			// Mode 4 (spec/boot.md "Frame"): the set-ups again, then 0x431190(2, n): SetZone(1),
 			// End.bmp at (0, 16) for 4 s (0x401000), StartMenu(0).
+			int cause = _gameOver;
 			_gameOver = 0;
 			resetWorld();
 			setZone(kZoneSY);
-			if (Image *end = _resources->loadImage(kZoneSY, "End.bmp", true)) {
+			if (Image *end = _resources->loadImage(kZoneSY, endPicture(_gameOverZone, cause), true)) {
 				end->draw(_screen, 0, 16, 1);
 				delete end;
 				present();
@@ -522,6 +540,22 @@ Common::Error RingEngine::run() {
 		g_system->delayMillis(10);
 	}
 	return Common::kNoError;
+}
+
+const char *RingEngine::endPicture(int zone, int cause) const {
+	// 0x431190: End.bmp in the DVD and CD versions; the ISO's pictures per zone and cause (E-0307).
+	if (_edition != kEditionISO || cause < 1 || cause > 4)
+		return "End.bmp";
+	static const char *const ni[4] = { "End01.bmp", "End02.bmp", "End03.bmp", "End04.bmp" };
+	static const char *const rh[4] = { "End05.bmp", "End06.bmp", "End02.bmp", "End07.bmp" };
+	static const char *const n2[2] = { "End03.bmp", "End08.bmp" };
+	if (zone == kZoneNI)
+		return ni[cause - 1];
+	if (zone == kZoneRH)
+		return rh[cause - 1];
+	if (zone == kZoneN2 && cause <= 2)
+		return n2[cause - 1];
+	return "End.bmp";
 }
 
 void RingEngine::key(int code) {
@@ -810,6 +844,7 @@ void RingEngine::setSoundItemVolume(int owner, int sound, int volume) {
 
 void RingEngine::gameOver(int n) {
 	_gameOver = n;
+	_gameOverZone = _zone;
 	_sounds->stopAll(0x40);
 }
 
