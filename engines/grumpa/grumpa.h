@@ -70,8 +70,12 @@ public:
 	/** A left click in the scene at `p`: run the first unspent trigger whose polygon contains
 	 *  it (docs/spec/events.md). Returns true if a trigger fired (the scene changed). */
 	bool handleSceneClick(const Common::Point &p);
-	/** Load the game's hand cursor as the system cursor (E-0005). */
+	/** Load the game's default cursor as the system cursor (E-0005). */
 	void setGameCursor();
+	/** Set the system cursor to the named cursor in UI/002_Cursor (cached). */
+	void setCursorImage(const Common::String &name);
+	/** Update the cursor for the point `p`: a hand over a clickable trigger, else the pointer. */
+	void updateHoverCursor(const Common::Point &p);
 	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */
 	bool drawMenu(int selected);
 	/** Play an MPEG-1 film from a Movies_<lang> folder; Esc/click skips. */
@@ -101,6 +105,7 @@ private:
 	uint32 _sceneTick0 = 0;
 	int _nextScene = -1;   // set by a go-to-scene trigger (E-0116); loaded by the main loop
 	bool _showHotspots = false;  // H toggles the trigger-polygon overlay
+	Common::String _cursorName;  // the current cursor image, to avoid redundant reloads
 };
 
 } // End of namespace Grumpa

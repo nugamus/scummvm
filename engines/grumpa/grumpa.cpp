@@ -83,11 +83,14 @@ Common::Error GrumpaEngine::run() {
 				} else if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_h) {
 					_showHotspots = !_showHotspots;  // overlay the clickable trigger polygons
 					dirty = true;
+				} else if (event.type == Common::EVENT_MOUSEMOVE) {
+					updateHoverCursor(event.mouse);  // hand over a clickable exit/interaction
 				} else if (event.type == Common::EVENT_LBUTTONUP) {
 					if (handleSceneClick(event.mouse)) {
 						if (_nextScene >= 0) {  // a go-to-scene trigger (E-0116)
 							enterScene(_nextScene);
 							_nextScene = -1;
+							_cursorName = "";  // refresh hover for the new scene's triggers
 						}
 						dirty = true;  // redraw with the new scene / actor state
 					}
