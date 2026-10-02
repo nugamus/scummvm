@@ -32,6 +32,10 @@
 #include "ring/rotation.h"
 #include "ring/sound.h"
 
+namespace Common {
+class Serializer;
+}
+
 namespace Graphics {
 class Font;
 class ManagedSurface;
@@ -289,6 +293,9 @@ public:
 	const Accessibility *hit(const Puzzle &p, int x, int y) const;
 	static const Accessibility *hit(const Common::Array<Common::SharedPtr<Accessibility> > &list, int x, int y);
 	static const Movability *hit(const Common::Array<Movability> &list, int x, int y);
+
+	/** Saved games (spec/save.md): the puzzles', rotations' and objects' records, then the variables. */
+	void syncState(Common::Serializer &s, uint32 now);
 
 	/** `VarGet*` / `VarSet*` (spec/api.md, "Variables"): an unknown id is reported and reads 0. */
 	enum VarType { kVarByte, kVarWord, kVarDword };

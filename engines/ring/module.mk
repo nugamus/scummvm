@@ -9,6 +9,7 @@ MODULE_OBJS = \
 	resources.o \
 	ring.o \
 	rotation.o \
+	save.o \
 	sound.o \
 	world.o \
 	ring/as.o \
