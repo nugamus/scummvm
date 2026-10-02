@@ -184,19 +184,23 @@ void RingEngine::present() {
 void RingEngine::pollEvents(uint32 ms) {
 	Common::Event event;
 	while (g_system->getEventManager()->pollEvent(event)) {
-		if (event.type == Common::EVENT_KEYDOWN) {
-			// WM_CHAR characters and Delete reach 0x40b060 (spec/events.md, "Keys").
-			if (event.kbd.keycode == Common::KEYCODE_ESCAPE)
+		if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START) {
+			// Escape and F12 come through the keymapper (metaengine.cpp).
+			if (event.customType == kActionSkip) {
 				_escapeDown = true;
-			if (event.kbd.keycode == Common::KEYCODE_F12)
+				_keys.push_back(27);
+			} else if (event.customType == kActionMenu) {
 				_keys.push_back(kKeyF12);
-			else if (event.kbd.keycode == Common::KEYCODE_DELETE)
+			}
+		} else if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_END && event.customType == kActionSkip) {
+			_escapeDown = false;
+		} else if (event.type == Common::EVENT_KEYDOWN) {
+			// WM_CHAR characters and Delete reach 0x40b060 (spec/events.md, "Keys").
+			if (event.kbd.keycode == Common::KEYCODE_DELETE)
 				_keys.push_back(0x2e);
 			else if (event.kbd.ascii && event.kbd.ascii < 256)
 				_keys.push_back(event.kbd.ascii);
-		} else if (event.type == Common::EVENT_KEYUP && event.kbd.keycode == Common::KEYCODE_ESCAPE)
-			_escapeDown = false;
-		else if (event.type == Common::EVENT_MOUSEMOVE && !_scripted)
+		} else if (event.type == Common::EVENT_MOUSEMOVE && !_scripted)
 			_mouse = event.mouse;
 		else if ((event.type == Common::EVENT_LBUTTONDOWN || event.type == Common::EVENT_LBUTTONUP) && !_scripted) {
 			// While dev_input drives the mouse the real buttons are ignored.

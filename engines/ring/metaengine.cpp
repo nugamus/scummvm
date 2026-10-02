@@ -21,6 +21,12 @@
 
 
 
+#include "backends/keymapper/action.h"
+#include "backends/keymapper/keymap.h"
+#include "backends/keymapper/standard-actions.h"
+
+#include "common/translation.h"
+
 #include "engines/advancedDetector.h"
 
 #include "graphics/scaler.h"
@@ -38,6 +44,32 @@ public:
 	Common::Error createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override {
 		*engine = new Ring::RingEngine(syst, desc);
 		return Common::kNoError;
+	}
+
+	Common::KeymapArray initKeymaps(const char *target) const override {
+		using namespace Common;
+		Keymap *keymap = new Keymap(Keymap::kKeymapTypeGame, "ring", _("Game keymappings"));
+		Action *act = new Action(kStandardActionLeftClick, _("Click"));
+		act->setLeftClickEvent();
+		act->addDefaultInputMapping("MOUSE_LEFT");
+		act->addDefaultInputMapping("JOY_A");
+		keymap->addAction(act);
+		act = new Action(kStandardActionRightClick, _("Inventory"));
+		act->setRightClickEvent();
+		act->addDefaultInputMapping("MOUSE_RIGHT");
+		act->addDefaultInputMapping("JOY_Y");
+		keymap->addAction(act);
+		act = new Action("SKIP", _("Skip / cancel"));
+		act->setCustomEngineActionEvent(Ring::kActionSkip);
+		act->addDefaultInputMapping("ESCAPE");
+		act->addDefaultInputMapping("JOY_B");
+		keymap->addAction(act);
+		act = new Action("MENU", _("Game menu"));
+		act->setCustomEngineActionEvent(Ring::kActionMenu);
+		act->addDefaultInputMapping("F12");
+		act->addDefaultInputMapping("JOY_X");
+		keymap->addAction(act);
+		return Keymap::arrayOf(keymap);
 	}
 
 	void getSavegameThumbnail(Graphics::Surface &thumb) override {
