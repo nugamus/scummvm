@@ -71,6 +71,8 @@ static void onClick(RingEngine *vm, int zone, int object, int value, int place) 
 		N2::onClick(vm, object, value);
 	else if (zone == kZoneFO)
 		FO::onClick(vm, object, value);
+	else if (zone == kZoneRO)
+		RO::onClick(vm, object, value);
 }
 
 static void onBagClick(RingEngine *vm, int zone, int object) {
@@ -83,6 +85,8 @@ static void onButtonDown(RingEngine *vm, int zone, int object, int value) {
 		NI::onButtonDown(vm, object, value);
 	else if (zone == kZoneN2)
 		N2::onButtonDown(vm, object, value);
+	else if (zone == kZoneRO)
+		RO::onButtonDown(vm, object, value);
 }
 
 static void onTimer(RingEngine *vm, int zone, int id) {
@@ -96,6 +100,8 @@ static void onTimer(RingEngine *vm, int zone, int id) {
 		N2::onTimer(vm, id);
 	else if (zone == kZoneFO)
 		FO::onTimer(vm, id);
+	else if (zone == kZoneRO)
+		RO::onTimer(vm, id);
 }
 
 static void onAnimation(RingEngine *vm, int zone, int id, int frame) {
@@ -109,6 +115,8 @@ static void onAnimation(RingEngine *vm, int zone, int id, int frame) {
 		N2::onAnimation(vm, id, frame);
 	else if (zone == kZoneFO)
 		FO::onAnimation(vm, id, frame);
+	else if (zone == kZoneRO)
+		RO::onAnimation(vm, id, frame);
 }
 
 static void onBeforeMove(RingEngine *vm, int zone, int from, int to, int index, int value, int kind) {
@@ -122,6 +130,8 @@ static void onBeforeMove(RingEngine *vm, int zone, int from, int to, int index, 
 		N2::onBeforeMove(vm, from, to, kind);
 	else if (zone == kZoneFO)
 		FO::onBeforeMove(vm, from, to, kind);
+	else if (zone == kZoneRO)
+		RO::onBeforeMove(vm, from, to, kind);
 }
 
 static void onAfterMove(RingEngine *vm, int zone, int to, int from, int index, int value, int kind) {
@@ -135,6 +145,8 @@ static void onAfterMove(RingEngine *vm, int zone, int to, int from, int index, i
 		N2::onAfterMove(vm, to, value, kind);
 	else if (zone == kZoneFO)
 		FO::onAfterMove(vm, to, from, kind);
+	else if (zone == kZoneRO)
+		RO::onAfterMove(vm, to, from, kind);
 }
 
 RingEngine *g_engine = nullptr;
@@ -634,6 +646,8 @@ void RingEngine::goZone(int zone, int entry) {
 		N2::enter(this, entry);
 	else if (zone == kZoneFO)
 		FO::enter(this, entry);
+	else if (zone == kZoneRO)
+		RO::enter(this, entry);
 	else
 		warning("Ring: zone %d is not implemented yet", zone);
 }
@@ -1116,6 +1130,8 @@ void RingEngine::soundEvent(int id, int type, int reason) {
 		N2::onSound(this, id, type, why, ended);
 	else if (_zone == kZoneFO)
 		FO::onSound(this, id, type, why, ended);
+	else if (_zone == kZoneRO)
+		RO::onSound(this, id, type, why, ended);
 }
 
 void RingEngine::track(int x, int y) {
@@ -1244,6 +1260,8 @@ void RingEngine::dragEvent(int phase) {
 		N2::onDrag(this, _drag.object, _drag.value, phase);
 	else if (_zone == kZoneFO)
 		FO::onDrag(this, _drag.object, phase);
+	else if (_zone == kZoneRO)
+		RO::onDrag(this, _drag.object, _drag.value, phase);
 }
 
 void RingEngine::click(int x, int y) {
