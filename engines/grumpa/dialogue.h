@@ -34,17 +34,7 @@ class Characters;
 
 // A CFXSound actor (types 0x18 / 0x2a) of a scene: an effect, music or a voice line
 // (docs/spec/dialogue.md, E-0405).
-struct SceneSound {
-	uint32 id = 0;
-	bool active = false, visible = false;
-	bool volSet = false, panSet = false;
-	int32 volume = 0, pan = 0;       // DirectSound hundredths of a dB
-	bool loop = false;
-	bool onEntry = false;            // start on the scene-entry broadcast 0x17
-	int speaker = 0;                 // the character saying it; 0 = not speech
-	Common::String name;             // the .wav
-	Common::Array<SceneCommand> onEnd;  // run when it stops
-};
+// SceneSound lives in mesh.h (SceneData::sounds).
 
 /** Read a sound record's body (after `u32 type, u32 id`) at `d[o]`, `n` bytes in all;
  *  advances `o` past it. The on-end commands keep their `when` and conditions. */

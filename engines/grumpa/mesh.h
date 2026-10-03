@@ -98,24 +98,71 @@ struct SceneSprite {
 	bool hasDepth = false; // _Z depth frames exist
 };
 
-// One command in a trigger's list (E-0109/E-0110): apply `opcode` to the actor `targetId`
-// after `when` ticks (-1 = immediately on the click). `hasCond` marks a command guarded by a
-// condition on another actor's state (honoured later; for now such commands are skipped).
+// A condition on an actor's state slot (docs/spec/events.md, E-0201): actor[id].slot[slot]
+// ==, >, <, != value for mode 0..3; `link` 1 ends an AND group.
+struct SceneCond {
+	int32 id = 0, slot = 0, value = 0, mode = 0, link = 0;
+};
+
+// One command (E-0109, E-0200): deliver `opcode` to the actor `targetId` (-1 every actor).
+// `when` -1 runs it now; any other value is a scene number: it waits until that scene is
+// entered. `conds` are checked when the command is pushed (events.cpp).
 struct SceneCommand {
 	int when = -1;
 	int targetId = 0;
 	int opcode = 0;
 	int arg1 = 0, arg2 = 0;
-	bool hasCond = false;
+	Common::Array<SceneCond> conds;
 };
+typedef Common::Array<SceneCommand> CommandList;
 
-// A clickable trigger (type 0x19, E-0108): a screen polygon and the commands it runs when
-// clicked. `once` goes true after it fires if it disables itself (opcode 13 on its own id).
+// A trigger (type 0x19, E-0108, E-0207): a screen polygon and the commands it runs when it
+// fires (a click inside the polygon, or opcode 0). `spent` is its latch (opcode 13).
 struct SceneTrigger {
 	uint32 id = 0;
 	Common::Array<Common::Point> poly;
-	Common::Array<SceneCommand> cmds;
+	CommandList cmds;
+	Common::Array<SceneCond> conds;  // +0x190, honoured when hasConds
 	bool spent = false;
+	bool active = true, visible = true;  // +0x10c, +0x110
+	int view = -1;           // +0x174: the view it belongs to (-1 any)
+	bool click = true;       // +0x178: 1 click, 0 walk-in
+	bool proximity = true;   // +0x17c: gated on the player character (Q-0202)
+	bool hasConds = false;   // +0x180
+	bool proximityOn = true; // +0x154 (opcodes 14/15)
+};
+
+// A CFXSound actor (0x18/0x2a, dialogue.cpp, docs/spec/dialogue.md).
+struct SceneSound {
+	uint32 id = 0;
+	bool active = false, visible = false;
+	bool volSet = false, panSet = false;
+	int32 volume = 0, pan = 0;       // DirectSound hundredths of a dB
+	bool loop = false;
+	bool onEntry = false;            // start on the scene-entry broadcast 0x17
+	int speaker = 0;                 // the character saying it; 0 = not speech
+	Common::String name;             // the .wav
+	Common::Array<SceneCommand> onEnd;  // run when it stops
+};
+
+// A sprite's command lists and autoplay flag (E-0208), kept beside SceneSprite for the VM.
+struct SpriteHooks {
+	uint32 id = 0;
+	bool autoplay = false;   // +0x1d4: plays on the scene-entry broadcast
+	CommandList onEnd, onForward, onBackward;  // +0x14c, +0x12c, +0x13c
+};
+
+// A logic actor (E-0204/E-0205): 0x21 script, 0x22/0x25 counter, 0x23/0x26 timer,
+// 0x24/0x27 flag, from the scene's .abi or Actors/global.atx.
+struct SceneLogic {
+	uint32 id = 0;
+	uint32 type = 0;
+	bool active = false, visible = false, latch = false;
+	Common::Array<int32> state;   // state slots; slot 0 always exists (E-0201)
+	int32 f0 = 0, f1 = 0;         // counter: max, fire; timer: limit (ms); flag: fire; script: guarded
+	int32 count = 0;              // counter count, timer elapsed ms, script pending
+	Common::Array<SceneCond> conds;  // script guard
+	CommandList cmds;
 };
 
 // A 3D animated-mesh actor (type 0x1a CFXStaticCharacter, E-0114): an .anb mesh (+ .tga
@@ -139,6 +186,9 @@ struct SceneData {
 	Common::Array<SceneSprite> sprites;
 	Common::Array<SceneTrigger> triggers;
 	Common::Array<SceneMesh> meshes;
+	Common::Array<SpriteHooks> spriteHooks;  // the event VM's view of the sprites
+	Common::Array<SceneLogic> logic;         // 0x21..0x27
+	Common::Array<SceneSound> sounds;        // 0x18/0x2a (dialogue.cpp)
 };
 
 /** A look-at camera (dev views of a lone mesh): Direct3D-style left-handed matrices. */

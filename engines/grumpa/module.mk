@@ -8,6 +8,7 @@ MODULE_OBJS = \
 	menu.o \
 	inventory.o \
 	saveload.o \
+	events.o \
 	movie.o \
 	character.o \
 	dialogue.o
