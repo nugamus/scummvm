@@ -79,6 +79,8 @@ public:
 	void setView(int k);
 	/** Redraw the current scene (background, sprites, 3D actors in render order) at `now`. */
 	void renderSceneFrame(uint32 now);
+	/** The whole frame: the scene, the score, the inventory panel, then actor 185's fade. */
+	void drawFrame(uint32 now);
 	/** A left click in the scene at `p`: run the first unspent trigger whose polygon contains
 	 *  it (docs/spec/events.md). Returns true if a trigger fired (the scene changed). */
 	bool handleSceneClick(const Common::Point &p);

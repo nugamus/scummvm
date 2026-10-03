@@ -33,7 +33,7 @@ namespace Grumpa {
 // The original opens <data>\Sounds\<name>; the cabinet splits that folder into the voices of
 // a language and the common sounds (dialogue.md, Q-0400). Names with non-ASCII letters were
 // extracted with '_' in their place.
-static Common::SeekableReadStream *openSound(const Common::String &name) {
+Common::SeekableReadStream *openSound(const Common::String &name) {
 	static const char *const dirs[] = { "Sounds_Swedish/", "Sounds_Danish/", "Sounds_Norwegian/",
 										"Sounds_Finnish/", "Sounds_/", "Sounds/" };
 	Common::String ascii = name;

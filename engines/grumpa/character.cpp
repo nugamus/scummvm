@@ -246,6 +246,18 @@ void Characters::apply(Character &c, int op, int arg1) {
 			c.pos = o->pos;
 		break;
 	}
+	case 0x58: case 0x59: case 0x5a: case 0x5b: {  // slot 2 / 3 + / - arg1 (E-0704)
+		int slot = op < 0x5a ? 2 : 3;
+		if (slot < (int)c.state.size())
+			c.state[slot] = (op & 1) ? MAX<int32>(c.state[slot] - arg1, 0) : c.state[slot] + arg1;
+		break;
+	}
+	case 0x5d: case 0x5e: case 0x5f: {             // slot 2 / 3 / 1 = arg1
+		int slot = op == 0x5d ? 2 : op == 0x5e ? 3 : 1;
+		if (slot < (int)c.state.size())
+			c.state[slot] = arg1;
+		break;
+	}
 	default:
 		debug(2, "Grumpa: character %u opcode %#x not modelled", c.id, op);
 		break;

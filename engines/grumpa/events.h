@@ -28,6 +28,7 @@
 #include "common/rect.h"
 
 #include "grumpa/mesh.h"
+#include "grumpa/score.h"
 
 namespace Grumpa {
 
@@ -40,7 +41,8 @@ bool pointInPolygon(const Common::Array<Common::Point> &poly, const Common::Poin
  * The event VM (docs/spec/events.md): the immediate and deferred command lists, conditions,
  * the 50 Hz update, scene entry/exit, and the classes it owns: sprites (0x0d), triggers
  * (0x19), meshes' shared opcodes (0x1a), scripts, counters, timers and flags (0x21..0x27,
- * scene and global.atx), the fade/scene manager 185 and the proxy 186.
+ * scene and global.atx), the fade/scene manager 185, the proxy 186, the score 8 and the
+ * ambience 180.
  */
 class EventVM {
 public:
@@ -76,6 +78,13 @@ public:
 	/** The frame a sprite (E-0208) or a mesh actor (E-0601) shows. */
 	int spriteFrame(uint32 id) const;
 
+	/** Actor 185's level (E-0700): the screen's colours are scaled by it / 255. */
+	int fadeLevel() const { return _fade.level; }
+	/** Escape is taken only while no fade runs and the screen is not black (E-0700). */
+	bool fadeIdle() const { return !_fade.running && _fade.level != 0; }
+	/** The score display (actor 8), drawn over the scene. */
+	const Score &score() const { return _score; }
+
 private:
 	struct Run {      // sprite animation state and the sprite / mesh latch (E-0208)
 		int frame = 0, dir = 0, counter = 0;
@@ -89,6 +98,14 @@ private:
 		bool playing, running;
 	};
 	typedef Common::HashMap<uint32, Status> StatusMap;
+	struct Fade {     // actor 185 (E-0700)
+		int level = 255, step = 0, hold = 0;
+		bool running = false;
+		int view = -1, scene = -1;  // shown / entered when the fade ends
+	};
+
+	void fadeStart(int level, int step);
+	void fadeUpdate();
 
 	bool conditionsHold(const Common::Array<SceneCond> &conds);
 	bool stateOf(int id, int slot, int32 &value) const;
@@ -124,6 +141,9 @@ private:
 	int _proxyTarget = -1;                         // actor 186 (E-0206)
 	bool _fired = false;                           // a trigger fired during click()
 	Common::RandomSource _rnd;                     // mesh delay timers
+	Fade _fade;
+	Score _score;
+	Ambience _ambience;
 };
 
 } // End of namespace Grumpa
