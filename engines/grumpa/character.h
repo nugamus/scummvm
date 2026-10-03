@@ -48,6 +48,12 @@ struct Character {
 	Common::Array<uint32> pairs;     // (other id, form id) pairs, flattened
 	bool latched = false;            // disabled by 0xd until 0x34
 	bool talking = false;            // the speaker of a playing voice line (Q-0401)
+	// Drawing (scene.cpp): the idle mesh and the texture in use, loaded on first draw.
+	bool loaded = false;
+	Mesh mesh;
+	Graphics::Surface skin;          // ARGB8888, like SceneMesh::texture
+	bool alpha = false;
+	int skinIndex = -1;              // the texture index `skin` was loaded for
 	Common::Array<int32> state;      // the state slots (E-0201, E-0407): 6 per character
 };
 
@@ -63,6 +69,7 @@ public:
 	bool present(const Character &c) const { return c.visible && c.home == _scene; }
 	int scene() const { return _scene; }
 	const Common::Array<Character> &all() const { return _chars; }
+	Common::Array<Character> &list() { return _chars; }
 	/** State slot `slot` of character `id` for a condition (E-0201); false if `id` is no character. */
 	bool stateOf(int id, int slot, int32 &value);
 
