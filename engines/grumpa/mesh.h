@@ -57,32 +57,45 @@ struct Mesh {
 	bool empty() const { return sections.empty(); }
 };
 
-// A fixed camera for a pre-rendered view (docs/spec/scene.md, E-0105): eye position, look
-// basis and the per-axis projection scales from the .abi camera block (NDC = proj*v/z).
+// A view's camera (docs/spec/scene.md): the Direct3D view and projection matrices the
+// original hands to SetTransform (row vectors, left-handed: clip = v * view * proj).
 struct Camera {
-	Vec3 eye;
-	Vec3 forward, up;
-	float projX, projY;  // camera block[2], block[3]; 1.0 == 90 degrees
-	float farZ;          // camera block[19], the far/range value
+	float view[16];
+	float proj[16];
 };
 
-// One pre-rendered view of a scene: its id, the camera id and the 26-float camera block
-// (docs/spec/scene.md). Read from a type-0x11 record in Scene_<NNN>.abi.
+// One pre-rendered view of a scene (CFXView entry, from Scene_<NNN>.scn): its colour
+// background, its depth buffer and its camera.
 struct SceneView {
-	uint32 id = 0;
-	uint32 camId = 0;
-	float cam[26] = {};
+	Common::String colour, depth;  // "<n>_<k>_IS.jpg", "<n>_<k>_IZ.fxi"
+	Camera cam;
 };
 
-// An animated 2D sprite prop (type 0x0d, E-0106/E-0107): a JPG frame sequence drawn at a
-// screen position with a colour key. `frames`/`fps` come from the record's animation block.
+// A scene light (type 0x11 CFXLight): the D3DLIGHT7 block of its .abi record, enabled at
+// load. d[0] type (1 = point), d[1..4] diffuse rgba, d[13..15] position, d[19] range,
+// d[21..23] attenuation.
+struct SceneLight {
+	uint32 id = 0;
+	float d[26] = {};
+	bool on = true;
+};
+
+// An animated 2D sprite prop (type 0x0d CFXSprite, E-0106/E-0107, docs/spec/scene.md): a
+// JPG frame sequence (and optional _Z depth frames) drawn at a screen position in its view.
 struct SceneSprite {
 	Common::String name;   // frame-0 JPG base, e.g. "cannons_0000.jpg"
 	uint32 id = 0;
 	int x = 0, y = 0;
 	bool active = false;   // +0x10c: animating/updating (E-0111)
 	bool visible = false;  // +0x110: drawn
-	int frames = 0, fps = 0;
+	int layer = 0;         // +0x114: render order (1 behind the 3D actors, 4 in front)
+	int fps = 0;           // +0x1e0: frames per second (one frame per 50/fps game ticks)
+	uint32 anim = 0;       // +0x1e4: animation flags (4 forward, 8 backward, 2 ping-pong, 1 loop)
+	int view = -1;         // +0x1c8: the view it belongs to (-1 every view)
+	bool keyed = false;    // +0x1f8: blit with a source colour key
+	int32 keyColor = -1;   // +0x208: key COLORREF (0x00BBGGRR), -1 = frame 0's pixel (0,0)
+	int frameCount = 0;    // frames found on disk (entering the scene)
+	bool hasDepth = false; // _Z depth frames exist
 };
 
 // One command in a trigger's list (E-0109/E-0110): apply `opcode` to the actor `targetId`
@@ -105,36 +118,40 @@ struct SceneTrigger {
 	bool spent = false;
 };
 
-// A 3D animated-mesh actor (type 0x1a, E-0114): an .anb mesh (+ .tga texture) authored in
-// world space, drawn through the view camera. `active` gates whether it is drawn (the scene's
-// default-state objects start active; the rest are shown by commands).
+// A 3D animated-mesh actor (type 0x1a CFXStaticCharacter, E-0114): an .anb mesh (+ .tga
+// texture) authored in world space, drawn through the current view's camera, lit by the
+// scene's lights. `visible` gates whether it is drawn (docs/spec/scene.md).
 struct SceneMesh {
 	Common::String anb, tga;
 	uint32 id = 0;
 	bool active = false;
 	bool visible = false;
 	Mesh mesh;                   // loaded once on scene entry
-	Graphics::Surface texture;   // .tga, converted to the screen format on scene entry
+	Graphics::Surface texture;   // .tga, as 32-bit ARGB (alpha used when the .tga has it)
+	bool alpha = false;          // 32-bit .tga: alpha-blended
 };
 
 // Everything the engine reads from a Scene_<NNN>.abi today.
 struct SceneData {
-	Common::Array<SceneView> views;
+	Common::Array<SceneView> views;     // from Scene_<NNN>.scn
+	int view = 0;                       // the current view (185 op 30 changes it)
+	Common::Array<SceneLight> lights;
 	Common::Array<SceneSprite> sprites;
 	Common::Array<SceneTrigger> triggers;
 	Common::Array<SceneMesh> meshes;
 };
 
-/** Build the view camera from its 26-float .abi block (E-0105). */
-Camera cameraFromBlock(const float cam[26]);
+/** A look-at camera (dev views of a lone mesh): Direct3D-style left-handed matrices. */
+Camera lookAtCamera(const Vec3 &eye, const Vec3 &target, float fovY, float zn, float zf);
 
-/** Rasterise `mesh` into `screen` through `cam`, z-testing against `depth` (16-bit, the
- *  scene's .fxi, `dw`x`dh`) when `depth` is non-empty (its own z-buffer otherwise). When
- *  `tex` is non-null (in `screen`'s format) the mesh is textured (perspective-correct UVs);
- *  otherwise it is flat-shaded. */
+/** Rasterise `mesh` into `screen` (RGB555) through `cam` like the original's Direct3D 7
+ *  device (docs/spec/scene.md): counter-clockwise faces culled, Gouraud lighting from
+ *  `lights` over the 0x1e1e1e ambient, `tex` (ARGB8888, may be null) modulated with
+ *  bilinear filtering, alpha-blended when `alpha`. `depth` (16-bit, screen-sized) is the
+ *  z-buffer: tested less-or-equal and written. */
 void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera &cam,
-				const Common::Array<uint16> *depth, int dw = 0, int dh = 0,
-				const Graphics::Surface *tex = nullptr);
+				const Common::Array<SceneLight> &lights, Common::Array<uint16> &depth,
+				const Graphics::Surface *tex = nullptr, bool alpha = false);
 
 } // End of namespace Grumpa
 

@@ -19,11 +19,11 @@
  *
  */
 
-// A small perspective, z-buffered, flat-shaded triangle rasteriser (engine's own code, from
-// graphics first principles). It draws actor meshes (E-0014) into the 800x600 page. The
-// original composites against the scene's .fxi depth buffer; wiring the actor's view-space Z
-// to those depth values needs the camera's near/far calibration, so for now each mesh uses
-// its own z-buffer over the background. Textured shading and scene-depth occlusion follow.
+// The 3D actors' renderer (docs/spec/scene.md, engine's own code). The original draws them
+// with Direct3D 7's fixed-function pipeline into its 800x600 RGB555 page, whose 16-bit
+// z-buffer holds the view's .fxi depth: each vertex goes through the view's view and
+// projection matrices, is lit by the scene's point lights (Gouraud) and the triangle is
+// textured (modulate, bilinear), depth-tested less-or-equal and written to the z-buffer.
 
 #include "common/array.h"
 #include "common/scummsys.h"
@@ -33,92 +33,145 @@
 
 namespace Grumpa {
 
-struct Vertex2D {
-	float sx, sy, z;   // screen x/y and view-space depth
-	bool behind;       // clipped by the near plane
-};
+static const float kAmbient = 30.0f / 255.0f;  // D3DRENDERSTATE_AMBIENT 0x1e1e1e (boot)
 
 static Vec3 normalize(const Vec3 &v) {
 	float len = sqrtf(v.dot(v));
 	return len > 1e-6f ? Vec3(v.x / len, v.y / len, v.z / len) : v;
 }
 
-// The scene .fxi holds the render device's own 16-bit depth (E-0010). We don't yet know the
-// exact view-space-Z -> z16 mapping (Q-0008 device math), so assume a linear ramp over the
-// camera's far/range and occlude where the scene is nearer. Returns 0xFFFF (farthest) when
-// the actor is behind the camera.
-static inline uint16 depth16(float vz, float farZ) {
-	if (vz <= 0.0f || farZ <= 0.0f)
-		return 0xFFFF;
-	float t = vz / farZ;
-	if (t < 0.0f) t = 0.0f;
-	if (t > 1.0f) t = 1.0f;
-	return (uint16)(t * 65535.0f);
+// Row vector times a 4x4 Direct3D matrix.
+static void xform(const float m[16], float x, float y, float z, float w, float out[4]) {
+	for (int j = 0; j < 4; j++)
+		out[j] = x * m[j] + y * m[4 + j] + z * m[8 + j] + w * m[12 + j];
 }
 
-void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera &cam,
-				const Common::Array<uint16> *depth, int dw, int dh, const Graphics::Surface *tex) {
-	const int W = screen.w, H = screen.h;
-	const bool textured = tex && tex->getPixels() && tex->w > 0 && tex->h > 0;
-	const bool useScene = depth && !depth->empty() && dw == W && dh == H;
-	Common::Array<float> zbuf;
-	if (!useScene) {
-		zbuf.resize(W * H);
-		for (uint i = 0; i < zbuf.size(); i++)
-			zbuf[i] = 1e30f;
-	}
+Camera lookAtCamera(const Vec3 &eye, const Vec3 &target, float fovY, float zn, float zf) {
+	Camera c;
+	Vec3 zaxis = normalize(target - eye);
+	Vec3 up = fabsf(zaxis.y) > 0.99f ? Vec3(0, 0, 1) : Vec3(0, 1, 0);
+	Vec3 xaxis = normalize(up.cross(zaxis));
+	Vec3 yaxis = zaxis.cross(xaxis);
+	const float v[16] = {
+		xaxis.x, yaxis.x, zaxis.x, 0,
+		xaxis.y, yaxis.y, zaxis.y, 0,
+		xaxis.z, yaxis.z, zaxis.z, 0,
+		-xaxis.dot(eye), -yaxis.dot(eye), -zaxis.dot(eye), 1 };
+	float ys = 1.0f / tanf(fovY / 2), q = zf / (zf - zn);
+	const float p[16] = {
+		ys * 3 / 4, 0, 0, 0,
+		0, ys, 0, 0,
+		0, 0, q, 1,
+		0, 0, -q * zn, 0 };
+	memcpy(c.view, v, sizeof(v));
+	memcpy(c.proj, p, sizeof(p));
+	return c;
+}
 
-	// Camera basis: right, up, forward (right-handed, looking along +forward).
-	Vec3 fwd = normalize(cam.forward);
-	Vec3 right = normalize(fwd.cross(cam.up));
-	Vec3 up = right.cross(fwd);
-	Vec3 light = normalize(Vec3(-0.3f, -0.6f, -0.7f));
+namespace {
+
+struct ScreenVertex {
+	float sx, sy, z;    // screen position, z/w in [0,1]
+	float iw;           // 1/w, for perspective-correct interpolation
+	float r, g, b;      // lit colour
+	bool clipped;       // in front of the near plane or behind the camera
+};
+
+// Direct3D 7 fixed-function lighting of one vertex (material: diffuse and ambient white,
+// no specular/emissive, the CFXTexture default; E-0303).
+static void light(const Vec3 &p, const Vec3 &n, const Common::Array<SceneLight> &lights,
+				  float &r, float &g, float &b) {
+	r = g = b = kAmbient;
+	for (uint i = 0; i < lights.size(); i++) {
+		const SceneLight &l = lights[i];
+		if (!l.on)
+			continue;
+		Vec3 d = Vec3(l.d[13], l.d[14], l.d[15]) - p;
+		float dist = sqrtf(d.dot(d));
+		if (dist > l.d[19] || dist < 1e-6f)
+			continue;
+		float ndl = n.dot(d) / dist;
+		if (ndl <= 0)
+			continue;
+		float att = l.d[21] + l.d[22] * dist + l.d[23] * dist * dist;
+		att = att > 0 ? 1.0f / att : 1.0f;
+		r += l.d[1] * ndl * att;
+		g += l.d[2] * ndl * att;
+		b += l.d[3] * ndl * att;
+	}
+	r = MIN(r, 1.0f); g = MIN(g, 1.0f); b = MIN(b, 1.0f);
+}
+
+// Bilinear texture sample with wrapping (D3DTFG/D3DTFN_LINEAR, D3DTADDRESS_WRAP).
+static void sample(const Graphics::Surface &t, float u, float v, float &r, float &g, float &b, float &a) {
+	float fx = u * t.w - 0.5f, fy = v * t.h - 0.5f;
+	int x0 = (int)floorf(fx), y0 = (int)floorf(fy);
+	float ax = fx - x0, ay = fy - y0;
+	r = g = b = a = 0;
+	for (int k = 0; k < 4; k++) {
+		int x = x0 + (k & 1), y = y0 + (k >> 1);
+		x %= t.w; if (x < 0) x += t.w;
+		y %= t.h; if (y < 0) y += t.h;
+		float wgt = ((k & 1) ? ax : 1 - ax) * ((k >> 1) ? ay : 1 - ay);
+		byte pa, pr, pg, pb;
+		t.format.colorToARGB(t.getPixel(x, y), pa, pr, pg, pb);
+		r += wgt * pr; g += wgt * pg; b += wgt * pb; a += wgt * pa;
+	}
+}
+
+} // anonymous namespace
+
+void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera &cam,
+				const Common::Array<SceneLight> &lights, Common::Array<uint16> &depth,
+				const Graphics::Surface *tex, bool alpha) {
+	const int W = screen.w, H = screen.h;
+	if ((int)depth.size() != W * H) {
+		depth.resize(W * H);
+		for (uint i = 0; i < depth.size(); i++)
+			depth[i] = 0xFFFF;
+	}
+	const bool textured = tex && tex->getPixels() && tex->w > 0 && tex->h > 0;
 
 	for (uint s = 0; s < mesh.sections.size(); s++) {
 		const MeshSection &sec = mesh.sections[s];
-		Common::Array<Vertex2D> proj;
-		proj.resize(sec.verts.size());
+		Common::Array<ScreenVertex> sv;
+		sv.resize(sec.verts.size());
 		for (uint i = 0; i < sec.verts.size(); i++) {
-			Vec3 rel = sec.verts[i] - cam.eye;
-			float vx = rel.dot(right), vy = rel.dot(up), vz = rel.dot(fwd);
-			Vertex2D &p = proj[i];
-			p.z = vz;
-			p.behind = vz < 0.01f;
-			if (!p.behind) {
-				p.sx = (0.5f + 0.5f * cam.projX * vx / vz) * W;
-				p.sy = (0.5f - 0.5f * cam.projY * vy / vz) * H;
-			}
+			const Vec3 &v = sec.verts[i];
+			float e[4], c[4];
+			xform(cam.view, v.x, v.y, v.z, 1, e);
+			xform(cam.proj, e[0], e[1], e[2], e[3], c);
+			ScreenVertex &p = sv[i];
+			// ponytail: a triangle crossing the near plane is dropped whole, not clipped;
+			// the scenes' actors stay well inside the frustum.
+			p.clipped = c[3] <= 1e-6f || c[2] < 0;
+			if (p.clipped)
+				continue;
+			p.iw = 1.0f / c[3];
+			p.sx = (c[0] * p.iw + 1) * W / 2;
+			p.sy = (1 - c[1] * p.iw) * H / 2;
+			p.z = c[2] * p.iw;
+			light(v, i < sec.normals.size() ? sec.normals[i] : Vec3(), lights, p.r, p.g, p.b);
 		}
 		for (uint fi = 0; fi < sec.faces.size(); fi++) {
 			const Face &face = sec.faces[fi];
-			const Vertex2D &a = proj[face.v[0]], &b = proj[face.v[1]], &c = proj[face.v[2]];
-			if (a.behind || b.behind || c.behind)
+			const ScreenVertex &a = sv[face.v[0]], &b = sv[face.v[1]], &c = sv[face.v[2]];
+			if (a.clipped || b.clipped || c.clipped)
 				continue;
-			// Flat shade from the triangle's geometric normal.
-			Vec3 n = normalize((sec.verts[face.v[1]] - sec.verts[face.v[0]])
-							   .cross(sec.verts[face.v[2]] - sec.verts[face.v[0]]));
-			float lit = 0.35f + 0.65f * MAX(0.0f, -n.dot(light));
-			byte r = (byte)(200 * lit), g = (byte)(150 * lit), bl = (byte)(110 * lit);
-			uint32 col = screen.format.RGBToColor(r, g, bl);
-
-			// Perspective-correct texture coordinates (u/z, v/z, 1/z interpolated).
+			// Default D3DCULL_CCW: only clockwise (on screen, y down) triangles are drawn.
+			float area = (b.sx - a.sx) * (c.sy - a.sy) - (b.sy - a.sy) * (c.sx - a.sx);
+			if (area <= 0)
+				continue;
 			float au = 0, av = 0, bu = 0, bv = 0, cu = 0, cv = 0;
 			if (textured) {
 				au = sec.u[face.uv[0]]; av = sec.v[face.uv[0]];
 				bu = sec.u[face.uv[1]]; bv = sec.v[face.uv[1]];
 				cu = sec.u[face.uv[2]]; cv = sec.v[face.uv[2]];
 			}
-			float aiz = 1.0f / a.z, biz = 1.0f / b.z, ciz = 1.0f / c.z;
-
-			int minx = (int)floorf(MIN(a.sx, MIN(b.sx, c.sx)));
-			int maxx = (int)ceilf(MAX(a.sx, MAX(b.sx, c.sx)));
-			int miny = (int)floorf(MIN(a.sy, MIN(b.sy, c.sy)));
-			int maxy = (int)ceilf(MAX(a.sy, MAX(b.sy, c.sy)));
-			minx = MAX(minx, 0); miny = MAX(miny, 0);
-			maxx = MIN(maxx, W - 1); maxy = MIN(maxy, H - 1);
-			float area = (b.sx - a.sx) * (c.sy - a.sy) - (b.sy - a.sy) * (c.sx - a.sx);
-			if (area == 0.0f)
-				continue;
+			int minx = MAX((int)ceilf(MIN(a.sx, MIN(b.sx, c.sx)) - 0.5f), 0);
+			int maxx = MIN((int)floorf(MAX(a.sx, MAX(b.sx, c.sx)) - 0.5f), W - 1);
+			int miny = MAX((int)ceilf(MIN(a.sy, MIN(b.sy, c.sy)) - 0.5f), 0);
+			int maxy = MIN((int)floorf(MAX(a.sy, MAX(b.sy, c.sy)) - 0.5f), H - 1);
 			for (int y = miny; y <= maxy; y++) {
 				for (int x = minx; x <= maxx; x++) {
 					float px = x + 0.5f, py = y + 0.5f;
@@ -127,30 +180,37 @@ void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera
 					float w2 = 1.0f - w0 - w1;
 					if (w0 < 0 || w1 < 0 || w2 < 0)
 						continue;
+					// z/w is affine in screen space: interpolate linearly (the z-buffer value).
 					float z = w0 * a.z + w1 * b.z + w2 * c.z;
-					bool pass;
-					if (useScene)
-						pass = depth16(z, cam.farZ) < (*depth)[y * W + x];
-					else
-						pass = z < zbuf[y * W + x];
-					if (!pass)
+					uint16 z16 = (uint16)CLIP(z * 65535.0f, 0.0f, 65535.0f);
+					uint16 &zb = depth[y * W + x];
+					if (z16 > zb)
 						continue;
-					uint32 pix = col;
+					// Perspective-correct colour and texture coordinates.
+					float pw0 = w0 * a.iw, pw1 = w1 * b.iw, pw2 = w2 * c.iw;
+					float inv = 1.0f / (pw0 + pw1 + pw2);
+					pw0 *= inv; pw1 *= inv; pw2 *= inv;
+					float r = pw0 * a.r + pw1 * b.r + pw2 * c.r;
+					float g = pw0 * a.g + pw1 * b.g + pw2 * c.g;
+					float bl = pw0 * a.b + pw1 * b.b + pw2 * c.b;
+					float ta = 255;
 					if (textured) {
-						// Perspective-correct UV, then sample and modulate by the lighting.
-						float iz = w0 * aiz + w1 * biz + w2 * ciz;
-						float u = (w0 * au * aiz + w1 * bu * biz + w2 * cu * ciz) / iz;
-						float v = (w0 * av * aiz + w1 * bv * biz + w2 * cv * ciz) / iz;
-						int tu = (int)(u * tex->w) % tex->w, tv = (int)(v * tex->h) % tex->h;
-						if (tu < 0) tu += tex->w;
-						if (tv < 0) tv += tex->h;
-						byte tr, tg, tb;
-						screen.format.colorToRGB(tex->getPixel(tu, tv), tr, tg, tb);
-						pix = screen.format.RGBToColor((byte)(tr * lit), (byte)(tg * lit), (byte)(tb * lit));
+						float tr, tg, tb;
+						sample(*tex, pw0 * au + pw1 * bu + pw2 * cu, pw0 * av + pw1 * bv + pw2 * cv,
+							   tr, tg, tb, ta);
+						r *= tr; g *= tg; bl *= tb;
+					} else {
+						r *= 255; g *= 255; bl *= 255;
 					}
-					if (!useScene)
-						zbuf[y * W + x] = z;
-					screen.setPixel(x, y, pix);
+					if (alpha) {
+						// SRCALPHA / INVSRCALPHA blend with the page.
+						byte dr, dg, db;
+						screen.format.colorToRGB(screen.getPixel(x, y), dr, dg, db);
+						float k = ta / 255.0f;
+						r = r * k + dr * (1 - k); g = g * k + dg * (1 - k); bl = bl * k + db * (1 - k);
+					}
+					zb = z16;
+					screen.setPixel(x, y, screen.format.RGBToColor((byte)r, (byte)g, (byte)bl));
 				}
 			}
 		}

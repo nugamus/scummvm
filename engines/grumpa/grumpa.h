@@ -57,16 +57,23 @@ public:
 	bool loadBackground(const Common::String &view);
 	/** Decode the view's depth buffer <view>_IZ.fxi into `depth` (E-0009). */
 	bool loadDepth(const Common::String &view, Common::Array<uint16> &depth, int &w, int &h);
+	/** Decode Bitmaps/<file>, an .fxi 16-bit surface (E-0009). */
+	bool loadFxi(const Common::String &file, Common::Array<uint16> &depth, int &w, int &h);
 	/** Load an actor mesh from Meshes/<name>.anb (frame 0 geometry, E-0014). */
 	bool loadMesh(const Common::String &name, Mesh &mesh);
-	/** Read Scenes/Scene_<num>.abi: its type-0x11 views and type-0x0d sprite props
-	 *  (docs/spec/scene.md). */
+	/** Read Scenes/Scene_<num>.abi (lights, sprite props, triggers, mesh actors) and the views
+	 *  of Scene_<num>.scn (docs/spec/scene.md). */
 	bool loadScene(int num, SceneData &scene);
-	/** Draw a sprite prop's frame `frame` at its position with the blue colour key (E-0107). */
-	void drawSprite(const SceneSprite &sprite, int frame = 0);
-	/** Enter scene <num>: load its graph and decode its background (view <num>_1). */
+	/** Read the CFXView record of Scenes/Scene_<num>.scn into scene.views. */
+	bool loadSceneViews(int num, SceneData &scene);
+	/** Draw a sprite prop's frame at its position (colour key or opaque), copying its depth
+	 *  frame into `depth` when it has one (docs/spec/scene.md). */
+	void drawSprite(const SceneSprite &sprite, int frame = 0, Common::Array<uint16> *depth = nullptr);
+	/** Enter scene <num>: load its graph and views and show view 0. */
 	bool enterScene(int num);
-	/** Redraw the current scene (cached background + each sprite's animated frame) at `now`. */
+	/** Show view `k` of the current scene: its background and depth (185 op 30, E-0304). */
+	void setView(int k);
+	/** Redraw the current scene (background, sprites, 3D actors in render order) at `now`. */
 	void renderSceneFrame(uint32 now);
 	/** A left click in the scene at `p`: run the first unspent trigger whose polygon contains
 	 *  it (docs/spec/events.md). Returns true if a trigger fired (the scene changed). */
