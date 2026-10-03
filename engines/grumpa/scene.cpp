@@ -581,6 +581,8 @@ bool GrumpaEngine::handleSceneClick(const Common::Point &p) {
 // Enter scene <num>: read its graph (views + sprites) and decode its background view
 // "<num>_1" into _sceneBg (cached, so animation only re-decodes the small sprites).
 bool GrumpaEngine::enterScene(int num) {
+	_sceneNum = num;
+	_inventory.setScene(num);  // op 23 to the items (E-0503)
 	_sceneData = SceneData();
 	loadScene(num, _sceneData);
 	Common::String bg = Common::String::format("%d_1", num);

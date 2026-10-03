@@ -6,6 +6,8 @@ MODULE_OBJS = \
 	scene.o \
 	render3d.o \
 	menu.o \
+	inventory.o \
+	saveload.o \
 	movie.o \
 	character.o \
 	dialogue.o

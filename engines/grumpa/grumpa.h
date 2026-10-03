@@ -34,6 +34,7 @@
 namespace Graphics { class Font; }
 
 #include "grumpa/detection.h"
+#include "grumpa/inventory.h"
 #include "grumpa/mesh.h"
 
 namespace Grumpa {
@@ -89,6 +90,15 @@ public:
 	static Common::U32String fromCp1252(const Common::String &s);
 	bool loadMenuText(Common::Array<Common::U32String> &items);
 
+
+	// Saves (saveload.cpp, docs/spec/save.md) and the inventory (inventory.cpp).
+	bool hasFeature(EngineFeature f) const override;
+	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
+	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
+	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave = false) override;
+	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
+	Inventory &inventory() { return _inventory; }
+
 private:
 	const ADGameDescription *_gameDesc;
 	Graphics::ManagedSurface _screen;
@@ -103,6 +113,11 @@ private:
 	Common::Array<uint16> _sceneDepth;
 	int _depthW = 0, _depthH = 0;
 	uint32 _sceneTick0 = 0;
+	Inventory _inventory;
+	int _sceneNum = -1;     // the scene shown (-1: menu)
+	bool _restoring = false;  // _nextScene comes from a loaded save
+	bool syncGame(Common::Serializer &s);
+	void syncEvents(Common::Serializer &s);
 	int _nextScene = -1;   // set by a go-to-scene trigger (E-0116); loaded by the main loop
 	bool _showHotspots = false;  // H toggles the trigger-polygon overlay
 	Common::String _cursorName;  // the current cursor image, to avoid redundant reloads
