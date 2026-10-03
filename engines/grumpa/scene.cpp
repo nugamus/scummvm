@@ -99,8 +99,12 @@ static uint decodePlane(const byte *d, uint off, int mode, byte plane[64]) {
 }
 
 bool GrumpaEngine::loadDepth(const Common::String &view, Common::Array<uint16> &depth, int &w, int &h) {
+	return loadFxi(view + "_IZ.fxi", depth, w, h);
+}
+
+bool GrumpaEngine::loadFxi(const Common::String &file, Common::Array<uint16> &depth, int &w, int &h) {
 	Common::File f;
-	Common::String name = "Bitmaps/" + view + "_IZ.fxi";
+	Common::String name = "Bitmaps/" + file;
 	if (!f.open(Common::Path(name)))
 		return false;
 	Common::Array<byte> buf(f.size());
@@ -319,22 +323,54 @@ static bool skipBody(AbiCur &c, uint32 t) {
 
 } // anonymous namespace
 
-Camera cameraFromBlock(const float cam[26]) {
-	Camera c;
-	c.eye = Vec3(cam[13], cam[14], cam[15]);
-	// The view has no stored orientation; the camera looks at the scene target (~origin),
-	// confirmed by projecting the 0x1a meshes onto the matching background (E-0115). forward =
-	// normalize(target - eye); use a world up of +Y, except when looking near-vertical (a
-	// top-down view), where +Y is parallel to forward, so use +Z instead.
-	float len = sqrtf(c.eye.dot(c.eye));
-	c.forward = len > 1e-3f ? Vec3(-c.eye.x / len, -c.eye.y / len, -c.eye.z / len)
-							: Vec3(0.0f, 0.0f, -1.0f);
-	c.up = (c.forward.y > 0.99f || c.forward.y < -0.99f) ? Vec3(0.0f, 0.0f, 1.0f)
-														 : Vec3(0.0f, 1.0f, 0.0f);
-	c.projX = cam[2] != 0.0f ? cam[2] : 1.0f;
-	c.projY = cam[3] != 0.0f ? cam[3] : 1.0f;
-	c.farZ = cam[19];
-	return c;
+// The scene's views live in its .scn (docs/spec/scene.md, E-0301): the last record is the
+// CFXView, `u32 9, u32 id, u32 n, n x (pstr colour, pstr depth), n view matrices, n projection
+// matrices` (16 floats each), ending the file in every scene. Found by its header from the end.
+static bool readSceneViews(const Common::Array<byte> &buf, Common::Array<SceneView> &views) {
+	const byte *d = buf.begin();
+	const uint32 size = buf.size();
+	for (int32 o = (int32)size - 12; o >= 0; o--) {
+		if (READ_LE_UINT32(d + o) != 9)
+			continue;
+		uint32 n = READ_LE_UINT32(d + o + 8);
+		if (n < 1 || n > 5)
+			continue;
+		uint32 p = o + 12;
+		Common::Array<SceneView> vs;
+		vs.resize(n);
+		bool ok = true;
+		for (uint32 k = 0; k < n && ok; k++) {
+			for (int j = 0; j < 2 && ok; j++) {
+				if (p + 4 > size) { ok = false; break; }
+				uint32 len = READ_LE_UINT32(d + p);
+				if (len == 0 || len > 64 || p + 4 + len > size) { ok = false; break; }
+				Common::String str((const char *)d + p + 4, len);
+				str = Common::String(str.c_str());  // drop the terminating NUL
+				(j ? vs[k].depth : vs[k].colour) = str;
+				p += 4 + len;
+			}
+		}
+		if (!ok || p + n * 128 != size)
+			continue;
+		for (uint32 k = 0; k < n; k++) {
+			for (int i = 0; i < 16; i++) {
+				vs[k].cam.view[i] = READ_LE_FLOAT(d + p + k * 64 + i * 4);
+				vs[k].cam.proj[i] = READ_LE_FLOAT(d + p + (n + k) * 64 + i * 4);
+			}
+		}
+		views = vs;
+		return true;
+	}
+	return false;
+}
+
+bool GrumpaEngine::loadSceneViews(int num, SceneData &scene) {
+	Common::File f;
+	if (!f.open(Common::Path(Common::String::format("Scenes/Scene_%03d.scn", num))))
+		return false;
+	Common::Array<byte> buf(f.size());
+	f.read(buf.begin(), buf.size());
+	return readSceneViews(buf, scene.views);
 }
 
 bool GrumpaEngine::loadScene(int num, SceneData &scene) {
@@ -354,15 +390,16 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 		uint32 t = c.u32();
 		uint32 id = c.u32();
 		if (t == 0x11) {
+			// CFXLight (E-0300): its last 0x68 bytes are a D3DLIGHT7, set and enabled at load.
 			c.skip(12); ecVec(c); c.skip(8); ccVec(c); ccVec(c);
-			SceneView v;
-			v.id = id;
-			v.camId = c.u32();
+			c.skip(4);
+			SceneLight l;
+			l.id = id;
 			for (int i = 0; i < 26; i++)
-				v.cam[i] = READ_LE_FLOAT(c.d + c.o + i * 4);
+				l.d[i] = READ_LE_FLOAT(c.d + c.o + i * 4);
 			c.skip(0x68);
 			if (c.ok)
-				scene.views.push_back(v);
+				scene.lights.push_back(l);
 		} else if (t == 0x0d) {
 			// Sprite prop (E-0107): header flags, anim block, gate, then position when gated.
 			SceneSprite sp;
@@ -371,11 +408,15 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			sp.active = c.u32() != 0;       // +0x10c
 			sp.visible = c.u32() != 0;      // +0x110
 			ecVec(c);
-			c.skip(8);               // +0x114,+0x314
-			sp.frames = (int)c.u32();  // +0x1e0
-			sp.fps = (int)c.u32();     // +0x1e4
-			c.skip(16);              // +0x1c8,+0x1f8,+0x208,+0x48c (rest of the 8-u32 block)
-			c.skip(4);               // +0x1d4
+			sp.layer = c.i32();       // +0x114
+			c.skip(4);                // +0x314
+			sp.fps = c.i32();         // +0x1e0
+			sp.anim = c.u32();        // +0x1e4
+			sp.view = c.i32();        // +0x1c8
+			sp.keyed = c.u32() == 1;  // +0x1f8
+			sp.keyColor = c.i32();    // +0x208
+			c.skip(4);
+			c.skip(4);                // +0x1d4
 			uint32 gate = c.u32();   // +0x20c
 			ccVec(c);
 			sub56(c);
@@ -450,45 +491,65 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			return false;
 		}
 	}
-	debug(1, "Grumpa: scene %s -> %u views, %u sprites, %u triggers", name.c_str(),
-		  (uint)scene.views.size(), (uint)scene.sprites.size(), (uint)scene.triggers.size());
+	loadSceneViews(num, scene);
+	debug(1, "Grumpa: scene %s -> %u views, %u lights, %u sprites, %u triggers", name.c_str(),
+		  (uint)scene.views.size(), (uint)scene.lights.size(), (uint)scene.sprites.size(),
+		  (uint)scene.triggers.size());
 	return c.ok;
 }
 
-// The file name of a sprite's frame: a name ending in "_<4 digits>.<ext>" animates by
-// substituting the frame number; any other name is static (drawn as-is). E-0107.
-static Common::String spriteFrameName(const Common::String &base, int frame) {
-	int dot = -1;
-	for (int i = (int)base.size() - 1; i >= 0; i--)
-		if (base[i] == '.') { dot = i; break; }
-	if (dot >= 5 && base[dot - 5] == '_') {
-		bool digits = true;
-		for (int i = dot - 4; i < dot; i++)
-			if (base[i] < '0' || base[i] > '9') { digits = false; break; }
-		if (digits)
-			return Common::String(base.c_str(), dot - 4)
-				+ Common::String::format("%04d", frame) + (base.c_str() + dot);
-	}
-	return base;
+// A sprite's frame files (CFXSprite load, E-0302): a name ending in "0000.<ext>" animates,
+// frame i being the name with i in those four digits; its depth frames, when present, are
+// "<stem>_Z<i>.fxi" (stem = the name without "0000.<ext>"). Any other name is one static frame,
+// with the depth "<name without ext>_Z.fxi".
+static bool spriteAnimated(const Common::String &name) {
+	return name.size() > 8 && Common::String(name.c_str() + name.size() - 8).hasPrefix("0000");
 }
 
-// Draw a sprite prop's frame `frame` at (x, y) with the blue colour key (E-0107): pixels near
-// pure blue (high B, low R/G) are transparent. flag0==0 sprites (smoke etc.) use a different
-// blend in the original (Q-0009); for now they key the same way.
-void GrumpaEngine::drawSprite(const SceneSprite &sprite, int frame) {
+static Common::String spriteFrameName(const Common::String &name, int frame) {
+	if (!spriteAnimated(name))
+		return name;
+	return Common::String(name.c_str(), name.size() - 8)
+		+ Common::String::format("%04d", frame) + (name.c_str() + name.size() - 4);
+}
+
+static Common::String spriteDepthName(const Common::String &name, int frame) {
+	if (!spriteAnimated(name))
+		return Common::String(name.c_str(), name.size() - 4) + "_Z.fxi";
+	return Common::String(name.c_str(), name.size() - 8) + Common::String::format("_Z%04d.fxi", frame);
+}
+
+// Draw a sprite's frame at (x, y) as the original's BltFast (E-0302): with a source colour
+// key when `keyed` (the key is the COLORREF keyColor, or frame 0's top-left pixel when it is
+// -1, matched exactly in the 16-bit page), else opaque. A depth frame, when the sprite has
+// them, is copied into the z-buffer `depth` over the same rectangle, so the 3D actors drawn
+// later are hidden behind it.
+void GrumpaEngine::drawSprite(const SceneSprite &sprite, int frame, Common::Array<uint16> *depth) {
 	if (sprite.name.empty())
 		return;
-	Common::String file = spriteFrameName(sprite.name, frame);
 	Common::File f;
-	if (!f.open(Common::Path("Bitmaps/" + file))) {
-		debug(2, "Grumpa: sprite %s not found", file.c_str());
+	if (!f.open(Common::Path("Bitmaps/" + spriteFrameName(sprite.name, frame))))
 		return;
-	}
 	Image::JPEGDecoder jpeg;
 	jpeg.setOutputPixelFormat(_screen.format);
 	if (!jpeg.loadStream(f))
 		return;
 	const Graphics::Surface *s = jpeg.getSurface();
+	uint32 key = 0;
+	if (sprite.keyed) {
+		if (sprite.keyColor != -1)
+			key = _screen.format.RGBToColor(sprite.keyColor & 0xFF, (sprite.keyColor >> 8) & 0xFF,
+											(sprite.keyColor >> 16) & 0xFF);
+		else if (frame == 0 || !spriteAnimated(sprite.name))
+			key = s->getPixel(0, 0);
+		else {
+			Common::File f0;
+			Image::JPEGDecoder j0;
+			j0.setOutputPixelFormat(_screen.format);
+			if (f0.open(Common::Path("Bitmaps/" + spriteFrameName(sprite.name, 0))) && j0.loadStream(f0))
+				key = j0.getSurface()->getPixel(0, 0);
+		}
+	}
 	for (int yy = 0; yy < s->h; yy++) {
 		int dy = sprite.y + yy;
 		if (dy < 0 || dy >= kScreenHeight)
@@ -497,11 +558,25 @@ void GrumpaEngine::drawSprite(const SceneSprite &sprite, int frame) {
 			int dx = sprite.x + xx;
 			if (dx < 0 || dx >= kScreenWidth)
 				continue;
-			byte r, g, b;
-			_screen.format.colorToRGB(s->getPixel(xx, yy), r, g, b);
-			if (b > 200 && r < 96 && g < 96)  // blue colour key
-				continue;
-			_screen.setPixel(dx, dy, s->getPixel(xx, yy));
+			uint32 pix = s->getPixel(xx, yy);
+			if (!sprite.keyed || pix != key)
+				_screen.setPixel(dx, dy, pix);
+		}
+	}
+	if (!sprite.hasDepth || !depth || depth->size() != (uint)(kScreenWidth * kScreenHeight))
+		return;
+	Common::Array<uint16> z;
+	int zw = 0, zh = 0;
+	if (!loadFxi(spriteDepthName(sprite.name, frame), z, zw, zh))
+		return;
+	for (int yy = 0; yy < zh; yy++) {
+		int dy = sprite.y + yy;
+		if (dy < 0 || dy >= kScreenHeight)
+			continue;
+		for (int xx = 0; xx < zw; xx++) {
+			int dx = sprite.x + xx;
+			if (dx >= 0 && dx < kScreenWidth)
+				(*depth)[dy * kScreenWidth + dx] = z[yy * zw + xx];
 		}
 	}
 }
@@ -571,6 +646,10 @@ bool GrumpaEngine::handleSceneClick(const Common::Point &p) {
 				_nextScene = cmd.arg1;
 				continue;
 			}
+			if (cmd.targetId == 185 && cmd.opcode == 30) {  // change view (E-0304)
+				setView(cmd.arg1);
+				continue;
+			}
 			applyCommand(_sceneData, cmd);
 		}
 		return true;
@@ -578,18 +657,78 @@ bool GrumpaEngine::handleSceneClick(const Common::Point &p) {
 	return false;
 }
 
-// Enter scene <num>: read its graph (views + sprites) and decode its background view
-// "<num>_1" into _sceneBg (cached, so animation only re-decodes the small sprites).
+// Enter scene <num>: read its graph and views, show view 0 (the player's scene entry sets
+// view 0, E-0304) and load the sprites' frame counts and the mesh actors' geometry/textures.
 bool GrumpaEngine::enterScene(int num) {
 	_sceneNum = num;
 	_inventory.setScene(num);  // op 23 to the items (E-0503)
 	_sceneData = SceneData();
 	loadScene(num, _sceneData);
-	Common::String bg = Common::String::format("%d_1", num);
+	if (_sceneData.views.empty()) {  // no .scn: the background by name
+		SceneView v;
+		v.colour = Common::String::format("%d_1_IS.jpg", num);
+		v.depth = Common::String::format("%d_1_IZ.fxi", num);
+		_sceneData.views.push_back(v);
+	}
+	setView(0);
+	for (uint i = 0; i < _sceneData.sprites.size(); i++) {
+		SceneSprite &sp = _sceneData.sprites[i];
+		sp.frameCount = 0;
+		if (sp.name.empty())
+			continue;
+		do
+			sp.frameCount++;
+		while (spriteAnimated(sp.name) && sp.frameCount < 10000 &&
+			   Common::File::exists(Common::Path("Bitmaps/" + spriteFrameName(sp.name, sp.frameCount))));
+		sp.hasDepth = Common::File::exists(Common::Path("Bitmaps/" + spriteDepthName(sp.name, 0)));
+	}
+	for (uint i = 0; i < _sceneData.meshes.size(); i++) {
+		SceneMesh &m = _sceneData.meshes[i];
+		Common::String base = m.anb;
+		if (base.size() > 4 && base[base.size() - 4] == '.')  // strip ".anb"/".ANB"
+			base = Common::String(base.c_str(), base.size() - 4);
+		loadMesh(base, m.mesh);
+		// The actor's texture (E-0114): a 32-bit .tga keeps its alpha and is blended, any
+		// other becomes an RGB555 texture (CFXTexture, E-0303).
+		Common::File tf;
+		// Names are cp1252 ("Dödgrumpapappa.tga"); the extracted cabinet has '_' for those.
+		Common::String ascii = m.tga;
+		for (uint k = 0; k < ascii.size(); k++)
+			if ((byte)ascii[k] >= 0x80)
+				ascii.setChar('_', k);
+		if (!m.tga.empty() && (tf.open(Common::Path("Bitmaps/" + m.tga)) ||
+							   tf.open(Common::Path("Bitmaps/" + ascii)))) {
+			Image::TGADecoder tga;
+			if (tga.loadStream(tf)) {
+				const Graphics::Surface *src = tga.getSurface();
+				m.alpha = src->format.bytesPerPixel == 4 && src->format.aBits() > 0;
+				Graphics::Surface *conv = src->convertTo(m.alpha ? Graphics::PixelFormat(4, 8, 8, 8, 8, 16, 8, 0, 24)
+																: Graphics::PixelFormat(2, 5, 5, 5, 0, 10, 5, 0, 0));
+				Graphics::Surface *argb = conv->convertTo(Graphics::PixelFormat(4, 8, 8, 8, 8, 16, 8, 0, 24));
+				m.texture.copyFrom(*argb);
+				argb->free();
+				delete argb;
+				conv->free();
+				delete conv;
+			}
+		}
+	}
+	_sceneTick0 = g_system->getMillis();
+	debug(1, "Grumpa: entered scene %d (%u views, %u lights, %u sprites, %u meshes)", num,
+		  (uint)_sceneData.views.size(), (uint)_sceneData.lights.size(),
+		  (uint)_sceneData.sprites.size(), (uint)_sceneData.meshes.size());
+	return true;
+}
+
+void GrumpaEngine::setView(int k) {
+	if (k < 0 || k >= (int)_sceneData.views.size())
+		return;
+	_sceneData.view = k;
+	const SceneView &v = _sceneData.views[k];
 	_sceneBg.create(kScreenWidth, kScreenHeight, _screen.format);
 	_sceneBg.clear();
 	Common::File f;
-	if (f.open(Common::Path("Bitmaps/" + bg + "_IS.jpg"))) {
+	if (f.open(Common::Path("Bitmaps/" + v.colour))) {
 		Image::JPEGDecoder jpeg;
 		jpeg.setOutputPixelFormat(_screen.format);
 		if (jpeg.loadStream(f)) {
@@ -597,47 +736,58 @@ bool GrumpaEngine::enterScene(int num) {
 			_sceneBg.blitFrom(*s, Common::Point((kScreenWidth - s->w) / 2, (kScreenHeight - s->h) / 2));
 		}
 	}
-	// The scene depth buffer (for occluding the 3D mesh actors), and the mesh geometry.
 	_sceneDepth.clear();
 	_depthW = _depthH = 0;
-	loadDepth(bg, _sceneDepth, _depthW, _depthH);
-	for (uint i = 0; i < _sceneData.meshes.size(); i++) {
-		SceneMesh &m = _sceneData.meshes[i];
-		Common::String base = m.anb;
-		if (base.size() > 4 && base[base.size() - 4] == '.')  // strip ".anb"/".ANB"
-			base = Common::String(base.c_str(), base.size() - 4);
-		loadMesh(base, m.mesh);
-		// The actor's texture (E-0114), converted to the screen format for direct sampling.
-		Common::File tf;
-		if (!m.tga.empty() && tf.open(Common::Path("Bitmaps/" + m.tga))) {
-			Image::TGADecoder tga;
-			if (tga.loadStream(tf)) {
-				Graphics::Surface *conv = tga.getSurface()->convertTo(_screen.format);
-				m.texture.copyFrom(*conv);
-				conv->free();
-				delete conv;
-			}
-		}
-	}
-	_sceneTick0 = g_system->getMillis();
-	debug(1, "Grumpa: entered scene %d (%u sprites, %u meshes)", num,
-		  (uint)_sceneData.sprites.size(), (uint)_sceneData.meshes.size());
-	return true;
+	loadFxi(v.depth, _sceneDepth, _depthW, _depthH);
+	if (_depthW != kScreenWidth || _depthH != kScreenHeight)
+		_sceneDepth.clear();  // drawn with a cleared z-buffer
 }
 
-// Redraw the current scene: the cached background, then each sprite's current animation frame
-// (frame = elapsed * fps / 1000, wrapped to the frame count). E-0107.
+// The frame a sprite shows `ticks` game ticks (20 ms, 50 per second) after the scene started:
+// one step every 50/fps ticks, forward, backward or ping-pong, looping or holding the last
+// frame (CFXSprite update, E-0302). Only active sprites move.
+static int spriteFrame(const SceneSprite &sp, uint32 ticks) {
+	if (!sp.active || sp.frameCount <= 1 || sp.fps <= 0)
+		return 0;
+	uint32 period = MAX(1, 50 / sp.fps);
+	uint32 step = ticks / period;
+	uint32 n = sp.frameCount;
+	bool loop = sp.anim & 1;
+	if (sp.anim & 2) {  // ping-pong
+		uint32 cycle = 2 * (n - 1);
+		if (!loop && step >= cycle)
+			return 0;
+		uint32 p = step % cycle;
+		return p < n ? p : cycle - p;
+	}
+	if (!loop && step >= n)
+		step = n - 1;
+	return (sp.anim & 8) ? (int)(n - 1 - step % n) : (int)(step % n);
+}
+
+// Redraw the current scene in the original's render order (E-0305): the view's background
+// and depth, then every visible actor by layer: layer-1 sprites, the layer-3 mesh actors
+// (lit, textured, depth-tested against the z-buffer), layer-4 sprites.
 void GrumpaEngine::renderSceneFrame(uint32 now) {
 	_screen.blitFrom(_sceneBg);
-	uint32 elapsed = now - _sceneTick0;
-	for (uint i = 0; i < _sceneData.sprites.size(); i++) {
-		const SceneSprite &sp = _sceneData.sprites[i];
-		if (!sp.visible)  // hidden until a command shows it (E-0111)
+	Common::Array<uint16> depth = _sceneDepth;
+	uint32 ticks = (now - _sceneTick0) / 20;
+	for (int layer = 0; layer <= 8; layer++) {
+		for (uint i = 0; i < _sceneData.sprites.size(); i++) {
+			const SceneSprite &sp = _sceneData.sprites[i];
+			if (sp.layer != layer || !sp.visible || (sp.view != -1 && sp.view != _sceneData.view))
+				continue;
+			drawSprite(sp, spriteFrame(sp, ticks), &depth);
+		}
+		if (layer != 3)
 			continue;
-		int frame = 0;
-		if (sp.active && sp.frames > 1 && sp.fps > 0)  // only animate active sprites
-			frame = (int)((elapsed * (uint32)sp.fps / 1000) % (uint32)sp.frames);
-		drawSprite(sp, frame);
+		const Camera &cam = _sceneData.views[_sceneData.view].cam;
+		for (uint i = 0; i < _sceneData.meshes.size(); i++) {
+			const SceneMesh &m = _sceneData.meshes[i];
+			if (m.visible && !m.mesh.empty())
+				renderMesh(_screen, m.mesh, cam, _sceneData.lights, depth,
+						   m.texture.getPixels() ? &m.texture : nullptr, m.alpha);
+		}
 	}
 	// Hotspot overlay (H): outline each unspent trigger's clickable polygon (E-0108), so the
 	// exits and interactions are visible. A development/accessibility view.
@@ -652,12 +802,6 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 								 tr.poly[(j + 1) % tr.poly.size()].x, tr.poly[(j + 1) % tr.poly.size()].y, col);
 		}
 	}
-	// 3D animated-mesh actors (type 0x1a, E-0114) are loaded (meshes cached) but not yet drawn
-	// in the live scene: each scene has several views at different eye positions, and the
-	// view that matches the shown background ("<n>_1") is not yet mapped (Scene_061 has 4
-	// views near/far the geometry; picking views[0] renders them off-screen). Once the
-	// view->background mapping is known, draw the active meshes through that view's camera with
-	// depth occlusion (verified via the dev harness). See docs/spec/scene.md.
 }
 
 } // End of namespace Grumpa
