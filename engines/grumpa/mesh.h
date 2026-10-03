@@ -37,14 +37,18 @@ struct Vec3 {
 	float dot(const Vec3 &o) const { return x * o.x + y * o.y + z * o.z; }
 };
 
-// A face references three vertices and (separately) three texture coordinates (E-0014).
+// A face references three vertices and (separately) three texture coordinates (E-0014). The
+// loader points each corner at the vertex the original's vertex buffer holds for its uv index
+// (E-0600).
 struct Face {
 	uint16 v[3];
 	uint16 uv[3];
 };
 
-// One drawable section of a mesh: vertices, normals, triangles and UVs.
+// One drawable section of a mesh: vertices and normals of every frame (frame k's `nv` vertices
+// at k * nv), triangles and UVs.
 struct MeshSection {
+	uint nv = 0;
 	Common::Array<Vec3> verts;
 	Common::Array<Vec3> normals;
 	Common::Array<Face> faces;
@@ -52,7 +56,7 @@ struct MeshSection {
 };
 
 struct Mesh {
-	int frames = 0;
+	int frames = 0;  // the frames the original reads (E-0600); the sections hold them all
 	Common::Array<MeshSection> sections;
 	bool empty() const { return sections.empty(); }
 };
@@ -176,6 +180,16 @@ struct SceneMesh {
 	Mesh mesh;                   // loaded once on scene entry
 	Graphics::Surface texture;   // .tga, as 32-bit ARGB (alpha used when the .tga has it)
 	bool alpha = false;          // 32-bit .tga: alpha-blended
+	// Animation (E-0601, docs/spec/scene.md), as read; the VM runs it (events.cpp).
+	int fps = 0;                 // +0x1b4
+	uint32 anim = 0;             // +0x1b8: 1 loop, 2 ping-pong, 4 forward, 8 backward, 0x10 there and back
+	bool playing = false;        // +0x1d4
+	int frame = 0;               // +0x1c0
+	bool autoplay = false;       // +0x1dc: plays on the scene-entry broadcast
+	// The delay timer (+0x278): a play waits `ticks` updates before running.
+	bool timerOn = false, timerCounting = false, timerRandom = false;
+	int32 timerMin = 0, timerMax = 0, timerFixed = 0;  // ms
+	int32 timerTicks = 0;
 };
 
 // Everything the engine reads from a Scene_<NNN>.abi today.
@@ -186,7 +200,7 @@ struct SceneData {
 	Common::Array<SceneSprite> sprites;
 	Common::Array<SceneTrigger> triggers;
 	Common::Array<SceneMesh> meshes;
-	Common::Array<SpriteHooks> spriteHooks;  // the event VM's view of the sprites
+	Common::Array<SpriteHooks> spriteHooks;  // the event VM's view of the sprites and meshes
 	Common::Array<SceneLogic> logic;         // 0x21..0x27
 	Common::Array<SceneSound> sounds;        // 0x18/0x2a (dialogue.cpp)
 };
@@ -198,10 +212,11 @@ Camera lookAtCamera(const Vec3 &eye, const Vec3 &target, float fovY, float zn, f
  *  device (docs/spec/scene.md): counter-clockwise faces culled, Gouraud lighting from
  *  `lights` over the 0x1e1e1e ambient, `tex` (ARGB8888, may be null) modulated with
  *  bilinear filtering, alpha-blended when `alpha`. `depth` (16-bit, screen-sized) is the
- *  z-buffer: tested less-or-equal and written. */
+ *  z-buffer: tested less-or-equal and written. Draws `frame` (nothing when it is not one of
+ *  the mesh's frames); triangles are clipped to the near plane. */
 void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera &cam,
 				const Common::Array<SceneLight> &lights, Common::Array<uint16> &depth,
-				const Graphics::Surface *tex = nullptr, bool alpha = false);
+				const Graphics::Surface *tex = nullptr, bool alpha = false, int frame = 0);
 
 } // End of namespace Grumpa
 

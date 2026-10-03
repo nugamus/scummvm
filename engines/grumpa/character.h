@@ -54,6 +54,8 @@ struct Character {
 	Graphics::Surface skin;          // ARGB8888, like SceneMesh::texture
 	bool alpha = false;
 	int skinIndex = -1;              // the texture index `skin` was loaded for
+	float clock = 0.0f;              // +0x4a4: the animation clock (E-0603)
+	int frame = 0;                   // +0x494: the frame of the clip shown
 	Common::Array<int32> state;      // the state slots (E-0201, E-0407): 6 per character
 };
 
@@ -70,6 +72,8 @@ public:
 	int scene() const { return _scene; }
 	const Common::Array<Character> &all() const { return _chars; }
 	Common::Array<Character> &list() { return _chars; }
+	/** The 20 ms update: present characters step their clip's frames (E-0603). */
+	void update();
 	/** State slot `slot` of character `id` for a condition (E-0201); false if `id` is no character. */
 	bool stateOf(int id, int slot, int32 &value);
 
