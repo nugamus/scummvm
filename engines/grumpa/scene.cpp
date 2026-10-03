@@ -660,6 +660,34 @@ bool GrumpaEngine::handleSceneClick(const Common::Point &p) {
 	return _events->click(p);
 }
 
+// An actor's texture (E-0114): a 32-bit .tga keeps its alpha and is blended, any other becomes
+// an RGB555 texture (CFXTexture, E-0303); returned as ARGB8888. Names are cp1252
+// (e.g. a dead-father texture); the extracted cabinet has '_' for those letters.
+static bool loadActorTexture(const Common::String &name, Graphics::Surface &out, bool &alpha) {
+	Common::File tf;
+	Common::String ascii = name;
+	for (uint k = 0; k < ascii.size(); k++)
+		if ((byte)ascii[k] >= 0x80)
+			ascii.setChar('_', k);
+	if (name.empty() || !(tf.open(Common::Path("Bitmaps/" + name)) || tf.open(Common::Path("Bitmaps/" + ascii))))
+		return false;
+	Image::TGADecoder tga;
+	if (!tga.loadStream(tf))
+		return false;
+	const Graphics::Surface *src = tga.getSurface();
+	alpha = src->format.bytesPerPixel == 4 && src->format.aBits() > 0;
+	Graphics::Surface *conv = src->convertTo(alpha ? Graphics::PixelFormat(4, 8, 8, 8, 8, 16, 8, 0, 24)
+												   : Graphics::PixelFormat(2, 5, 5, 5, 0, 10, 5, 0, 0));
+	Graphics::Surface *argb = conv->convertTo(Graphics::PixelFormat(4, 8, 8, 8, 8, 16, 8, 0, 24));
+	out.free();
+	out.copyFrom(*argb);
+	argb->free();
+	delete argb;
+	conv->free();
+	delete conv;
+	return true;
+}
+
 // Enter scene <num>: read its graph and views, show view 0 (the player's scene entry sets
 // view 0, E-0304) and load the sprites' frame counts and the mesh actors' geometry/textures.
 bool GrumpaEngine::enterScene(int num) {
@@ -692,30 +720,7 @@ bool GrumpaEngine::enterScene(int num) {
 		if (base.size() > 4 && base[base.size() - 4] == '.')  // strip ".anb"/".ANB"
 			base = Common::String(base.c_str(), base.size() - 4);
 		loadMesh(base, m.mesh);
-		// The actor's texture (E-0114): a 32-bit .tga keeps its alpha and is blended, any
-		// other becomes an RGB555 texture (CFXTexture, E-0303).
-		Common::File tf;
-		// Names are cp1252 ("Dödgrumpapappa.tga"); the extracted cabinet has '_' for those.
-		Common::String ascii = m.tga;
-		for (uint k = 0; k < ascii.size(); k++)
-			if ((byte)ascii[k] >= 0x80)
-				ascii.setChar('_', k);
-		if (!m.tga.empty() && (tf.open(Common::Path("Bitmaps/" + m.tga)) ||
-							   tf.open(Common::Path("Bitmaps/" + ascii)))) {
-			Image::TGADecoder tga;
-			if (tga.loadStream(tf)) {
-				const Graphics::Surface *src = tga.getSurface();
-				m.alpha = src->format.bytesPerPixel == 4 && src->format.aBits() > 0;
-				Graphics::Surface *conv = src->convertTo(m.alpha ? Graphics::PixelFormat(4, 8, 8, 8, 8, 16, 8, 0, 24)
-																: Graphics::PixelFormat(2, 5, 5, 5, 0, 10, 5, 0, 0));
-				Graphics::Surface *argb = conv->convertTo(Graphics::PixelFormat(4, 8, 8, 8, 8, 16, 8, 0, 24));
-				m.texture.copyFrom(*argb);
-				argb->free();
-				delete argb;
-				conv->free();
-				delete conv;
-			}
-		}
+		loadActorTexture(m.tga, m.texture, m.alpha);
 	}
 	_sceneTick0 = g_system->getMillis();
 	_events->enterScene(num, &_sceneData);  // kept status, deferred commands, 23 and 86
@@ -769,6 +774,40 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 			if (m.visible && !m.mesh.empty())
 				renderMesh(_screen, m.mesh, cam, _sceneData.lights, depth,
 						   m.texture.getPixels() ? &m.texture : nullptr, m.alpha);
+		}
+		// The characters at home in this scene (characters.md, E-0403): the idle mesh turned by
+		// yaw about +Y and moved to the position. ponytail: idle pose only, no state machine
+		// (Q-0403); the yaw sign follows D3DX's RotationY, not yet checked against the original.
+		Common::Array<Character> &chars = _characters.list();
+		for (uint i = 0; i < chars.size(); i++) {
+			Character &c = chars[i];
+			if (!_characters.present(c) || c.anims.empty())
+				continue;
+			if (!c.loaded) {
+				c.loaded = true;
+				Common::String base = c.anims[0];
+				if (base.size() > 4 && base[base.size() - 4] == '.')
+					base = Common::String(base.c_str(), base.size() - 4);
+				loadMesh(base, c.mesh);
+			}
+			if (c.skinIndex != c.texture && c.texture >= 0 && c.texture < (int)c.textures.size()) {
+				c.skinIndex = c.texture;
+				loadActorTexture(c.textures[c.texture], c.skin, c.alpha);
+			}
+			if (c.mesh.empty())
+				continue;
+			Mesh placed = c.mesh;
+			float cs = cosf(c.yaw), sn = sinf(c.yaw);
+			for (uint s = 0; s < placed.sections.size(); s++) {
+				MeshSection &sec = placed.sections[s];
+				for (uint v = 0; v < sec.verts.size(); v++) {
+					const Vec3 p = sec.verts[v], n = sec.normals[v];
+					sec.verts[v] = Vec3(p.x * cs + p.z * sn + c.pos.x, p.y + c.pos.y, -p.x * sn + p.z * cs + c.pos.z);
+					sec.normals[v] = Vec3(n.x * cs + n.z * sn, n.y, -n.x * sn + n.z * cs);
+				}
+			}
+			renderMesh(_screen, placed, cam, _sceneData.lights, depth,
+					   c.skin.getPixels() ? &c.skin : nullptr, c.alpha);
 		}
 	}
 	// Hotspot overlay (H): outline each unspent trigger's clickable polygon (E-0108), so the
