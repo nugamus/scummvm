@@ -30,7 +30,7 @@ namespace Grumpa {
 // ScummVM saves holding what the original keeps in Save\Current\ (docs/spec/save.md):
 // the current scene, the items and the inventory, then the event VM's state.
 enum {
-	kSaveVersion = 1
+	kSaveVersion = 2  // 2: the event VM block
 };
 
 bool GrumpaEngine::hasFeature(EngineFeature f) const {
