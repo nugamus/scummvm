@@ -29,16 +29,21 @@
 
 #include "engines/util.h"
 
+#include "grumpa/events.h"
 #include "grumpa/grumpa.h"
 
 namespace Grumpa {
 
 GrumpaEngine::GrumpaEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	: Engine(syst), _gameDesc(gameDesc) {
+	_events = new EventVM(this);
+	_voices = new Voices(_mixer, &_characters);
 }
 
 GrumpaEngine::~GrumpaEngine() {
 	delete _menuFont;
+	delete _voices;
+	delete _events;
 }
 
 Common::Error GrumpaEngine::run() {
@@ -54,6 +59,7 @@ Common::Error GrumpaEngine::run() {
 
 	// The game data sits in subdirectories (Bitmaps, Actors, Scenes, ...) of the game dir.
 	SearchMan.addDirectory("gamedir", ConfMan.getPath("path"), 0, 2);
+	_events->newGame();  // the global actors of Actors/global.atx (E-0205)
 	setGameCursor();
 
 	_screen.clear();
@@ -144,6 +150,7 @@ Common::Error GrumpaEngine::run() {
 					// animated sprite props (docs/spec/scene.md). Scene navigation and the
 					// game logic are the next layers.
 					_inventory.load();
+					_events->newGame();
 					enterScene(1);
 					state = kScene;
 					dirty = true;
@@ -164,6 +171,20 @@ Common::Error GrumpaEngine::run() {
 			// Redraw the scene at ~15 fps for the sprite animation (the original ran a 10 ms
 			// timer; the props cycle at a few fps).
 			uint32 now = g_system->getMillis();
+			// The event VM: one update per 20 ms, at most one when far behind (E-0202).
+			if (now - _lastUpdate > 1000)
+				_lastUpdate = now - EventVM::kUpdateMs;
+			while (now - _lastUpdate >= EventVM::kUpdateMs && _nextScene < 0) {
+				_lastUpdate += EventVM::kUpdateMs;
+				_events->update();
+				dirty = true;
+			}
+			if (_nextScene >= 0) {  // 185 op 31 (E-0206)
+				enterScene(_nextScene);
+				_nextScene = -1;
+				_cursorName = "";
+				_lastUpdate = g_system->getMillis();
+			}
 			if (dirty || now - lastSceneDraw >= 66) {
 				renderSceneFrame(now);
 				_inventory.draw(_screen);

@@ -22,6 +22,7 @@
 #include "common/serializer.h"
 #include "common/stream.h"
 
+#include "grumpa/events.h"
 #include "grumpa/grumpa.h"
 
 namespace Grumpa {
@@ -63,6 +64,7 @@ bool GrumpaEngine::syncGame(Common::Serializer &s) {
 
 // The event VM's block (actor states, kept scene statuses, the command lists): events.cpp.
 void GrumpaEngine::syncEvents(Common::Serializer &s) {
+	_events->syncState(s);  // events.cpp
 }
 
 Common::Error GrumpaEngine::saveGameStream(Common::WriteStream *stream, bool isAutosave) {

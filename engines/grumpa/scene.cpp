@@ -29,6 +29,8 @@
 #include "image/jpeg.h"
 #include "image/tga.h"
 
+#include "grumpa/dialogue.h"
+#include "grumpa/events.h"
 #include "grumpa/grumpa.h"
 
 static inline float READ_LE_FLOAT(const byte *p) {
@@ -183,7 +185,6 @@ bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
 // Set the system cursor to UI/002_Cursor/<name>_0000.jpg (the game's cursor set, 002_Cursor.atx:
 // default, grabing, pointpush, pull, push, stop, attack, itemglitter, ...). The JPEGs key out
 // their blue background (E-0107). Cached by name so hover updates are cheap.
-static bool pointInPoly(const Common::Array<Common::Point> &poly, const Common::Point &p);
 
 void GrumpaEngine::setCursorImage(const Common::String &name) {
 	if (name == _cursorName)
@@ -223,7 +224,7 @@ void GrumpaEngine::updateHoverCursor(const Common::Point &p) {
 	bool overTrigger = false;
 	for (uint i = 0; i < _sceneData.triggers.size(); i++) {
 		const SceneTrigger &tr = _sceneData.triggers[i];
-		if (!tr.spent && tr.poly.size() >= 3 && pointInPoly(tr.poly, p)) {
+		if (_events->triggerClickable(tr) && tr.poly.size() >= 3 && pointInPolygon(tr.poly, p)) {
 			overTrigger = true;
 			break;
 		}
@@ -260,6 +261,41 @@ static void ec(AbiCur &c) { c.skip(20); }
 static void cc(AbiCur &c) { c.skip(20); int32 k = acount(c); for (int32 i = 0; i < k && c.ok; i++) ec(c); }
 static void ecVec(AbiCur &c) { int32 k = acount(c); for (int32 i = 0; i < k && c.ok; i++) ec(c); }
 static void ccVec(AbiCur &c) { int32 k = acount(c); for (int32 i = 0; i < k && c.ok; i++) cc(c); }
+
+// The event VM's reads (docs/spec/events.md): an EC vector as conditions or as state slots,
+// a CC vector as commands with their conditions (E-0109, E-0201).
+static void readConds(AbiCur &c, Common::Array<SceneCond> &out) {
+	int32 k = acount(c);
+	for (int32 i = 0; i < k && c.ok; i++) {
+		SceneCond e;
+		e.id = c.i32(); e.slot = c.i32(); e.value = c.i32(); e.mode = c.i32(); e.link = c.i32();
+		out.push_back(e);
+	}
+}
+// Every record's head after `type, id`: active (+0x10c), visible (+0x110), then its state
+// slots as `n, n x u32` (the loader re-reads the id into +0x108; E-0400, E-0201).
+static void readHead(AbiCur &c, bool &active, bool &visible, Common::Array<int32> *state = nullptr) {
+	active = c.u32() != 0;
+	visible = c.u32() != 0;
+	int32 n = acount(c);
+	for (int32 i = 0; i < n && c.ok; i++) {
+		int32 v = c.i32();
+		if (state)
+			state->push_back(v);
+	}
+	if (state && state->empty())
+		state->push_back(0);   // the "State" slot every actor has
+}
+static void readCmds(AbiCur &c, CommandList &out) {
+	int32 k = acount(c);
+	for (int32 i = 0; i < k && c.ok; i++) {
+		SceneCommand cmd;
+		cmd.when = c.i32(); cmd.targetId = c.i32(); cmd.opcode = c.i32();
+		cmd.arg1 = c.i32(); cmd.arg2 = c.i32();
+		readConds(c, cmd.conds);
+		out.push_back(cmd);
+	}
+}
 static void pstr(AbiCur &c) { int32 k = c.i32(); if (k > 0) c.skip(k); }
 static void sub56(AbiCur &c) { c.skip(56); }
 static void sub24(AbiCur &c) { c.skip(24); }
@@ -404,10 +440,7 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			// Sprite prop (E-0107): header flags, anim block, gate, then position when gated.
 			SceneSprite sp;
 			sp.id = id;
-			c.skip(4);                      // +0x108 (parent/link)
-			sp.active = c.u32() != 0;       // +0x10c
-			sp.visible = c.u32() != 0;      // +0x110
-			ecVec(c);
+			readHead(c, sp.active, sp.visible);
 			sp.layer = c.i32();       // +0x114
 			c.skip(4);                // +0x314
 			sp.fps = c.i32();         // +0x1e0
@@ -416,43 +449,42 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			sp.keyed = c.u32() == 1;  // +0x1f8
 			sp.keyColor = c.i32();    // +0x208
 			c.skip(4);
-			c.skip(4);                // +0x1d4
+			SpriteHooks hk;           // the event VM's part (E-0208)
+			hk.id = id;
+			hk.autoplay = c.u32() == 1;  // +0x1d4
 			uint32 gate = c.u32();   // +0x20c
-			ccVec(c);
+			readCmds(c, hk.onEnd);   // +0x14c
 			sub56(c);
 			if (gate == 1) {
 				sp.x = (int)c.u32();  // +0x190
 				sp.y = (int)c.u32();  // +0x194
 			}
-			ccVec(c); ccVec(c);
+			readCmds(c, hk.onForward);   // +0x12c
+			readCmds(c, hk.onBackward);  // +0x13c
 			// trailing pstr: the JPG frame-base name
 			int32 n = c.i32();
 			if (n > 0) {
 				sp.name = Common::String((const char *)(c.d + c.o), n);
 				c.skip(n);
 			}
-			if (c.ok)
+			if (c.ok) {
 				scene.sprites.push_back(sp);
+				scene.spriteHooks.push_back(hk);
+			}
 		} else if (t == 0x19) {
-			// Trigger (E-0108/E-0109): capture its command list (CC) and clickable polygon.
+			// Trigger (E-0108, E-0207): flags, gates, conditions, commands and polygon.
 			SceneTrigger tr;
 			tr.id = id;
-			c.skip(12); ecVec(c); c.skip(32); c.skip(76); sub56(c); ecVec(c);
-			int32 ncc = acount(c);
-			for (int32 j = 0; j < ncc && c.ok; j++) {
-				int32 base[5];
-				for (int b = 0; b < 5; b++) base[b] = (int32)c.u32();
-				int32 nsub = acount(c);           // nested EC guard conditions
-				c.skip(20 * (uint32)nsub);
-				SceneCommand cmd;
-				cmd.when = base[0];               // base = (when, targetId, opcode, arg1, arg2)
-				cmd.targetId = base[1];
-				cmd.opcode = base[2];
-				cmd.arg1 = base[3];
-				cmd.arg2 = base[4];
-				cmd.hasCond = nsub > 0;
-				tr.cmds.push_back(cmd);
-			}
+			readHead(c, tr.active, tr.visible);
+			c.skip(4);                     // +0x170
+			tr.view = c.i32();             // +0x174
+			tr.click = c.u32() == 1;       // +0x178
+			tr.proximity = c.u32() == 1;   // +0x17c
+			tr.hasConds = c.u32() == 1;    // +0x180
+			c.skip(12);                    // +0x188, +0x14c, +0x150
+			c.skip(76); sub56(c);
+			readConds(c, tr.conds);        // +0x190
+			readCmds(c, tr.cmds);          // +0x12c
 			int32 k = c.i32();                     // polygon point count
 			for (int32 j = 0; j < k && c.ok; j++) {
 				float px = READ_LE_FLOAT(c.d + c.o); c.skip(4);
@@ -475,10 +507,8 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			// .anb mesh and .tga texture names.
 			SceneMesh m;
 			m.id = id;
-			c.skip(4);
-			m.active = c.u32() != 0;        // +0x10c
-			m.visible = c.u32() != 0;       // +0x110
-			ecVec(c); c.skip(72); sub56(c); sub24(c); sub24(c); pairVec(c);
+			readHead(c, m.active, m.visible);
+			c.skip(72); sub56(c); sub24(c); sub24(c); pairVec(c);
 			for (int v = 0; v < 8 && c.ok; v++) ccVec(c);
 			int32 na = c.i32();
 			if (na > 0) { m.anb = Common::String((const char *)(c.d + c.o), na); c.skip(na); }
@@ -486,6 +516,38 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			if (nt > 0) { m.tga = Common::String((const char *)(c.d + c.o), nt); c.skip(nt); }
 			if (c.ok)
 				scene.meshes.push_back(m);
+		} else if (t == 0x18 || t == 0x2a) {
+			// Sound actor (dialogue.cpp, E-0405).
+			SceneSound snd;
+			uint32 o = c.o;
+			if (!readSceneSound(c.d, c.n, o, id, snd)) {
+				c.ok = false;
+				break;
+			}
+			c.o = o;
+			scene.sounds.push_back(snd);
+		} else if (t >= 0x21 && t <= 0x27) {
+			// Logic actors (E-0204): script, counter, timer, flag (0x25..0x27 = 0x22..0x24).
+			SceneLogic a;
+			a.id = id;
+			a.type = t;
+			readHead(c, a.active, a.visible, &a.state);
+			uint32 k = t >= 0x25 ? t - 3 : t;
+			if (k == 0x21) {
+				a.f0 = c.i32();          // +0x128 guarded
+				readConds(c, a.conds);   // +0x12c
+			} else if (k == 0x22) {
+				a.f0 = c.i32();          // +0x130 max
+				a.f1 = c.i32();          // +0x148 fire
+			} else if (k == 0x23) {
+				a.f0 = c.i32();          // +0x12c limit (ms)
+				c.skip(8);               // +0x130, +0x134
+			} else {
+				a.f0 = c.i32();          // +0x12c fire
+			}
+			readCmds(c, a.cmds);
+			if (c.ok)
+				scene.logic.push_back(a);
 		} else if (!skipBody(c, t)) {
 			warning("Grumpa: scene %s unmodelled type %#x at %#x", name.c_str(), t, c.o - 8);
 			return false;
@@ -582,7 +644,7 @@ void GrumpaEngine::drawSprite(const SceneSprite &sprite, int frame, Common::Arra
 }
 
 // Ray-cast point-in-polygon for a trigger's clickable region (E-0108).
-static bool pointInPoly(const Common::Array<Common::Point> &poly, const Common::Point &p) {
+bool pointInPolygon(const Common::Array<Common::Point> &poly, const Common::Point &p) {
 	bool in = false;
 	for (uint i = 0, j = poly.size() - 1; i < poly.size(); j = i++) {
 		if ((poly[i].y > p.y) != (poly[j].y > p.y) &&
@@ -593,68 +655,9 @@ static bool pointInPoly(const Common::Array<Common::Point> &poly, const Common::
 	return in;
 }
 
-// Apply one command to its target actor (by id), per the opcode vocabulary (E-0111). Only
-// sprites and triggers are modelled so far; commands to other actor ids are ignored.
-static void applyCommand(SceneData &scene, const SceneCommand &cmd) {
-	for (uint i = 0; i < scene.sprites.size(); i++) {
-		SceneSprite &s = scene.sprites[i];
-		if ((int)s.id != cmd.targetId)
-			continue;
-		debug(2, "Grumpa:   cmd target=%d op=%d -> sprite %s (vis %d act %d)",
-			  cmd.targetId, cmd.opcode, s.name.c_str(), s.visible, s.active);
-		switch (cmd.opcode) {
-		case 0:   s.active = true; break;               // play
-		case 1:   s.active = false; break;              // stop
-		case 2:   s.visible = true; break;              // show
-		case 3:   s.visible = false; break;             // hide
-		case 11:  s.active = true; break;               // activate
-		case 12:  s.active = false; break;              // deactivate
-		case 13:  s.active = s.visible = false; break;  // disable
-		case 500: s.active = s.visible = true; break;   // full on
-		case 501: s.active = s.visible = false; break;  // full off
-		default: break;
-		}
-		return;
-	}
-	for (uint i = 0; i < scene.triggers.size(); i++) {
-		SceneTrigger &tr = scene.triggers[i];
-		if ((int)tr.id != cmd.targetId)
-			continue;
-		if (cmd.opcode == 13)       // disable (one-shot)
-			tr.spent = true;
-		else if (cmd.opcode == 11 || cmd.opcode == 500 || cmd.opcode == 52)
-			tr.spent = false;       // (re-)enable
-		return;
-	}
-}
-
+// A click in the scene goes to the triggers as opcode 18 (docs/spec/events.md, E-0207).
 bool GrumpaEngine::handleSceneClick(const Common::Point &p) {
-	for (uint i = 0; i < _sceneData.triggers.size(); i++) {
-		SceneTrigger &tr = _sceneData.triggers[i];
-		if (tr.spent || tr.poly.size() < 3 || !pointInPoly(tr.poly, p))
-			continue;
-		debug(1, "Grumpa: trigger %u fired (%u commands)", tr.id, (uint)tr.cmds.size());
-		// Apply only the immediate, unconditional commands for now; timed (when>=0) and
-		// condition-guarded commands need the tick queue and variable actors (Q-0010).
-		for (uint j = 0; j < tr.cmds.size(); j++) {
-			const SceneCommand &cmd = tr.cmds[j];
-			if (cmd.when != -1 || cmd.hasCond)
-				continue;
-			// Navigation: a command to the scene manager (id 185) opcode 31 goes to the scene
-			// in arg1 (E-0116); the main loop performs the load.
-			if (cmd.targetId == 185 && cmd.opcode == 31) {
-				_nextScene = cmd.arg1;
-				continue;
-			}
-			if (cmd.targetId == 185 && cmd.opcode == 30) {  // change view (E-0304)
-				setView(cmd.arg1);
-				continue;
-			}
-			applyCommand(_sceneData, cmd);
-		}
-		return true;
-	}
-	return false;
+	return _events->click(p);
 }
 
 // Enter scene <num>: read its graph and views, show view 0 (the player's scene entry sets
@@ -662,6 +665,7 @@ bool GrumpaEngine::handleSceneClick(const Common::Point &p) {
 bool GrumpaEngine::enterScene(int num) {
 	_sceneNum = num;
 	_inventory.setScene(num);  // op 23 to the items (E-0503)
+	_events->leaveScene();     // broadcast 25, keep the old scene's status (E-0202)
 	_sceneData = SceneData();
 	loadScene(num, _sceneData);
 	if (_sceneData.views.empty()) {  // no .scn: the background by name
@@ -714,6 +718,7 @@ bool GrumpaEngine::enterScene(int num) {
 		}
 	}
 	_sceneTick0 = g_system->getMillis();
+	_events->enterScene(num, &_sceneData);  // kept status, deferred commands, 23 and 86
 	debug(1, "Grumpa: entered scene %d (%u views, %u lights, %u sprites, %u meshes)", num,
 		  (uint)_sceneData.views.size(), (uint)_sceneData.lights.size(),
 		  (uint)_sceneData.sprites.size(), (uint)_sceneData.meshes.size());
@@ -743,41 +748,18 @@ void GrumpaEngine::setView(int k) {
 		_sceneDepth.clear();  // drawn with a cleared z-buffer
 }
 
-// The frame a sprite shows `ticks` game ticks (20 ms, 50 per second) after the scene started:
-// one step every 50/fps ticks, forward, backward or ping-pong, looping or holding the last
-// frame (CFXSprite update, E-0302). Only active sprites move.
-static int spriteFrame(const SceneSprite &sp, uint32 ticks) {
-	if (!sp.active || sp.frameCount <= 1 || sp.fps <= 0)
-		return 0;
-	uint32 period = MAX(1, 50 / sp.fps);
-	uint32 step = ticks / period;
-	uint32 n = sp.frameCount;
-	bool loop = sp.anim & 1;
-	if (sp.anim & 2) {  // ping-pong
-		uint32 cycle = 2 * (n - 1);
-		if (!loop && step >= cycle)
-			return 0;
-		uint32 p = step % cycle;
-		return p < n ? p : cycle - p;
-	}
-	if (!loop && step >= n)
-		step = n - 1;
-	return (sp.anim & 8) ? (int)(n - 1 - step % n) : (int)(step % n);
-}
-
 // Redraw the current scene in the original's render order (E-0305): the view's background
 // and depth, then every visible actor by layer: layer-1 sprites, the layer-3 mesh actors
 // (lit, textured, depth-tested against the z-buffer), layer-4 sprites.
 void GrumpaEngine::renderSceneFrame(uint32 now) {
 	_screen.blitFrom(_sceneBg);
 	Common::Array<uint16> depth = _sceneDepth;
-	uint32 ticks = (now - _sceneTick0) / 20;
 	for (int layer = 0; layer <= 8; layer++) {
 		for (uint i = 0; i < _sceneData.sprites.size(); i++) {
 			const SceneSprite &sp = _sceneData.sprites[i];
 			if (sp.layer != layer || !sp.visible || (sp.view != -1 && sp.view != _sceneData.view))
 				continue;
-			drawSprite(sp, spriteFrame(sp, ticks), &depth);
+			drawSprite(sp, _events->spriteFrame(sp.id), &depth);  // animated by the VM (E-0208)
 		}
 		if (layer != 3)
 			continue;
@@ -795,7 +777,7 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 		uint32 col = _screen.format.RGBToColor(0, 255, 0);
 		for (uint i = 0; i < _sceneData.triggers.size(); i++) {
 			const SceneTrigger &tr = _sceneData.triggers[i];
-			if (tr.spent || tr.poly.size() < 2)
+			if (!_events->triggerClickable(tr) || tr.poly.size() < 2)
 				continue;
 			for (uint j = 0; j < tr.poly.size(); j++)
 				_screen.drawLine(tr.poly[j].x, tr.poly[j].y,

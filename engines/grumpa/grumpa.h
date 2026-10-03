@@ -34,10 +34,14 @@
 namespace Graphics { class Font; }
 
 #include "grumpa/detection.h"
+#include "grumpa/character.h"
+#include "grumpa/dialogue.h"
 #include "grumpa/inventory.h"
 #include "grumpa/mesh.h"
 
 namespace Grumpa {
+
+class EventVM;
 
 // The original runs one 800x600, 16-bit (RGB555) surface on DirectDraw7 (games/grumpa docs,
 // E-0010). We keep the same page and blit it to the backend each frame.
@@ -105,6 +109,9 @@ public:
 	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave = false) override;
 	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
 	Inventory &inventory() { return _inventory; }
+	Characters &characters() { return _characters; }
+	Voices &voices() { return *_voices; }
+	EventVM &events() { return *_events; }
 
 private:
 	const ADGameDescription *_gameDesc;
@@ -126,6 +133,11 @@ private:
 	bool syncGame(Common::Serializer &s);
 	void syncEvents(Common::Serializer &s);
 	int _nextScene = -1;   // set by a go-to-scene trigger (E-0116); loaded by the main loop
+	EventVM *_events = nullptr;  // the event VM (events.cpp, docs/spec/events.md)
+	Characters _characters;      // Actors/Characters.abi (character.cpp)
+	Voices *_voices = nullptr;   // the scene's sound actors (dialogue.cpp)
+	uint32 _lastUpdate = 0;      // the VM runs one update per 20 ms of this clock
+	friend class EventVM;
 	bool _showHotspots = false;  // H toggles the trigger-polygon overlay
 	Common::String _cursorName;  // the current cursor image, to avoid redundant reloads
 };
