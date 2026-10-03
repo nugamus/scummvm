@@ -776,6 +776,7 @@ void EventVM::leaveScene() {
 	deliver(-1, kOpLeave, _sceneNum, 0);
 	runImmediate();
 	keep();
+	_engine->_voices->enterScene(nullptr);  // stop its sounds while their data still exists
 	_scene = nullptr;
 	_run.clear();
 }

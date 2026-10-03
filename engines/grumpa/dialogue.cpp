@@ -120,7 +120,7 @@ void Voices::enterScene(Common::Array<SceneSound> *sounds) {
 void Voices::stopAll() {
 	for (uint i = 0; i < _run.size(); i++) {
 		_mixer->stopHandle(_run[i].handle);
-		if (_run[i].playing && _sounds)
+		if (_run[i].playing && _sounds && i < _sounds->size())
 			setTalking((*_sounds)[i].speaker, false);
 		_run[i].playing = _run[i].pending = false;
 	}
