@@ -46,6 +46,28 @@ GrumpaEngine::~GrumpaEngine() {
 	delete _events;
 }
 
+// Actor 185's fade scales every colour channel by level / 255 (a gamma ramp, E-0700).
+static void fadeScreen(Graphics::ManagedSurface &screen, int level) {
+	if (level >= 255)
+		return;
+	const Graphics::PixelFormat &f = screen.format;
+	for (int y = 0; y < screen.h; y++) {
+		uint16 *p = (uint16 *)screen.getBasePtr(0, y);
+		for (int x = 0; x < screen.w; x++, p++) {
+			byte r, g, b;
+			f.colorToRGB(*p, r, g, b);
+			*p = f.RGBToColor(r * level / 255, g * level / 255, b * level / 255);
+		}
+	}
+}
+
+void GrumpaEngine::drawFrame(uint32 now) {
+	renderSceneFrame(now);
+	_events->score().draw(_screen);  // layer 6, like the panel
+	_inventory.draw(_screen);
+	fadeScreen(_screen, _events->fadeLevel());
+}
+
 Common::Error GrumpaEngine::run() {
 	// The original draws to one 800x600 16-bit (RGB555) page; use that format (E-0010).
 	// Scene rendering (2D background + .fxi depth + 3D actors) comes once the scene formats
@@ -94,6 +116,8 @@ Common::Error GrumpaEngine::run() {
 				continue;
 			if (state == kScene) {
 				if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE) {
+					if (!_events->fadeIdle())  // not during a fade or on black (E-0700)
+						continue;
 					state = kMenu;
 					dirty = true;
 				} else if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_h) {
@@ -186,8 +210,7 @@ Common::Error GrumpaEngine::run() {
 				_lastUpdate = g_system->getMillis();
 			}
 			if (dirty || now - lastSceneDraw >= 66) {
-				renderSceneFrame(now);
-				_inventory.draw(_screen);
+				drawFrame(now);
 				lastSceneDraw = now;
 				dirty = false;
 			}

@@ -45,7 +45,8 @@ enum {
 	kOpPlay = 0, kOpStop = 1, kOpShow = 2, kOpHide = 3, kOpActivate = 11, kOpDeactivate = 12,
 	kOpLatch = 13, kOpProxOn = 14, kOpProxOff = 15, kOpSetFlag = 16, kOpClick = 18,
 	kOpMouse = 22, kOpEnter = 23, kOpLeave = 25, kOpView = 26, kOpGotoView = 30,
-	kOpGotoScene = 31, kOpUnlatch = 52, kOpSetFlag2 = 56, kOpCountAdd = 57, kOpCountSub = 58,
+	kOpGotoScene = 31, kOpFadeOut = 32, kOpFadeIn = 33, kOpLifeAdd = 50, kOpLifeSub = 51,
+	kOpUnlatch = 52, kOpSetFlag2 = 56, kOpCountAdd = 57, kOpCountSub = 58,
 	kOpCountMax = 59, kOpCountReset = 62, kOpProxyTarget = 63, kOpTimerStart = 64,
 	kOpTimerLimit = 65, kOpTimerOn = 66, kOpTimerStop = 67, kOpReset = 86, kOpOn = 500,
 	kOpOff = 501
@@ -126,6 +127,8 @@ void EventVM::collectIds(Common::Array<int> &ids) const {
 // A state slot of an actor the VM owns; false for an actor it does not know (characters,
 // items, sounds: their classes are not in the engine yet), which the original skips.
 bool EventVM::stateOf(int id, int slot, int32 &value) const {
+	if (id == Score::kId)
+		return _score.stateOf(slot, value);
 	if (Inventory::owns(id))
 		return _engine->_inventory.stateOf(id, slot, value);
 	if (_engine->_characters.stateOf(id, slot, value))
@@ -226,14 +229,48 @@ void EventVM::deliver(int id, int op, int arg1, int arg2) {
 
 void EventVM::deliverOne(int id, int op, int arg1, int arg2) {
 	debug(2, "Grumpa: VM -> %d op %d (%d, %d)", id, op, arg1, arg2);
-	if (id == kSceneManager) {
-		// ponytail: no fades yet; views and scenes switch at once
-		if (op == kOpGotoScene) {
-			_engine->_nextScene = arg1;
-		} else if (op == kOpGotoView && _scene) {
-			_engine->setView(arg1);
-			deliver(-1, kOpView, arg1, 0);
+	if (id == kSceneManager) {   // the fade (E-0700); a view or scene waits for its end
+		switch (op) {
+		case kOpGotoView:
+			fadeStart(255, -255 / 20);
+			_fade.view = arg1;
+			break;
+		case kOpGotoScene:
+			if (arg2 != -1) {
+				fadeStart(255, -255 / 20);
+			} else {             // black at once
+				fadeStart(0, -1);
+				fadeUpdate();
+			}
+			_fade.scene = arg1;
+			break;
+		case kOpFadeOut:
+			if (arg1 > 0)
+				fadeStart(255, -255 / arg1);
+			break;
+		case kOpFadeIn:
+			if (arg1 > 0) {
+				fadeStart(0, 255 / arg1);
+			} else {
+				fadeStart(255, 1);
+				fadeUpdate();
+			}
+			break;
+		default:
+			break;
 		}
+		return;
+	}
+	if (id == Score::kId) {
+		_score.command(op, arg1, arg2, _engine->_characters);
+		return;
+	}
+	if (id == Ambience::kId) {
+		_ambience.command(op, arg1);
+		return;
+	}
+	if ((op == kOpLifeAdd || op == kOpLifeSub) && _engine->_characters.find(id)) {
+		_score.command(op, arg1, id, _engine->_characters);  // a character's life (E-0704)
 		return;
 	}
 	if (id == kProxy) {
@@ -345,7 +382,6 @@ void EventVM::deliverOne(int id, int op, int arg1, int arg2) {
 			push(out[i]);
 		return;
 	}
-	// Managers 8/10/12/13/180...: not in the engine yet.
 	debug(3, "Grumpa: VM no actor %d for op %d", id, op);
 }
 
@@ -566,7 +602,7 @@ void EventVM::meshUpdate(SceneMesh &m, Run &r) {
 	if (!m.active)
 		return;
 	if (r.running) {
-		// ponytail: R = 50 in R / fps (Q-0200), as for sprites
+		// one frame every 50 / fps updates, as for sprites (E-0701)
 		if (m.fps > 0 && ++r.counter >= 50 / m.fps) {
 			r.counter = 0;
 			meshAdvance(m, r);
@@ -678,7 +714,7 @@ void EventVM::update() {
 			logicUpdate(*a);
 		} else if (SceneSprite *sp = sprite(id)) {
 			Run &r = _run[sp->id];
-			// ponytail: R = 50 in R / fps (Q-0200)
+			// one frame every max(1, 50 / fps) updates (E-0701)
 			if (sp->active && r.running && sp->fps > 0 && ++r.counter >= MAX(1, 50 / sp->fps)) {
 				r.counter = 0;
 				spriteAdvance(*sp, r);
@@ -688,6 +724,44 @@ void EventVM::update() {
 		}
 	}
 	_engine->_characters.update();
+	_score.update();
+	_ambience.update();
+	fadeUpdate();
+}
+
+// ---- actor 185, the fade (E-0700) -------------------------------------------------------------
+
+void EventVM::fadeStart(int level, int step) {
+	_fade.level = level;
+	_fade.step = step;
+	_fade.hold = 4;
+	_fade.running = true;
+}
+
+void EventVM::fadeUpdate() {
+	if (!_fade.running)
+		return;
+	if (_fade.hold > 0) {
+		_fade.hold--;
+		return;
+	}
+	_fade.level += _fade.step;
+	if (_fade.level > 0 && _fade.level < 255)
+		return;
+	_fade.level = CLIP(_fade.level, 0, 255);
+	_fade.running = false;
+	debug(2, "Grumpa: fade ended at %d", _fade.level);
+	if (_fade.view != -1 && _scene) {
+		int v = _fade.view;
+		_fade.view = -1;
+		_engine->setView(v);
+		deliver(-1, kOpView, v, 0);
+		fadeStart(0, 255 / 20);
+	}
+	if (_fade.scene != -1) {
+		_engine->_nextScene = _fade.scene;   // the main loop enters it (E-0202)
+		_fade.scene = -1;
+	}
 }
 
 bool EventVM::click(const Common::Point &p) {
@@ -738,6 +812,7 @@ void EventVM::enterScene(int num, SceneData *scene) {
 	_scene = scene;
 	_sceneNum = num;
 	_run.clear();
+	_ambience.enterScene();
 	_engine->_voices->enterScene(&scene->sounds);
 	for (uint i = 0; i < scene->meshes.size(); i++) {  // as read (E-0601)
 		const SceneMesh &m = scene->meshes[i];
@@ -799,6 +874,11 @@ void EventVM::enterScene(int num, SceneData *scene) {
 	runImmediate();
 	deliver(-1, kOpReset, 0, 0);
 	runImmediate();
+	SceneCommand fadeIn;               // the new scene fades in over 24 updates
+	fadeIn.targetId = kSceneManager;
+	fadeIn.opcode = kOpFadeIn;
+	fadeIn.arg1 = 24;
+	push(fadeIn);
 }
 
 // ---- global.atx (E-0205) -------------------------------------------------------------------
@@ -886,6 +966,11 @@ void EventVM::newGame() {
 	_globals.clear();
 	_globalIds.clear();
 	_proxyTarget = -1;
+	_fade = Fade();
+	if (!_score.load())
+		warning("Grumpa: UI/008_Score/008_Score.atx not found");
+	if (!_ambience.load())
+		warning("Grumpa: Actors/global2.atx not found");
 	if (!loadGlobals())
 		warning("Grumpa: Actors/global.atx not found");
 	_engine->_characters.load();
@@ -980,6 +1065,10 @@ void EventVM::syncState(Common::Serializer &s) {
 		}
 	}
 	s.syncAsSint32LE(_proxyTarget);
+	if (s.getVersion() >= 3) {
+		_score.syncState(s);
+		_ambience.syncState(s);
+	}
 	if (s.isLoading()) {
 		_scene = nullptr;   // the scene the save names is entered afresh, from its kept status
 		_run.clear();
