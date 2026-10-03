@@ -172,6 +172,22 @@ bool Characters::stateOf(int id, int slot, int32 &value) {
 	return true;
 }
 
+// The animation clock (E-0603): 0.46 a update, a frame each time it passes 1.0; at the end the
+// clip starts over. ponytail: the idle only, no clip queue (Q-0403).
+void Characters::update() {
+	for (uint i = 0; i < _chars.size(); i++) {
+		Character &c = _chars[i];
+		if (!c.active || c.home != _scene || c.mesh.frames <= 0)
+			continue;
+		c.clock += 0.46f;
+		if (c.clock <= 1.0f)
+			continue;
+		c.clock -= 1.0f;
+		if (++c.frame >= c.mesh.frames)
+			c.frame = 0;
+	}
+}
+
 bool Characters::command(int id, int op, int arg1, int arg2) {
 	if (id == -1) {
 		for (uint i = 0; i < _chars.size(); i++)

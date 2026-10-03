@@ -139,8 +139,10 @@ bool GrumpaEngine::loadFxi(const Common::String &file, Common::Array<uint16> &de
 	return true;
 }
 
-// Load an actor mesh: Meshes/<name>.anb, frame-0 geometry (E-0014). We keep only the static
-// pose (vertices, faces, UVs); the animation frames after it are ignored for now.
+// Load an actor mesh: Meshes/<name>.anb (E-0014, E-0600): frame 0 inside the sections, then
+// frames 1..F-1, each every section's vertices in turn; anything after them is never read.
+// Each face corner is pointed at the vertex the original's vertex buffer keeps for the corner's
+// uv index: the last corner, in face order, naming that uv index.
 bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
 	Common::File f;
 	if (!f.open(Common::Path("Meshes/" + name + ".anb")))
@@ -151,7 +153,7 @@ bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
 	uint size = buf.size();
 	if (size < 8)
 		return false;
-	mesh.frames = READ_LE_UINT32(d);
+	mesh.frames = MAX<int>(READ_LE_UINT32(d), 1);
 	uint nsec = READ_LE_UINT32(d + 4);
 	uint off = 8;
 	for (uint si = 0; si < nsec; si++) {
@@ -159,10 +161,15 @@ bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
 			return false;
 		uint a = READ_LE_UINT32(d + off), b = READ_LE_UINT32(d + off + 4), c = READ_LE_UINT32(d + off + 8);
 		off += 12;
+		if (off + a * 24 + c * 12 + b * 8 > size)
+			return false;
 		MeshSection sec;
+		sec.nv = a;
+		sec.verts.resize(a * mesh.frames);
+		sec.normals.resize(a * mesh.frames);
 		for (uint i = 0; i < a; i++, off += 24) {
-			sec.verts.push_back(Vec3(READ_LE_FLOAT(d + off), READ_LE_FLOAT(d + off + 4), READ_LE_FLOAT(d + off + 8)));
-			sec.normals.push_back(Vec3(READ_LE_FLOAT(d + off + 20), READ_LE_FLOAT(d + off + 16), READ_LE_FLOAT(d + off + 12)));
+			sec.verts[i] = Vec3(READ_LE_FLOAT(d + off), READ_LE_FLOAT(d + off + 4), READ_LE_FLOAT(d + off + 8));
+			sec.normals[i] = Vec3(READ_LE_FLOAT(d + off + 12), READ_LE_FLOAT(d + off + 16), READ_LE_FLOAT(d + off + 20));
 		}
 		Common::Array<Face> faces;
 		faces.resize(c);
@@ -176,8 +183,32 @@ bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
 		for (uint i = 0; i < c; i++, off += 6)
 			for (int k = 0; k < 3; k++)
 				faces[i].uv[k] = READ_LE_UINT16(d + off + k * 2);
+		Common::Array<uint16> vertOfUv;
+		vertOfUv.resize(b);
+		for (uint i = 0; i < c; i++)
+			for (int k = 0; k < 3; k++) {
+				if (faces[i].uv[k] >= b || faces[i].v[k] >= a)
+					return false;
+				vertOfUv[faces[i].uv[k]] = faces[i].v[k];
+			}
+		for (uint i = 0; i < c; i++)
+			for (int k = 0; k < 3; k++)
+				faces[i].v[k] = vertOfUv[faces[i].uv[k]];
 		sec.faces = faces;
 		mesh.sections.push_back(sec);
+	}
+	for (int fr = 1; fr < mesh.frames; fr++) {
+		for (uint si = 0; si < mesh.sections.size(); si++) {
+			MeshSection &sec = mesh.sections[si];
+			if (off + sec.nv * 24 > size) {
+				mesh.frames = fr;  // a short file: keep the frames it has
+				return true;
+			}
+			for (uint i = 0; i < sec.nv; i++, off += 24) {
+				sec.verts[fr * sec.nv + i] = Vec3(READ_LE_FLOAT(d + off), READ_LE_FLOAT(d + off + 4), READ_LE_FLOAT(d + off + 8));
+				sec.normals[fr * sec.nv + i] = Vec3(READ_LE_FLOAT(d + off + 12), READ_LE_FLOAT(d + off + 16), READ_LE_FLOAT(d + off + 20));
+			}
+		}
 	}
 	return true;
 }
@@ -508,14 +539,45 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			SceneMesh m;
 			m.id = id;
 			readHead(c, m.active, m.visible);
-			c.skip(72); sub56(c); sub24(c); sub24(c); pairVec(c);
-			for (int v = 0; v < 8 && c.ok; v++) ccVec(c);
+			// The animation fields (E-0601): fps, mode, then fields of the bubble tests and
+			// the rest (Q-0600), playing, start frame, autoplay.
+			int32 af[18];
+			for (int k = 0; k < 18; k++)
+				af[k] = c.i32();
+			m.fps = af[0];
+			m.anim = (uint32)af[1];
+			m.playing = af[13] == 1;
+			m.frame = af[14];
+			m.autoplay = af[15] == 1;
+			// The delay timer: on, (+0x104), (+0x10c), counting, (+0x114), random, (2),
+			// min, max, (+0x12c), fixed, (+0x134), ticks left.
+			int32 tm[14];
+			for (int k = 0; k < 14; k++)
+				tm[k] = c.i32();
+			m.timerOn = tm[0] != 0;
+			m.timerCounting = tm[3] == 1;
+			m.timerRandom = tm[5] == 1;
+			m.timerMin = tm[8];
+			m.timerMax = tm[9];
+			m.timerFixed = tm[11];
+			m.timerTicks = tm[13];
+			sub24(c); sub24(c); pairVec(c);
+			// Lists 1, 2 and 8 end the animation (forward end, backward end, end; E-0601),
+			// 3..7 belong to the bubble tests (Q-0600).
+			SpriteHooks hk;
+			hk.id = id;
+			readCmds(c, hk.onForward);
+			readCmds(c, hk.onBackward);
+			for (int v = 2; v < 7 && c.ok; v++) ccVec(c);
+			readCmds(c, hk.onEnd);
 			int32 na = c.i32();
 			if (na > 0) { m.anb = Common::String((const char *)(c.d + c.o), na); c.skip(na); }
 			int32 nt = c.i32();
 			if (nt > 0) { m.tga = Common::String((const char *)(c.d + c.o), nt); c.skip(nt); }
-			if (c.ok)
+			if (c.ok) {
 				scene.meshes.push_back(m);
+				scene.spriteHooks.push_back(hk);
+			}
 		} else if (t == 0x18 || t == 0x2a) {
 			// Sound actor (dialogue.cpp, E-0405).
 			SceneSound snd;
@@ -773,10 +835,11 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 			const SceneMesh &m = _sceneData.meshes[i];
 			if (m.visible && !m.mesh.empty())
 				renderMesh(_screen, m.mesh, cam, _sceneData.lights, depth,
-						   m.texture.getPixels() ? &m.texture : nullptr, m.alpha);
+						   m.texture.getPixels() ? &m.texture : nullptr, m.alpha,
+						   _events->spriteFrame(m.id));  // animated by the VM (E-0601)
 		}
 		// The characters at home in this scene (characters.md, E-0403): the idle mesh turned by
-		// yaw about +Y and moved to the position. ponytail: idle pose only, no state machine
+		// yaw about +Y and moved to the position. ponytail: the idle clip only, no state machine
 		// (Q-0403); the yaw sign follows D3DX's RotationY, not yet checked against the original.
 		Common::Array<Character> &chars = _characters.list();
 		for (uint i = 0; i < chars.size(); i++) {
@@ -796,15 +859,24 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 			}
 			if (c.mesh.empty())
 				continue;
-			Mesh placed = c.mesh;
+			// The current frame of the idle (its clock: Characters::update, E-0603), placed.
+			Mesh placed;
+			placed.frames = 1;
+			const int fr = CLIP(c.frame, 0, c.mesh.frames - 1);
 			float cs = cosf(c.yaw), sn = sinf(c.yaw);
-			for (uint s = 0; s < placed.sections.size(); s++) {
-				MeshSection &sec = placed.sections[s];
-				for (uint v = 0; v < sec.verts.size(); v++) {
-					const Vec3 p = sec.verts[v], n = sec.normals[v];
-					sec.verts[v] = Vec3(p.x * cs + p.z * sn + c.pos.x, p.y + c.pos.y, -p.x * sn + p.z * cs + c.pos.z);
-					sec.normals[v] = Vec3(n.x * cs + n.z * sn, n.y, -n.x * sn + n.z * cs);
+			for (uint s = 0; s < c.mesh.sections.size(); s++) {
+				const MeshSection &src = c.mesh.sections[s];
+				MeshSection sec;
+				sec.nv = src.nv;
+				sec.faces = src.faces;
+				sec.u = src.u;
+				sec.v = src.v;
+				for (uint v = 0; v < src.nv; v++) {
+					const Vec3 p = src.verts[fr * src.nv + v], n = src.normals[fr * src.nv + v];
+					sec.verts.push_back(Vec3(p.x * cs + p.z * sn + c.pos.x, p.y + c.pos.y, -p.x * sn + p.z * cs + c.pos.z));
+					sec.normals.push_back(Vec3(n.x * cs + n.z * sn, n.y, -n.x * sn + n.z * cs));
 				}
+				placed.sections.push_back(sec);
 			}
 			renderMesh(_screen, placed, cam, _sceneData.lights, depth,
 					   c.skin.getPixels() ? &c.skin : nullptr, c.alpha);

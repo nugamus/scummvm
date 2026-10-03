@@ -70,11 +70,18 @@ Camera lookAtCamera(const Vec3 &eye, const Vec3 &target, float fovY, float zn, f
 
 namespace {
 
+// A triangle corner in clip space, with its lit colour and texture coordinates.
+struct ClipVertex {
+	float c[4];
+	float r, g, b;
+	float u, v;
+};
+
 struct ScreenVertex {
 	float sx, sy, z;    // screen position, z/w in [0,1]
 	float iw;           // 1/w, for perspective-correct interpolation
 	float r, g, b;      // lit colour
-	bool clipped;       // in front of the near plane or behind the camera
+	float u, v;
 };
 
 // Direct3D 7 fixed-function lighting of one vertex (material: diffuse and ambient white,
@@ -119,100 +126,144 @@ static void sample(const Graphics::Surface &t, float u, float v, float &r, float
 	}
 }
 
+// Rasterise one screen triangle: clockwise only (default D3DCULL_CCW, y down), z/w tested
+// less-or-equal against and written to `depth`, pixels past the far plane (z/w > 1) dropped.
+static void drawTriangle(Graphics::ManagedSurface &screen, Common::Array<uint16> &depth,
+						 const ScreenVertex &a, const ScreenVertex &b, const ScreenVertex &c,
+						 const Graphics::Surface *tex, bool alpha) {
+	const int W = screen.w, H = screen.h;
+	float area = (b.sx - a.sx) * (c.sy - a.sy) - (b.sy - a.sy) * (c.sx - a.sx);
+	if (area <= 0)
+		return;
+	int minx = MAX((int)ceilf(MIN(a.sx, MIN(b.sx, c.sx)) - 0.5f), 0);
+	int maxx = MIN((int)floorf(MAX(a.sx, MAX(b.sx, c.sx)) - 0.5f), W - 1);
+	int miny = MAX((int)ceilf(MIN(a.sy, MIN(b.sy, c.sy)) - 0.5f), 0);
+	int maxy = MIN((int)floorf(MAX(a.sy, MAX(b.sy, c.sy)) - 0.5f), H - 1);
+	for (int y = miny; y <= maxy; y++) {
+		for (int x = minx; x <= maxx; x++) {
+			float px = x + 0.5f, py = y + 0.5f;
+			float w0 = ((b.sx - px) * (c.sy - py) - (b.sy - py) * (c.sx - px)) / area;
+			float w1 = ((c.sx - px) * (a.sy - py) - (c.sy - py) * (a.sx - px)) / area;
+			float w2 = 1.0f - w0 - w1;
+			if (w0 < 0 || w1 < 0 || w2 < 0)
+				continue;
+			// z/w is affine in screen space: interpolate linearly (the z-buffer value).
+			float z = w0 * a.z + w1 * b.z + w2 * c.z;
+			if (z > 1.0f)
+				continue;
+			uint16 z16 = (uint16)CLIP(z * 65535.0f, 0.0f, 65535.0f);
+			uint16 &zb = depth[y * W + x];
+			if (z16 > zb)
+				continue;
+			// Perspective-correct colour and texture coordinates.
+			float pw0 = w0 * a.iw, pw1 = w1 * b.iw, pw2 = w2 * c.iw;
+			float inv = 1.0f / (pw0 + pw1 + pw2);
+			pw0 *= inv; pw1 *= inv; pw2 *= inv;
+			float r = pw0 * a.r + pw1 * b.r + pw2 * c.r;
+			float g = pw0 * a.g + pw1 * b.g + pw2 * c.g;
+			float bl = pw0 * a.b + pw1 * b.b + pw2 * c.b;
+			float ta = 255;
+			if (tex) {
+				float tr, tg, tb;
+				sample(*tex, pw0 * a.u + pw1 * b.u + pw2 * c.u, pw0 * a.v + pw1 * b.v + pw2 * c.v,
+					   tr, tg, tb, ta);
+				r *= tr; g *= tg; bl *= tb;
+			} else {
+				r *= 255; g *= 255; bl *= 255;
+			}
+			if (alpha) {
+				// SRCALPHA / INVSRCALPHA blend with the page.
+				byte dr, dg, db;
+				screen.format.colorToRGB(screen.getPixel(x, y), dr, dg, db);
+				float k = ta / 255.0f;
+				r = r * k + dr * (1 - k); g = g * k + dg * (1 - k); bl = bl * k + db * (1 - k);
+			}
+			zb = z16;
+			screen.setPixel(x, y, screen.format.RGBToColor((byte)r, (byte)g, (byte)bl));
+		}
+	}
+}
+
+static ClipVertex lerp(const ClipVertex &p, const ClipVertex &q, float t) {
+	ClipVertex o;
+	for (int k = 0; k < 4; k++)
+		o.c[k] = p.c[k] + (q.c[k] - p.c[k]) * t;
+	o.r = p.r + (q.r - p.r) * t; o.g = p.g + (q.g - p.g) * t; o.b = p.b + (q.b - p.b) * t;
+	o.u = p.u + (q.u - p.u) * t; o.v = p.v + (q.v - p.v) * t;
+	return o;
+}
+
 } // anonymous namespace
+
 
 void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera &cam,
 				const Common::Array<SceneLight> &lights, Common::Array<uint16> &depth,
-				const Graphics::Surface *tex, bool alpha) {
+				const Graphics::Surface *tex, bool alpha, int frame) {
 	const int W = screen.w, H = screen.h;
+	if (frame < 0 || frame >= MAX(mesh.frames, 1))
+		return;
 	if ((int)depth.size() != W * H) {
 		depth.resize(W * H);
 		for (uint i = 0; i < depth.size(); i++)
 			depth[i] = 0xFFFF;
 	}
-	const bool textured = tex && tex->getPixels() && tex->w > 0 && tex->h > 0;
+	if (!tex || !tex->getPixels() || tex->w <= 0 || tex->h <= 0)
+		tex = nullptr;
 
 	for (uint s = 0; s < mesh.sections.size(); s++) {
 		const MeshSection &sec = mesh.sections[s];
-		Common::Array<ScreenVertex> sv;
-		sv.resize(sec.verts.size());
-		for (uint i = 0; i < sec.verts.size(); i++) {
-			const Vec3 &v = sec.verts[i];
-			float e[4], c[4];
+		const uint base = frame * sec.nv;
+		if (base + sec.nv > sec.verts.size())
+			continue;
+		Common::Array<ClipVertex> cv;
+		cv.resize(sec.nv);
+		for (uint i = 0; i < sec.nv; i++) {
+			const Vec3 &v = sec.verts[base + i];
+			float e[4];
 			xform(cam.view, v.x, v.y, v.z, 1, e);
-			xform(cam.proj, e[0], e[1], e[2], e[3], c);
-			ScreenVertex &p = sv[i];
-			// ponytail: a triangle crossing the near plane is dropped whole, not clipped;
-			// the scenes' actors stay well inside the frustum.
-			p.clipped = c[3] <= 1e-6f || c[2] < 0;
-			if (p.clipped)
-				continue;
-			p.iw = 1.0f / c[3];
-			p.sx = (c[0] * p.iw + 1) * W / 2;
-			p.sy = (1 - c[1] * p.iw) * H / 2;
-			p.z = c[2] * p.iw;
-			light(v, i < sec.normals.size() ? sec.normals[i] : Vec3(), lights, p.r, p.g, p.b);
+			xform(cam.proj, e[0], e[1], e[2], e[3], cv[i].c);
+			light(v, sec.normals[base + i], lights, cv[i].r, cv[i].g, cv[i].b);
 		}
 		for (uint fi = 0; fi < sec.faces.size(); fi++) {
 			const Face &face = sec.faces[fi];
-			const ScreenVertex &a = sv[face.v[0]], &b = sv[face.v[1]], &c = sv[face.v[2]];
-			if (a.clipped || b.clipped || c.clipped)
-				continue;
-			// Default D3DCULL_CCW: only clockwise (on screen, y down) triangles are drawn.
-			float area = (b.sx - a.sx) * (c.sy - a.sy) - (b.sy - a.sy) * (c.sx - a.sx);
-			if (area <= 0)
-				continue;
-			float au = 0, av = 0, bu = 0, bv = 0, cu = 0, cv = 0;
-			if (textured) {
-				au = sec.u[face.uv[0]]; av = sec.v[face.uv[0]];
-				bu = sec.u[face.uv[1]]; bv = sec.v[face.uv[1]];
-				cu = sec.u[face.uv[2]]; cv = sec.v[face.uv[2]];
+			// Clip the triangle to the near plane z >= 0 (Sutherland-Hodgman), then fan it.
+			ClipVertex in[3], poly[4];
+			for (int k = 0; k < 3; k++) {
+				in[k] = cv[face.v[k]];
+				in[k].u = tex ? sec.u[face.uv[k]] : 0;
+				in[k].v = tex ? sec.v[face.uv[k]] : 0;
 			}
-			int minx = MAX((int)ceilf(MIN(a.sx, MIN(b.sx, c.sx)) - 0.5f), 0);
-			int maxx = MIN((int)floorf(MAX(a.sx, MAX(b.sx, c.sx)) - 0.5f), W - 1);
-			int miny = MAX((int)ceilf(MIN(a.sy, MIN(b.sy, c.sy)) - 0.5f), 0);
-			int maxy = MIN((int)floorf(MAX(a.sy, MAX(b.sy, c.sy)) - 0.5f), H - 1);
-			for (int y = miny; y <= maxy; y++) {
-				for (int x = minx; x <= maxx; x++) {
-					float px = x + 0.5f, py = y + 0.5f;
-					float w0 = ((b.sx - px) * (c.sy - py) - (b.sy - py) * (c.sx - px)) / area;
-					float w1 = ((c.sx - px) * (a.sy - py) - (c.sy - py) * (a.sx - px)) / area;
-					float w2 = 1.0f - w0 - w1;
-					if (w0 < 0 || w1 < 0 || w2 < 0)
-						continue;
-					// z/w is affine in screen space: interpolate linearly (the z-buffer value).
-					float z = w0 * a.z + w1 * b.z + w2 * c.z;
-					uint16 z16 = (uint16)CLIP(z * 65535.0f, 0.0f, 65535.0f);
-					uint16 &zb = depth[y * W + x];
-					if (z16 > zb)
-						continue;
-					// Perspective-correct colour and texture coordinates.
-					float pw0 = w0 * a.iw, pw1 = w1 * b.iw, pw2 = w2 * c.iw;
-					float inv = 1.0f / (pw0 + pw1 + pw2);
-					pw0 *= inv; pw1 *= inv; pw2 *= inv;
-					float r = pw0 * a.r + pw1 * b.r + pw2 * c.r;
-					float g = pw0 * a.g + pw1 * b.g + pw2 * c.g;
-					float bl = pw0 * a.b + pw1 * b.b + pw2 * c.b;
-					float ta = 255;
-					if (textured) {
-						float tr, tg, tb;
-						sample(*tex, pw0 * au + pw1 * bu + pw2 * cu, pw0 * av + pw1 * bv + pw2 * cv,
-							   tr, tg, tb, ta);
-						r *= tr; g *= tg; bl *= tb;
-					} else {
-						r *= 255; g *= 255; bl *= 255;
-					}
-					if (alpha) {
-						// SRCALPHA / INVSRCALPHA blend with the page.
-						byte dr, dg, db;
-						screen.format.colorToRGB(screen.getPixel(x, y), dr, dg, db);
-						float k = ta / 255.0f;
-						r = r * k + dr * (1 - k); g = g * k + dg * (1 - k); bl = bl * k + db * (1 - k);
-					}
-					zb = z16;
-					screen.setPixel(x, y, screen.format.RGBToColor((byte)r, (byte)g, (byte)bl));
+			int n = 0;
+			for (int k = 0; k < 3; k++) {
+				const ClipVertex &p = in[k], &q = in[(k + 1) % 3];
+				bool pin = p.c[2] >= 0, qin = q.c[2] >= 0;
+				if (pin)
+					poly[n++] = p;
+				if (pin != qin)
+					poly[n++] = lerp(p, q, p.c[2] / (p.c[2] - q.c[2]));
+			}
+			if (n < 3)
+				continue;
+			ScreenVertex sv[4];
+			bool ok = true;
+			for (int k = 0; k < n; k++) {
+				const ClipVertex &p = poly[k];
+				if (p.c[3] <= 1e-6f) {
+					ok = false;
+					break;
 				}
+				ScreenVertex &o = sv[k];
+				o.iw = 1.0f / p.c[3];
+				o.sx = (p.c[0] * o.iw + 1) * W / 2;
+				o.sy = (1 - p.c[1] * o.iw) * H / 2;
+				o.z = p.c[2] * o.iw;
+				o.r = p.r; o.g = p.g; o.b = p.b;
+				o.u = p.u; o.v = p.v;
 			}
+			if (!ok)
+				continue;
+			for (int k = 1; k + 1 < n; k++)
+				drawTriangle(screen, depth, sv[0], sv[k], sv[k + 1], tex, alpha);
 		}
 	}
 }

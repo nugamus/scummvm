@@ -316,14 +316,20 @@ void EventVM::deliverOne(int id, int op, int arg1, int arg2) {
 		if (r.latch)
 			return;
 		switch (op) {
+		case kOpPlay: meshPlay(*m, r); break;
+		case kOpStop: r.playing = false; break;
 		case kOpShow: m->visible = true; break;
 		case kOpHide: m->visible = false; break;
 		case kOpActivate: m->active = true; break;
 		case kOpDeactivate: m->active = false; break;
 		case kOpLatch: m->active = m->visible = false; r.latch = true; break;
-		case kOpOn: m->active = m->visible = true; break;
-		case kOpOff: m->active = m->visible = false; break;
-		default: break;  // 0/1 play/stop the mesh animation (render)
+		case kOpEnter:
+			if (m->autoplay)
+				meshPlay(*m, r);
+			break;
+		case kOpOn: m->active = m->visible = true; meshPlay(*m, r); break;
+		case kOpOff: m->active = m->visible = r.playing = false; break;
+		default: break;  // 14/15 bubble tests (Q-0600); 86/92 reload what is already loaded
 		}
 		return;
 	}
@@ -530,6 +536,132 @@ void EventVM::spriteAdvance(const SceneSprite &sp, Run &r) {
 	}
 }
 
+// ---- 0x1a mesh animation (E-0601, docs/spec/scene.md) --------------------------------------
+
+// The delay timer's ticks: milliseconds at 50 updates a second; random in [min, max).
+void EventVM::meshTimerLoad(SceneMesh &m) {
+	if (!m.timerRandom) {
+		m.timerTicks = m.timerFixed * 50 / 1000;
+		return;
+	}
+	int32 lo = m.timerMin * 50 / 1000, hi = m.timerMax * 50 / 1000;
+	m.timerTicks = hi > lo ? lo + (int32)_rnd.getRandomNumber(hi - lo - 1) : lo;
+}
+
+void EventVM::meshPlay(SceneMesh &m, Run &r) {
+	if (m.anim & 6)
+		r.frame = 0;
+	if (m.anim & 8)
+		r.frame = MAX(m.mesh.frames, 1);  // one update not drawn, then F-1
+	r.playing = true;
+	if (m.timerOn) {
+		meshTimerLoad(m);
+		m.timerCounting = true;
+	} else {
+		r.running = true;
+	}
+}
+
+void EventVM::meshUpdate(SceneMesh &m, Run &r) {
+	if (!m.active)
+		return;
+	if (r.running) {
+		// ponytail: R = 50 in R / fps (Q-0200), as for sprites
+		if (m.fps > 0 && ++r.counter >= 50 / m.fps) {
+			r.counter = 0;
+			meshAdvance(m, r);
+		}
+	} else if (m.timerOn) {
+		if (!r.playing) {
+			m.timerCounting = false;
+			meshTimerLoad(m);
+			return;
+		}
+		if (!m.timerCounting)
+			return;
+		if (--m.timerTicks < 1) {
+			m.timerCounting = false;
+			meshTimerLoad(m);
+			r.running = true;
+		}
+	}
+}
+
+void EventVM::meshAdvance(SceneMesh &m, Run &r) {
+	const int n = MAX(m.mesh.frames, 1);
+	const bool loop = m.anim & 1;
+	const SpriteHooks *h = hooks(m.id);
+	bool restart = false;
+	if (m.anim & 4) {           // forward
+		if (++r.frame < n)
+			return;
+		r.running = false;
+		r.frame = n - 1;
+		if (!loop) {
+			if (h)
+				runList(h->onEnd, -1);
+		} else if (r.playing) {
+			r.frame = 0;
+			restart = true;
+		}
+	} else if (m.anim & 8) {    // backward
+		if (--r.frame >= 0)
+			return;
+		r.running = false;
+		r.frame = 0;
+		if (!loop) {
+			if (h)
+				runList(h->onEnd, -1);
+		} else if (r.playing) {
+			r.frame = n - 1;
+			restart = true;
+		}
+	} else if (m.anim & 2) {    // ping-pong
+		if (r.dir == 0) {
+			if (++r.frame >= n) {
+				r.dir = 1;
+				r.frame = n - 2;
+			}
+			return;
+		}
+		if (--r.frame >= 0)
+			return;
+		r.running = false;
+		r.dir = 0;
+		r.frame = MIN(1, n - 1);
+		if (!loop) {
+			if (h)
+				runList(h->onEnd, -1);
+		} else if (r.playing) {
+			restart = true;
+		}
+	} else if (m.anim & 0x10) { // forward on one play, back on the next; playing stays set
+		if (r.dir == 0) {
+			if (++r.frame < n)
+				return;
+			r.running = false;
+			r.frame = n - 1;
+			r.dir = 1;
+			if (h)
+				runList(h->onForward, -1);
+		} else {
+			if (--r.frame >= 0)
+				return;
+			r.dir = 0;
+			r.running = false;
+			r.frame = 0;
+			if (h)
+				runList(h->onBackward, -1);
+		}
+	}
+	if (restart) {
+		if (m.timerOn)
+			meshPlay(m, r);
+		else
+			r.running = true;
+	}
+}
+
 // ---- the loop, scenes (E-0202) -----------------------------------------------------------
 
 void EventVM::update() {
@@ -551,8 +683,11 @@ void EventVM::update() {
 				r.counter = 0;
 				spriteAdvance(*sp, r);
 			}
+		} else if (SceneMesh *m = mesh(id)) {
+			meshUpdate(*m, _run[m->id]);
 		}
 	}
+	_engine->_characters.update();
 }
 
 bool EventVM::click(const Common::Point &p) {
@@ -587,7 +722,8 @@ void EventVM::keep() {
 	}
 	for (uint i = 0; i < _scene->meshes.size(); i++) {
 		const SceneMesh &m = _scene->meshes[i];
-		Status s = { m.active, m.visible, _run[m.id].latch, 0, Common::Array<int32>(), 0, 0, false, false };
+		const Run &r = _run[m.id];
+		Status s = { m.active, m.visible, r.latch, 0, Common::Array<int32>(), r.frame, r.dir, r.playing, r.running };
 		kept[m.id] = s;
 	}
 	for (uint i = 0; i < _scene->logic.size(); i++) {
@@ -603,6 +739,12 @@ void EventVM::enterScene(int num, SceneData *scene) {
 	_sceneNum = num;
 	_run.clear();
 	_engine->_voices->enterScene(&scene->sounds);
+	for (uint i = 0; i < scene->meshes.size(); i++) {  // as read (E-0601)
+		const SceneMesh &m = scene->meshes[i];
+		Run &r = _run[m.id];
+		r.frame = m.frame;
+		r.playing = m.playing;
+	}
 	if (_kept.contains(num)) {
 		const StatusMap &kept = _kept[num];
 		for (StatusMap::const_iterator it = kept.begin(); it != kept.end(); ++it) {
@@ -623,7 +765,13 @@ void EventVM::enterScene(int num, SceneData *scene) {
 			} else if (SceneMesh *m = mesh(it->_key)) {
 				m->active = s.active;
 				m->visible = s.visible;
-				_run[m->id].latch = s.latch;
+				m->autoplay = false;  // the status keeps it as 0 (E-0602)
+				Run &r = _run[m->id];
+				r.latch = s.latch;
+				r.frame = s.frame;
+				r.dir = s.dir;
+				r.playing = s.playing;
+				r.running = s.running;
 			} else if (SceneLogic *a = logicActor(it->_key)) {
 				a->active = s.active;
 				a->visible = s.visible;

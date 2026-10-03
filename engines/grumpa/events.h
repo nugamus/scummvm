@@ -23,6 +23,7 @@
 #define GRUMPA_EVENTS_H
 
 #include "common/hashmap.h"
+#include "common/random.h"
 #include "common/serializer.h"
 #include "common/rect.h"
 
@@ -45,7 +46,7 @@ class EventVM {
 public:
 	enum { kUpdateMs = 20 };  // 50 updates a second (E-0202)
 
-	explicit EventVM(GrumpaEngine *engine) : _engine(engine) {}
+	explicit EventVM(GrumpaEngine *engine) : _engine(engine), _rnd("grumpa") {}
 
 	/** A new game: the global actors from Actors/global.atx, no deferred commands, no kept
 	 *  scene status. */
@@ -72,7 +73,7 @@ public:
 	/** Save/load the VM (saveload.cpp): globals, deferred commands, every scene's kept status. */
 	void syncState(Common::Serializer &s);
 
-	/** The frame a sprite shows (E-0208). */
+	/** The frame a sprite (E-0208) or a mesh actor (E-0601) shows. */
 	int spriteFrame(uint32 id) const;
 
 private:
@@ -97,6 +98,10 @@ private:
 	void deliverOne(int id, int op, int arg1, int arg2);
 	void spritePlay(const SceneSprite &sp, Run &r);
 	void spriteAdvance(const SceneSprite &sp, Run &r);
+	void meshPlay(SceneMesh &m, Run &r);
+	void meshAdvance(SceneMesh &m, Run &r);
+	void meshUpdate(SceneMesh &m, Run &r);
+	void meshTimerLoad(SceneMesh &m);
 	const SpriteHooks *hooks(uint32 id) const;
 	void triggerFire(SceneTrigger &tr);
 	void logicCommand(SceneLogic &a, int op, int arg1);
@@ -118,6 +123,7 @@ private:
 	Common::HashMap<int, StatusMap> _kept;         // scene number -> its actors' status
 	int _proxyTarget = -1;                         // actor 186 (E-0206)
 	bool _fired = false;                           // a trigger fired during click()
+	Common::RandomSource _rnd;                     // mesh delay timers
 };
 
 } // End of namespace Grumpa
