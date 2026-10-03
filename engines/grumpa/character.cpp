@@ -105,7 +105,8 @@ bool Characters::load() {
 		c.id = r.u32();
 		c.active = r.u32() != 0;
 		c.visible = r.u32() != 0;
-		r.skip(4 * r.count());       // the six stats (Q-0402)
+		for (uint32 k = r.count(); k > 0 && r.ok; k--)   // the state slots (E-0407)
+			c.state.push_back((int32)r.u32());
 		c.home = (int32)r.u32();
 		c.pos.x = r.f32(); c.pos.y = r.f32(); c.pos.z = r.f32();
 		r.skip(4);
@@ -161,6 +162,14 @@ Character *Characters::find(int id) {
 		if ((int)_chars[i].id == id)
 			return &_chars[i];
 	return nullptr;
+}
+
+bool Characters::stateOf(int id, int slot, int32 &value) {
+	Character *c = find(id);
+	if (!c)
+		return false;
+	value = slot >= 0 && slot < (int)c->state.size() ? c->state[slot] : 0;
+	return true;
 }
 
 bool Characters::command(int id, int op, int arg1, int arg2) {
