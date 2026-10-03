@@ -71,7 +71,17 @@ Common::Error GrumpaEngine::run() {
 	enum { kMenu, kScene } state = kMenu;
 	bool dirty = true;
 	uint32 lastSceneDraw = 0;
+	if (ConfMan.hasKey("save_slot"))  // started from the launcher's Load
+		loadGameState(ConfMan.getInt("save_slot"));
 	while (!shouldQuit()) {
+		if (_restoring && _nextScene >= 0) {  // a loaded save (saveload.cpp)
+			enterScene(_nextScene);
+			_nextScene = -1;
+			_restoring = false;
+			_cursorName = "";
+			state = kScene;
+			dirty = true;
+		}
 		Common::Event event;
 		while (g_system->getEventManager()->pollEvent(event)) {
 			if (count == 0)
@@ -84,7 +94,15 @@ Common::Error GrumpaEngine::run() {
 					_showHotspots = !_showHotspots;  // overlay the clickable trigger polygons
 					dirty = true;
 				} else if (event.type == Common::EVENT_MOUSEMOVE) {
-					updateHoverCursor(event.mouse);  // hand over a clickable exit/interaction
+					if (!_inventory.showHeldCursor())  // the held item is the cursor
+						updateHoverCursor(event.mouse);  // hand over a clickable exit/interaction
+				} else if (event.type == Common::EVENT_RBUTTONUP) {
+					_inventory.command(Inventory::kPanelId, 19, 0, 0);  // right click: the inventory
+					dirty = true;
+				} else if (event.type == Common::EVENT_LBUTTONUP && _inventory.click(event.mouse)) {
+					if (!_inventory.showHeldCursor())
+						_cursorName = "", updateHoverCursor(event.mouse);
+					dirty = true;
 				} else if (event.type == Common::EVENT_LBUTTONUP) {
 					if (handleSceneClick(event.mouse)) {
 						if (_nextScene >= 0) {  // a go-to-scene trigger (E-0116)
@@ -125,6 +143,7 @@ Common::Error GrumpaEngine::run() {
 					// The first scene is the tutorial hut (scene 1); render it live with its
 					// animated sprite props (docs/spec/scene.md). Scene navigation and the
 					// game logic are the next layers.
+					_inventory.load();
 					enterScene(1);
 					state = kScene;
 					dirty = true;
@@ -147,6 +166,7 @@ Common::Error GrumpaEngine::run() {
 			uint32 now = g_system->getMillis();
 			if (dirty || now - lastSceneDraw >= 66) {
 				renderSceneFrame(now);
+				_inventory.draw(_screen);
 				lastSceneDraw = now;
 				dirty = false;
 			}
