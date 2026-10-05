@@ -28,6 +28,9 @@
 #include "image/jpeg.h"
 #include "image/tga.h"
 
+#include "grumpa/character.h"
+#include "grumpa/dialogue.h"
+#include "grumpa/events.h"
 #include "grumpa/inventory.h"
 
 namespace Grumpa {
@@ -38,12 +41,29 @@ enum {
 	kSlotSize = 86,
 	kEquipSize = 96,
 	kShieldX = 210,
-	kIconOffset = 32
+	kIconOffset = 32,
+	kButtonY = 96, kButtonH = 36,
+	kDiskX = 70, kDiskW = 30, kDoorX = 200, kDoorW = 32
 };
+
+// What the equipment slots take and the attachment Grumpa wears for each (E-0901).
+static const int kWeapons[][2] = { { 100, 4 }, { 101, 1 }, { 110, 3 }, { 113, 2 } };
+static const int kShields[][2] = { { 138, 0 }, { 134, 5 } };
+
+static int attachmentOf(int slot, int id) {
+	const int (*t)[2] = slot == 0 ? kWeapons : kShields;
+	int n = slot == 0 ? ARRAYSIZE(kWeapons) : ARRAYSIZE(kShields);
+	for (int i = 0; i < n; i++)
+		if (t[i][0] == id)
+			return t[i][1];
+	return -1;
+}
 
 Inventory::~Inventory() {
 	for (uint i = 0; i < _icons.size(); i++)
 		delete _icons[i];
+	for (uint i = 0; i < _items.size(); i++)
+		_items[i].skin.free();
 }
 
 static Common::String readPstr(Common::SeekableReadStream &s) {
@@ -70,6 +90,8 @@ bool Inventory::load() {
 	for (uint i = 0; i < _icons.size(); i++)
 		delete _icons[i];
 	_icons.clear();
+	for (uint i = 0; i < _items.size(); i++)
+		_items[i].skin.free();
 	_items.clear();
 	_held = -1;
 	_shown = _locked = false;
@@ -218,9 +240,9 @@ bool Inventory::add(int id) {
 	if (!it)
 		return false;
 	if (id == 174 || (id >= 177 && id <= 179)) {
-		// Water Drop and the coins count on actor 8 ((8, 50, 100) / (8, 9, 1)) and are not
-		// carried (E-0503).
-		// ponytail: actor 8's score/coin counters are not modelled yet; the item just goes.
+		// Water Drop and the coins count on actor 8 and are not carried (E-0503).
+		if (_vm)
+			_vm->deliver(8, id == 174 ? 50 : 9, id == 174 ? 100 : 1, 0);
 		setState(*it, kGone);
 		return true;
 	}
@@ -235,10 +257,7 @@ bool Inventory::add(int id) {
 		}
 	}
 	say(_fullVoice);
-	// Full: it drops beside Grumpa (State 4 at actor 3's position). Without a player
-	// character it stays in the current scene where it was (Q-0202).
-	setState(*it, kInScene);
-	it->scene = _scene;
+	dropBesidePlayer(*it);
 	return false;
 }
 
@@ -285,12 +304,29 @@ void Inventory::command(int id, int op, int arg1, int arg2) {
 		it->scene = arg1;
 		setState(*it, kInScene);
 		break;
-	case 71:
-		// ponytail: the target actor's position needs the 3D actor model; keep the item's own.
-		it->scene = _scene;
-		it->active = it->visible = true;
-		setState(*it, kInScene);
+	case 71: {
+		// At the actor, 30 units higher, turned as it (E-0900). ponytail: only characters
+		// carry a position in the engine; another actor leaves the item where it was.
+		Character *c = _chars ? _chars->find(arg1) : nullptr;
+		Vec3 at(it->pos[0], it->pos[1], it->pos[2]);
+		float yaw = it->rot[1];
+		if (c) {
+			at = Vec3(c->pos.x, c->pos.y + 30.0f, c->pos.z);
+			yaw = c->yaw;
+		}
+		place(*it, at, yaw);
 		break;
+	}
+	case 18: {  // a click: pick up a hovered item lying here (E-0900)
+		Common::Point p((int16)(arg1 & 0xffff), (int16)((uint32)arg1 >> 16));
+		if (it->state != kInScene || it->scene != _scene || !it->hovered || _held != -1 ||
+			!clickRect(it->rect).contains(p))
+			break;
+		add(id);
+		sayFile("effect_item.wav", _pickSound);
+		debug(1, "Grumpa: picked up item %d", id);
+		break;
+	}
 	default: break;
 	}
 }
@@ -301,6 +337,13 @@ bool Inventory::click(const Common::Point &p) {
 	Common::Rect panel(_pos.x, _pos.y, _pos.x + _panel.w, _pos.y + _panel.h + 3 * kSlotSize);
 	if (!panel.contains(p))
 		return false;
+	// The door and diskette buttons answer the plain cursor only (E-0901).
+	Common::Rect door(_pos.x + kDoorX, _pos.y + kButtonY, _pos.x + kDoorX + kDoorW, _pos.y + kButtonY + kButtonH);
+	Common::Rect disk(_pos.x + kDiskX, _pos.y + kButtonY, _pos.x + kDiskX + kDiskW, _pos.y + kButtonY + kButtonH);
+	if (_held == -1 && (door.contains(p) || disk.contains(p))) {
+		_request = door.contains(p) ? 60 : 61;
+		return true;
+	}
 	int left = _pos.x + (_panel.w - kSlotGrid) / 2, top = _pos.y + _panel.h;
 	for (int i = 0; i < kSlots; i++) {
 		Common::Rect r = Common::Rect::center(0, 0, kSlotSize, kSlotSize);
@@ -326,18 +369,12 @@ bool Inventory::click(const Common::Point &p) {
 		}
 		return true;
 	}
-	// The shield slot (right of Grumpa) takes 134 and 138 only (E-0504); the weapon slot and
-	// the two buttons are Q-0502.
-	Common::Rect shield(_pos.x + kShieldX, _pos.y, _pos.x + kShieldX + kEquipSize, _pos.y + kEquipSize);
-	if (shield.contains(p)) {
-		if (_held == -1 && _equip[1] != -1) {
-			hold(_equip[1]);
-			_equip[1] = -1;
-		} else if (_held == 134 || _held == 138) {
-			if (_equip[1] != -1)
-				add(_equip[1]);
-			_equip[1] = _held;
-			setState(*find(_held), kCarried);
+	// Then the shield slot (right of Grumpa), then the weapon slot (left).
+	for (int k = 1; k >= 0; k--) {
+		Common::Rect r(_pos.x + k * kShieldX, _pos.y, _pos.x + k * kShieldX + kEquipSize, _pos.y + kEquipSize);
+		if (r.contains(p)) {
+			equipClick(k);
+			break;
 		}
 	}
 	return true;
@@ -373,6 +410,129 @@ void Inventory::draw(Graphics::ManagedSurface &screen) {
 		if (ic)
 			screen.transBlitFrom(*ic, _pos + Common::Point(k * kShieldX + kIconOffset, kIconOffset), key);
 	}
+}
+
+// An equipment slot (0 weapon, 1 shield; E-0901): take its item onto an empty cursor, or put
+// a fitting held item in (the old one back to the inventory); anything else goes back to the
+// inventory. ponytail: Grumpa wearing the attachment (FUN_00421780) is not drawn yet.
+void Inventory::equipClick(int k) {
+	if (_held == -1) {
+		if (_equip[k] == -1)
+			return;
+		Item *it = find(_equip[k]);
+		debug(1, "Grumpa: Grumpa takes off attachment %d", attachmentOf(k, _equip[k]));
+		_equip[k] = -1;
+		if (it) {
+			hold(it->id);
+			say(it->voice);
+		}
+		return;
+	}
+	int heldId = _held;
+	if (attachmentOf(k, heldId) < 0) {
+		_held = -1;
+		add(heldId);
+		return;
+	}
+	if (_equip[k] != -1)
+		add(_equip[k]);
+	_equip[k] = heldId;
+	setState(*find(heldId), kCarried);
+	debug(1, "Grumpa: Grumpa wears attachment %d", attachmentOf(k, heldId));
+}
+
+Common::Rect Inventory::clickRect(const Common::Rect &r) {
+	Common::Rect w = r;
+	if (w.width() < 40) {
+		w.left = r.left - 30;
+		w.right = r.left + 30;
+	}
+	if (w.height() < 40) {
+		w.top = r.top - 30;
+		w.bottom = r.top + 30;
+	}
+	return w;
+}
+
+bool Inventory::itemAt(const Common::Point &p) const {
+	for (uint i = 0; i < _items.size(); i++) {
+		const Item &it = _items[i];
+		if (it.hovered && it.state == kInScene && it.scene == _scene && clickRect(it.rect).contains(p))
+			return true;
+	}
+	return false;
+}
+
+// Every 2 updates an item lying here turns 0.05 rad, steps its glow and checks the mouse:
+// over its rectangle, the panel hidden and the player within 160 units, it is hovered and
+// says its name once each time the mouse comes onto it (E-0900).
+void Inventory::update(const Character *player, const Common::Point &mouse) {
+	_player = player;
+	for (uint i = 0; i < _items.size(); i++) {
+		Item &it = _items[i];
+		if (!it.active || it.scene != _scene || it.state != kInScene)
+			continue;
+		if (++it.tick < 2)
+			continue;
+		it.tick = 0;
+		if (it.glow >= 0 && ++it.glow > 10)
+			it.glow = -1;
+		it.rot[1] += 0.05f;
+		if (it.rot[1] > 6.2831855f)
+			it.rot[1] -= 6.2831855f;
+		bool near = true;
+		if (player) {
+			float dx = it.pos[0] - player->pos.x, dy = it.pos[1] - player->pos.y, dz = it.pos[2] - player->pos.z;
+			near = sqrtf(dx * dx + dy * dy + dz * dz) < 160.0f;
+		}
+		if (!_shown && near && !it.rect.isEmpty() && clickRect(it.rect).contains(mouse)) {  // drawn once
+			if (it.sayArmed)
+				say(it.voice);
+			it.sayArmed = false;
+			it.hovered = true;
+		} else {
+			it.sayArmed = true;
+			it.hovered = false;
+		}
+	}
+}
+
+// Lying in the current scene at `pos` turned by `yaw`, shown, with a glow and the pick-up
+// sound (op 71 and the drop beside Grumpa, E-0900).
+void Inventory::place(Item &it, const Vec3 &pos, float yaw) {
+	it.pos[0] = pos.x;
+	it.pos[1] = pos.y;
+	it.pos[2] = pos.z;
+	it.rot[0] = it.rot[2] = 0.0f;
+	it.rot[1] = yaw;
+	it.active = it.visible = true;
+	it.scene = _scene;
+	setState(it, kInScene);
+	it.glow = 0;
+	sayFile("effect_item.wav", _pickSound);
+}
+
+// The panel is full: at the player's character, 20 units up and 30 ahead (E-0900).
+// ponytail: no walk-mesh test yet (the 30-back and on-the-spot fallbacks); without a player
+// character the item stays where it was.
+void Inventory::dropBesidePlayer(Item &it) {
+	if (!_player) {
+		setState(it, kInScene);
+		it.scene = _scene;
+		return;
+	}
+	Vec3 at(_player->pos.x + sinf(_player->yaw) * 30.0f, _player->pos.y + 20.0f,
+			_player->pos.z + cosf(_player->yaw) * 30.0f);
+	place(it, at, _player->yaw);
+}
+
+void Inventory::sayFile(const Common::String &wav, Audio::SoundHandle &h) {
+	Common::SeekableReadStream *f = openSound(wav);
+	Audio::SeekableAudioStream *s = f ? Audio::makeWAVStream(f, DisposeAfterUse::YES) : nullptr;
+	if (!s)
+		return;
+	g_system->getMixer()->stopHandle(h);
+	g_system->getMixer()->playStream(Audio::Mixer::kSFXSoundType, &h, s);
 }
 
 bool Inventory::showHeldCursor() {

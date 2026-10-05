@@ -38,6 +38,7 @@ GrumpaEngine::GrumpaEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	: Engine(syst), _gameDesc(gameDesc) {
 	_events = new EventVM(this);
 	_voices = new Voices(_mixer, &_characters);
+	_inventory.attach(&_characters, _events);
 }
 
 GrumpaEngine::~GrumpaEngine() {
@@ -89,6 +90,7 @@ Common::Error GrumpaEngine::run() {
 	// first scene view; "Avsluta Spel" quits.
 	if (!(ConfMan.hasKey("dev_skip_intro") && ConfMan.getBool("dev_skip_intro")))
 		playMovie("grumpa_intro");
+	_events->startAmbience();  // the boot plays it under the main menu (E-0902)
 	Common::Array<Common::U32String> items;
 	loadMenuText(items);
 	int sel = 0;
@@ -132,6 +134,11 @@ Common::Error GrumpaEngine::run() {
 				} else if (event.type == Common::EVENT_LBUTTONUP && _inventory.click(event.mouse)) {
 					if (!_inventory.showHeldCursor())
 						_cursorName = "", updateHoverCursor(event.mouse);
+					int request = _inventory.takeRequest();  // the panel's buttons (E-0901)
+					if (request == 60)
+						state = kMenu;
+					else if (request == 61)
+						saveGameDialog();
 					dirty = true;
 				} else if (event.type == Common::EVENT_LBUTTONUP) {
 					if (handleSceneClick(event.mouse)) {

@@ -12,7 +12,8 @@ MODULE_OBJS = \
 	movie.o \
 	character.o \
 	dialogue.o \
-	score.o
+	score.o \
+	items.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_GRUMPA), DYNAMIC_PLUGIN)

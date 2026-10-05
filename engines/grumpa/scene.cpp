@@ -260,6 +260,8 @@ void GrumpaEngine::updateHoverCursor(const Common::Point &p) {
 			break;
 		}
 	}
+	if (_inventory.itemAt(p))  // a hovered item takes the hotspot cursor too (E-0900)
+		overTrigger = true;
 	setCursorImage(overTrigger ? "grabing" : "default");
 }
 
@@ -725,7 +727,7 @@ bool GrumpaEngine::handleSceneClick(const Common::Point &p) {
 // An actor's texture (E-0114): a 32-bit .tga keeps its alpha and is blended, any other becomes
 // an RGB555 texture (CFXTexture, E-0303); returned as ARGB8888. Names are cp1252
 // (e.g. a dead-father texture); the extracted cabinet has '_' for those letters.
-static bool loadActorTexture(const Common::String &name, Graphics::Surface &out, bool &alpha) {
+bool loadActorTexture(const Common::String &name, Graphics::Surface &out, bool &alpha) {
 	Common::File tf;
 	Common::String ascii = name;
 	for (uint k = 0; k < ascii.size(); k++)
@@ -838,6 +840,7 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 						   m.texture.getPixels() ? &m.texture : nullptr, m.alpha,
 						   _events->spriteFrame(m.id));  // animated by the VM (E-0601)
 		}
+		drawItems(cam, depth);  // the items lying here (E-0900)
 		// The characters at home in this scene (characters.md, E-0403): the idle mesh turned by
 		// yaw about +Y and moved to the position. ponytail: the idle clip only, no state machine
 		// (Q-0403); the yaw sign follows D3DX's RotationY, not yet checked against the original.

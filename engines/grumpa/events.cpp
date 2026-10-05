@@ -25,6 +25,8 @@
 #include "common/tokenizer.h"
 
 #include "common/serializer.h"
+#include "common/system.h"
+#include "common/events.h"
 
 #include "grumpa/events.h"
 #include "grumpa/grumpa.h"
@@ -724,6 +726,7 @@ void EventVM::update() {
 		}
 	}
 	_engine->_characters.update();
+	_engine->_inventory.update(_engine->playerCharacter(), g_system->getEventManager()->getMousePos());
 	_score.update();
 	_ambience.update();
 	fadeUpdate();
