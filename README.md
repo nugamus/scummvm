@@ -1,3 +1,32 @@
+# Nugamus's ScummVM fork
+
+This is my fork of [ScummVM](https://github.com/scummvm/scummvm), where I work on engines for a handful of
+late-90s adventure games that ScummVM doesn't support yet. You'll need your own copy of a game to play it;
+no game data lives here.
+
+| Engine | Game | Branch |
+| --- | --- | --- |
+| `x3d` | Monet: The Mystery of the Orangerie Museum (4X Technologies) | [`x3d-upstream`](../../tree/x3d-upstream) |
+| `peintre` | Mission Sunlight | not published yet |
+| `ring` | Ring: The Legend of the Nibelungen (Arxel Tribe) | not published yet |
+| `gilbert` | Gilbert og den kemystiske ø | not published yet |
+| `grumpa` | Grumpa | not published yet |
+
+### Branches
+
+- [`x3d-upstream`](../../tree/x3d-upstream) is the X3D engine, cleaned up for submitting to ScummVM. The other
+  engines get a branch like it once they're ready.
+- [`avi-fxtc`](../../tree/avi-fxtc) and [`engine-hotspot-markers`](../../tree/engine-hotspot-markers) are small fixes
+  to ScummVM itself.
+
+The research behind these engines (file format specs, notes on the original executables and the tools I wrote
+along the way) is in [nugamus/reimpl-notes](https://github.com/nugamus/reimpl-notes).
+
+AI assistance was used while writing these engines and is disclosed on every commit with an `Assisted-by` line,
+as ScummVM's [AI guidelines](AI-GUIDELINES.md) ask.
+
+---
+
 # [ScummVM README](https://www.scummvm.org/) · [![Translation status](https://translations.scummvm.org/widgets/scummvm/-/scummvm/svg-badge.svg)](https://translations.scummvm.org/engage/scummvm/?utm_source=widget) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md#pull-requests)
 
 ## About ScummVM
