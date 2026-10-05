@@ -82,6 +82,8 @@ public:
 	int fadeLevel() const { return _fade.level; }
 	/** Escape is taken only while no fade runs and the screen is not black (E-0700). */
 	bool fadeIdle() const { return !_fade.running && _fade.level != 0; }
+	/** Play the ambience's pending sound now (the boot, before the main menu). */
+	void startAmbience() { _ambience.enterScene(); }
 	/** The score display (actor 8), drawn over the scene. */
 	const Score &score() const { return _score; }
 

@@ -29,7 +29,13 @@
 #include "common/str.h"
 #include "graphics/managed_surface.h"
 
+#include "grumpa/mesh.h"
+
 namespace Grumpa {
+
+class Characters;
+struct Character;
+class EventVM;
 
 /**
  * The items (global actors 100..179), the cursor's held item and the inventory panel
@@ -57,6 +63,15 @@ public:
 		int32 scene = -1;
 		float pos[3] = {}, rot[3] = {};
 		Common::String mesh, texture, icon, voice;  // IO_*.ANB, IT_*.tga, IC_*.tga, IS_*.wav
+		// In the world (E-0900): the mesh and texture, loaded on first draw; the screen
+		// rectangle of the last draw; hovering; the glow after a placement.
+		bool loaded = false, alpha = false;
+		Mesh model;
+		Graphics::Surface skin;          // ARGB8888
+		Common::Rect rect;
+		bool hovered = false, sayArmed = true;
+		int tick = 0;                    // updates since the last 2-update step
+		int glow = -1;                   // glow steps done (-1: none)
 	};
 
 	~Inventory();
@@ -82,10 +97,27 @@ public:
 	/** Set the system cursor to the held item's icon; false when nothing is held. */
 	bool showHeldCursor();
 
+	/** The player's character and the VM (counted items go to actor 8, E-0503). */
+	void attach(Characters *chars, EventVM *vm) { _chars = chars; _vm = vm; }
+	/** The 20 ms update of the items lying in the scene: spin, glow, hover (E-0900).
+	 *  `player` is the player's character (nullptr: none, no distance limit). */
+	void update(const Character *player, const Common::Point &mouse);
+	Common::Array<Item> &items() { return _items; }
+	/** Whether a hovered item lies under `p` (the hotspot cursor). */
+	bool itemAt(const Common::Point &p) const;
+	/** The item's click rectangle: each side narrower than 40 px widened to centre +/- 30. */
+	static Common::Rect clickRect(const Common::Rect &r);
+	/** A panel button pressed by the last click: 60 the main menu, 61 the saved games, else 0. */
+	int takeRequest() { int r = _request; _request = 0; return r; }
+
 	void syncState(Common::Serializer &s);
 
 private:
 	Item *find(int id);
+	void place(Item &it, const Vec3 &pos, float yaw);
+	void dropBesidePlayer(Item &it);
+	void equipClick(int k);
+	void sayFile(const Common::String &wav, Audio::SoundHandle &h);
 	void setState(Item &it, int32 state);
 	void hold(int id);
 	bool add(int id);
@@ -105,6 +137,11 @@ private:
 	Graphics::ManagedSurface _slotImg[2];
 	Common::Array<Graphics::ManagedSurface *> _icons;  // by item index, loaded on demand
 	Audio::SoundHandle _voice;
+	Audio::SoundHandle _pickSound;
+	Characters *_chars = nullptr;
+	EventVM *_vm = nullptr;
+	const Character *_player = nullptr;  // as given to the last update
+	int _request = 0;
 };
 
 } // End of namespace Grumpa

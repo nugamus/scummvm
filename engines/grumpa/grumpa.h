@@ -43,6 +43,9 @@ namespace Grumpa {
 
 class EventVM;
 
+/** Load Bitmaps/<name> as an actor texture, ARGB8888 (scene.cpp, E-0303). */
+bool loadActorTexture(const Common::String &name, Graphics::Surface &out, bool &alpha);
+
 // The original runs one 800x600, 16-bit (RGB555) surface on DirectDraw7 (games/grumpa docs,
 // E-0010). We keep the same page and blit it to the backend each frame.
 enum {
@@ -81,6 +84,10 @@ public:
 	void renderSceneFrame(uint32 now);
 	/** The whole frame: the scene, the score, the inventory panel, then actor 185's fade. */
 	void drawFrame(uint32 now);
+	/** The items lying in the scene (inventory.md, E-0900), at layer 3 with the meshes. */
+	void drawItems(const Camera &cam, Common::Array<uint16> &depth);
+	/** The player's character, for the items' 160-unit reach (nullptr: none). */
+	const Character *playerCharacter();
 	/** A left click in the scene at `p`: run the first unspent trigger whose polygon contains
 	 *  it (docs/spec/events.md). Returns true if a trigger fired (the scene changed). */
 	bool handleSceneClick(const Common::Point &p);
@@ -142,6 +149,9 @@ private:
 	friend class EventVM;
 	bool _showHotspots = false;  // H toggles the trigger-polygon overlay
 	Common::String _cursorName;  // the current cursor image, to avoid redundant reloads
+	Mesh _glowMesh;              // Meshes/effect_item.ANB, the glow of a placed item
+	Graphics::Surface _glowSkin;
+	bool _glowAlpha = false, _glowLoaded = false;
 };
 
 } // End of namespace Grumpa
