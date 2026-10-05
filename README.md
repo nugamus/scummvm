@@ -8,14 +8,14 @@ no game data lives here.
 | --- | --- | --- |
 | `x3d` | Monet: The Mystery of the Orangerie Museum (4X Technologies) | [`x3d-upstream`](../../tree/x3d-upstream) |
 | `peintre` | Mission Sunlight | not published yet |
-| `ring` | Ring: The Legend of the Nibelungen (Arxel Tribe) | not published yet |
+| `ring` | Ring: The Legend of the Nibelungen (Arxel Tribe) | [`ring`](../../tree/ring) |
 | `gilbert` | Gilbert og den kemystiske ø | not published yet |
 | `grumpa` | Grumpa | not published yet |
 
 ### Branches
 
-- [`x3d-upstream`](../../tree/x3d-upstream) is the X3D engine, cleaned up for submitting to ScummVM. The other
-  engines get a branch like it once they're ready.
+- [`x3d-upstream`](../../tree/x3d-upstream) and [`ring`](../../tree/ring) each hold one engine, cleaned up for
+  submitting to ScummVM. The other engines get a branch like them once they're ready.
 - [`avi-fxtc`](../../tree/avi-fxtc) and [`engine-hotspot-markers`](../../tree/engine-hotspot-markers) are small fixes
   to ScummVM itself.
 
