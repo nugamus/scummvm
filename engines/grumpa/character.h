@@ -143,8 +143,9 @@ public:
 	 *  `firstEntry`, puts the player at the scene's first entry, at home there. */
 	void forgetScene(bool firstEntry);
 	/** Saves: each character's position, yaw, home, active and visible (version 4), the
-	 *  characters actors 3 and 4 hold (6). */
-	void syncState(Common::Serializer &s);
+	 *  characters actors 3 and 4 hold (5); state slots, texture, worn attachments and latch
+	 *  (6). */
+	bool syncState(Common::Serializer &s);
 	/** The engine, for loading meshes, and the VM, for the commands characters send. */
 	void attach(GrumpaEngine *vm, EventVM *events) { _vm = vm; _events = events; }
 

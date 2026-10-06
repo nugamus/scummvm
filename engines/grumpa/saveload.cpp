@@ -30,8 +30,9 @@ namespace Grumpa {
 // ScummVM saves holding what the original keeps in Save\Current\ (docs/spec/save.md):
 // the current scene, the items and the inventory, then the event VM's state.
 enum {
-	kSaveVersion = 5  // 2: the event VM block; 3: the score and the ambience; 4: the characters;
+	kSaveVersion = 6  // 2: the event VM block; 3: the score and the ambience; 4: the characters;
 	                  // 5: the characters actors 3 and 4 hold
+	                  // 6: the characters' state slots, texture, attachments and latch
 };
 
 bool GrumpaEngine::hasFeature(EngineFeature f) const {
@@ -54,8 +55,8 @@ bool GrumpaEngine::syncGame(Common::Serializer &s) {
 	s.syncAsSint32LE(scene);
 	_inventory.syncState(s);
 	syncEvents(s);
-	if (s.getVersion() >= 4)
-		_characters.syncState(s);
+	if (s.getVersion() >= 4 && !_characters.syncState(s))
+		return false;
 	if (s.isLoading()) {
 		if (s.err() || scene < 0)
 			return false;
