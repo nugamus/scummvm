@@ -67,6 +67,7 @@ struct Character {
 	float sphere = 0.0f;             // [0x290]: the proximity sphere's radius (E-0705)
 	int face = -1;                   // +0x44c: the walk-mesh face under it
 	int floorType = -1;              // +0x450
+	int platform = -1;               // +0x454: the platform it stands on (E-1600)
 	// Drawing (scene.cpp): the texture in use, loaded on first draw.
 	Graphics::Surface skin;          // ARGB8888, like SceneMesh::texture
 	bool alpha = false;

@@ -41,6 +41,12 @@ struct Floor {
 		Vec3 pos, rot;
 		int scene;
 	};
+	// An active 0x1a mesh actor with +0x1d0 = 1 (E-1600): walked on at its frame-0 x/z, at the
+	// height of its current frame.
+	struct Platform {
+		const Mesh *mesh;
+		int frame;
+	};
 
 	Common::Array<Vec3> verts;
 	Common::Array<uint16> faces;  // 3 vertex indices a face
@@ -61,9 +67,11 @@ struct Floor {
 	float height(int f, float x, float z) const;
 	/** The floor's opcodes (E-0803): 5 closes, 6 opens floor type `arg - 1` (0: all). */
 	void command(int op, int arg);
-	/** CFXFloor::Move (E-0802): move `pos` by `delta`, kept `radius` off the walls; the floor
-	 *  type rules are the caller's. `face` is the face under the result (-1: off the mesh). */
-	void move(Vec3 &pos, Vec3 delta, float radius, int &face) const;
+	/** CFXFloor::Move (E-0802, E-1600): move `pos` by `delta`, onto one of `platforms` or kept
+	 *  `radius` off the walls; the floor type rules are the caller's. `face` is the face under
+	 *  the result (-1: off the mesh), `platform` the index of the platform it is on (-1: none). */
+	void move(Vec3 &pos, Vec3 delta, float radius, int &face, int &platform,
+			  const Common::Array<Platform> &platforms) const;
 
 private:
 	bool inFace(int f, float x, float z) const;

@@ -126,6 +126,7 @@ public:
 	Characters &characters() { return _characters; }
 	Voices &voices() { return *_voices; }
 	EventVM &events() { return *_events; }
+	SceneData &sceneData() { return _sceneData; }
 
 private:
 	const ADGameDescription *_gameDesc;

@@ -192,6 +192,7 @@ struct SceneMesh {
 	bool playing = false;        // +0x1d4
 	int frame = 0;               // +0x1c0
 	bool autoplay = false;       // +0x1dc: plays on the scene-entry broadcast
+	bool platform = false;       // +0x1d0: walked on (E-1600)
 	// The delay timer (+0x278): a play waits `ticks` updates before running.
 	bool timerOn = false, timerCounting = false, timerRandom = false;
 	int32 timerMin = 0, timerMax = 0, timerFixed = 0;  // ms

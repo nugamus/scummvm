@@ -23,6 +23,7 @@
 #include "common/file.h"
 
 #include "grumpa/character.h"
+#include "grumpa/events.h"
 #include "grumpa/grumpa.h"
 
 namespace Grumpa {
@@ -299,9 +300,18 @@ bool Characters::touches(const Character &c, const Vec3 &centre, float r) {
 // The character update (E-0603, E-0813, E-0814, E-0802/E-0803): on each animation tick (0.46
 // an update) the frame steps and, at the clip's end, the queue's next slot starts (else the
 // clip loops); the yaw takes one step of its turn; the clip's root motion for the frame, turned
-// by the yaw, goes through the walk mesh. ponytail: no idle fidget (slots 0x1f/0x20 after 11
-// idle loops), no swimming mode [0x48c], no platforms.
+// by the yaw, goes through the walk mesh and the platforms. ponytail: no idle fidget (slots
+// 0x1f/0x20 after 11 idle loops), no swimming mode [0x48c].
 void Characters::update() {
+	// The platform list (E-1600): the scene's 0x1a meshes with +0x1d0 set, when active; the
+	// files list them by ascending id, the original's order.
+	Common::Array<Floor::Platform> platforms;
+	const Common::Array<SceneMesh> &meshes = _vm->sceneData().meshes;
+	for (uint i = 0; i < meshes.size(); i++)
+		if (meshes[i].platform && meshes[i].active && !meshes[i].mesh.empty()) {
+			Floor::Platform pl = { &meshes[i].mesh, _vm->events().spriteFrame(meshes[i].id) };
+			platforms.push_back(pl);
+		}
 	for (uint i = 0; i < _chars.size(); i++) {
 		Character &c = _chars[i];
 		if (!c.active || c.home != _scene)
@@ -340,13 +350,16 @@ void Characters::update() {
 		if (_floor.empty())
 			continue;
 		const Vec3 old = c.pos;
-		const int oldFace = c.face;
-		_floor.move(c.pos, delta, c.radius, c.face);
-		// Off the mesh, a step up of more than 20 or a closed wall type: back (E-0803).
-		int type = c.face >= 0 ? _floor.types[c.face] : -1;
-		if (c.face < 0 || c.pos.y > old.y + 20.0f || (type > 18 && type <= 28 && _floor.closed[type])) {
+		const int oldFace = c.face, oldPlatform = c.platform;
+		_floor.move(c.pos, delta, c.radius, c.face, c.platform, platforms);
+		// Off the mesh, a step up of more than 20 (80 on a platform, type 15) or a closed wall
+		// type: back (E-0803, E-1600).
+		int type = c.platform >= 0 ? 15 : c.face >= 0 ? _floor.types[c.face] : -1;
+		if (c.face < 0 || c.pos.y > old.y + (c.platform >= 0 ? 80.0f : 20.0f) ||
+			(type > 18 && type <= 28 && _floor.closed[type])) {
 			c.pos = old;
 			c.face = oldFace;
+			c.platform = oldPlatform;
 		} else {
 			c.floorType = type;
 		}
@@ -388,7 +401,7 @@ void Characters::enter(int scene) {
 		if (p->active)
 			p->home = scene;
 	}
-	p->face = -1;
+	p->face = p->platform = -1;
 	p->floorType = -1;
 	request(*p, 5, 0.0f);
 	p->turnSteps = 0;
