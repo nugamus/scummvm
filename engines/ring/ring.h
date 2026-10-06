@@ -331,7 +331,6 @@ private:
 	Common::Array<int> _keys; ///< key codes not handled yet
 	Common::String _languageFolder;
 	bool _escapeDown = false;
-	bool _scripted = false; ///< dev_input drives the mouse
 	struct Timer {
 		int id;
 		uint32 period, due;
