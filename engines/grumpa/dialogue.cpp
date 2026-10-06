@@ -234,8 +234,7 @@ void Voices::stop(uint idx, bool runList, Common::Array<SceneCommand> &out) {
 	Run &r = _run[idx];
 	_mixer->stopHandle(r.handle);
 	r.pending = false;
-	if (r.playing)
-		setTalking(s.speaker, false);
+	setTalking(s.speaker, false);
 	r.playing = false;
 	if (runList) {
 		for (uint i = 0; i < s.onEnd.size(); i++)
@@ -245,10 +244,13 @@ void Voices::stop(uint idx, bool runList, Common::Array<SceneCommand> &out) {
 	}
 }
 
+// "Talking" is the speaker's state slot 5, read only by conditions: the companion's hints wait
+// for it to be 0 (E-1620). ponytail: no speech queue (character op 0x48) yet, so play does not
+// flush an absent speaker's queue.
 void Voices::setTalking(int speaker, bool on) {
 	Character *c = speaker > 0 ? _chars->find(speaker) : nullptr;
-	if (c)
-		c->talking = on;
+	if (c && c->state.size() > 5)
+		c->state[5] = on ? 1 : 0;
 }
 
 } // End of namespace Grumpa
