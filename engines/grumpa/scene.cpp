@@ -583,14 +583,15 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			m.timerFixed = tm[11];
 			m.timerTicks = tm[13];
 			sub24(c); sub24(c); pairVec(c);
-			// Lists 1, 2 and 8 end the animation (forward end, backward end, end; E-0601),
-			// 3..7 belong to the bubble tests (Q-0600).
+			// Lists 1, 2 and 7 end the animation (forward end, backward end, end; E-1807);
+			// 3, 4, 6 and 8 belong to the contact tests, 5 is never read (Q-0600).
 			SpriteHooks hk;
 			hk.id = id;
 			readCmds(c, hk.onForward);
 			readCmds(c, hk.onBackward);
-			for (int v = 2; v < 7 && c.ok; v++) ccVec(c);
+			for (int v = 2; v < 6 && c.ok; v++) ccVec(c);
 			readCmds(c, hk.onEnd);
+			ccVec(c);
 			int32 na = c.i32();
 			if (na > 0) { m.anb = Common::String((const char *)(c.d + c.o), na); c.skip(na); }
 			int32 nt = c.i32();
