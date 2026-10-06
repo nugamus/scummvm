@@ -35,6 +35,8 @@ class RingEngine;
  * logic is specified in the research repository's games/ring/docs/<zone>.md.
  */
 namespace SY {
+/** Frees the save, load and status screens' state (the engine's destructor). */
+void shutdown();
 void onAccessibility(RingEngine *vm, int object, int value);
 void onNothing(RingEngine *vm);
 void onClick(RingEngine *vm, int object, int value);
