@@ -449,7 +449,7 @@ bool EventVM::gateSource(const SceneTrigger &tr, const Character *c, int32 who, 
 }
 
 // The proximity gate (E-0207, E-0705): bit 1 the player's character, bit 2 the companion's
-// (actor 4's), each with its own latch. ponytail: bit 4, the fighters' characters, is combat's.
+// (actor 4's), bit 4 the characters of the fighters 91..94 (no id test), each with its own latch.
 bool EventVM::triggerGate(SceneTrigger &tr) {
 	if (!tr.proximity)
 		return true;
@@ -461,6 +461,9 @@ bool EventVM::triggerGate(SceneTrigger &tr) {
 		pass = gateSource(tr, chars.player(), tr.who, tr.inside);
 	if (tr.gate & 2)
 		pass = gateSource(tr, chars.follower(), tr.whoCompanion, tr.insideCompanion) || pass;
+	if (tr.gate & 4)
+		for (int f = 0; f < 4; f++)
+			pass = gateSource(tr, chars.fighterCharacter(Characters::kFirstFighter + f), -1, tr.insideFighter[f]) || pass;
 	return pass;
 }
 
@@ -479,6 +482,11 @@ void EventVM::triggerUpdate() {
 			const Character *f = _engine->_characters.follower();
 			if (!f || !Characters::touches(*f, tr.centre, tr.radius))
 				tr.insideCompanion = false;
+			for (int k = 0; k < 4; k++) {
+				const Character *e = _engine->_characters.fighterCharacter(Characters::kFirstFighter + k);
+				if (!e || !Characters::touches(*e, tr.centre, tr.radius))
+					tr.insideFighter[k] = false;
+			}
 		} else if (triggerGate(tr) && (!tr.hasConds || conditionsHold(tr.conds))) {
 			debug(1, "Grumpa: walk-in trigger %u fired", tr.id);
 			triggerFire(tr);
