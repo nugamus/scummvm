@@ -72,6 +72,7 @@ struct Character {
 	Common::Array<Clip> clips;       // +0x2dc: 44 slots, by the number the .anb name starts with
 	int clip = 0;                    // +0x434: the slot playing
 	Common::Array<int> queue;        // +0x404: the slots to play next
+	int idleStarts = 0;              // +0x4a8: clip-0 starts in a row (the fidget, E-1740)
 	int turnSteps = 0;               // +0x4ac: yaw steps left
 	float turnStep = 0.0f;           // +0x4b8
 	float radius = 0.0f;             // [0x28c]: kept this far off the walk mesh's walls
