@@ -150,17 +150,20 @@ void Characters::makePlayer(Character &c) {
 }
 
 // Op 0x37 to actor 3 or 4 (E-0811, E-1222): the held character stops, loses its role and is
-// let go. ponytail: actor 95's companion flag (combat) is not cleared here.
+// let go.
 void Characters::release(int actor) {
 	Character *c = find(held(actor));
 	if (c) {
 		request(*c, 2, 0.0f);
 		c->setRole(0);
 	}
-	if (actor == kPlayerActor)
+	if (actor == kPlayerActor) {
 		_player = -1;
-	else
+	} else {
 		_follow.id = -1;
+		if (_fighters[kFighters - 1].held >= 0)  // a fighting companion stays off (E-1222)
+			_fighters[kFighters - 1].backToFollower = false;
+	}
 }
 
 // Op 0x46 (E-1501): a rider form leaves Grumpa and the mount side by side and Grumpa is the

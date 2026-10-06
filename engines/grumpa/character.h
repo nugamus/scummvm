@@ -120,6 +120,7 @@ struct Fighter {
 	int held = -1, target = -1;      // +0x2a0, +0x298
 	float clock = 0.0f;              // +0x29c
 	int hitTimer = 0, starts = 0;    // +0x2a8, +0x2b4
+	bool backToFollower = true;      // +0x2bc: 95's companion goes back to actor 4 (E-1433)
 };
 
 /** The character database, loaded once and kept for the whole game. */
@@ -217,6 +218,7 @@ private:
 	void react(Character &c);
 	void engage(int fighter, Character &c, int target, int role);
 	void releaseFighter(int fighter);
+	void handBack();
 	void endFights();
 	void fighterRule(int fighter);
 	void fightersCommand(int op, int arg1);
