@@ -111,6 +111,8 @@ public:
 	int takeRequest() { int r = _request; _request = 0; return r; }
 
 	void syncState(Common::Serializer &s);
+	/** Grumpa wears what the equipment slots hold (loading a save without worn flags). */
+	void wearEquipment();
 
 private:
 	Item *find(int id);
