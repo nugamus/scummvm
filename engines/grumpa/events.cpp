@@ -231,6 +231,7 @@ void EventVM::deliver(int id, int op, int arg1, int arg2) {
 
 void EventVM::deliverOne(int id, int op, int arg1, int arg2) {
 	debug(2, "Grumpa: VM -> %d op %d (%d, %d)", id, op, arg1, arg2);
+	debugC(1, kDebugCoverage, "cov opcode %d", op);
 	if (id == kSceneManager) {   // the fade (E-0700); a view or scene waits for its end
 		switch (op) {
 		case kOpGotoView:
@@ -813,6 +814,7 @@ void EventVM::keep() {
 }
 
 void EventVM::enterScene(int num, SceneData *scene) {
+	debugC(1, kDebugCoverage, "cov scene %d", num);
 	_scene = scene;
 	_sceneNum = num;
 	_run.clear();

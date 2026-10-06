@@ -28,6 +28,7 @@ const DebugChannelDef GrumpaMetaEngineDetection::debugFlagList[] = {
 	{ Grumpa::kDebugGraphics, "Graphics", "Graphics debug level" },
 	{ Grumpa::kDebugScript, "Script", "Game logic" },
 	{ Grumpa::kDebugSound, "Sound", "Sound and music" },
+	{ Grumpa::kDebugCoverage, "coverage", "Which opcodes and scenes run (cov lines for test coverage)" },
 	DEBUG_CHANNEL_END
 };
 
