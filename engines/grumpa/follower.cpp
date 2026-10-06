@@ -120,7 +120,7 @@ void Characters::shuffleAside(Character &c) {
 	const int holders[2] = { _player, _follow.id };
 	for (int i = 0; i < 2; i++) {
 		const Character *o = find(holders[i]);
-		if (!o || o == &c || !touches(c, Vec3(o->pos.x, o->pos.y + o->sphere, o->pos.z), o->sphere))
+		if (!o || o == &c || !touches(c, Vec3(o->pos.x, o->pos.y + o->sphere, o->pos.z), o->radius))
 			continue;
 		const Vec3 d = c.pos - o->pos;
 		const float len = sqrtf(d.dot(d));

@@ -438,9 +438,10 @@ bool Characters::syncState(Common::Serializer &s) {
 	return !s.err();
 }
 
+// The body sphere (E-1405): centred `[0x290]` above the position, of radius `[0x28c]`.
 bool Characters::touches(const Character &c, const Vec3 &centre, float r) {
 	const Vec3 d = Vec3(c.pos.x, c.pos.y + c.sphere, c.pos.z) - centre;
-	return d.dot(d) < (c.sphere + r) * (c.sphere + r);
+	return d.dot(d) < (c.radius + r) * (c.radius + r);
 }
 
 // The character update (E-0603, E-0813, E-0814, E-0802/E-0803): on each animation tick (0.46

@@ -57,7 +57,7 @@ void Characters::playerStrike(const Character &p) {
 void Characters::hit(Character &victim, int attacker, int32 attack) {
 	victim.lastAttacker = attacker;
 	const int32 n = attack - victim.slot(3);
-	debug(1, "Grumpa: character %d hits %u for %d (life %d)", attacker, victim.id, n, victim.slot(1));
+	debug(1, "Grumpa: character %d hits %u for %d = %d - %d (life %d)", attacker, victim.id, n, attack, victim.slot(3), victim.slot(1));
 	if (victim.slot(1) >= 0 && n > 0 && _vm)
 		_vm->events().deliver(Score::kId, 0x33, n, victim.id);
 }
@@ -316,7 +316,7 @@ void Characters::fighterRule(int f) {
 			continue;
 		const Vec3 e = c->pos - o->pos;
 		const float l = sqrtf(e.dot(e));
-		if (l > 0.0f && touches(*c, Vec3(o->pos.x, o->pos.y + o->sphere, o->pos.z), o->sphere)) {
+		if (l > 0.0f && touches(*c, Vec3(o->pos.x, o->pos.y + o->sphere, o->pos.z), o->radius)) {
 			c->pos.x += 4.0f * e.x / l;
 			c->pos.z += 4.0f * e.z / l;
 		}

@@ -76,8 +76,8 @@ struct Character {
 	int idleStarts = 0;              // +0x4a8: clip-0 starts in a row (the fidget, E-1740)
 	int turnSteps = 0;               // +0x4ac: yaw steps left
 	float turnStep = 0.0f;           // +0x4b8
-	float radius = 0.0f;             // [0x28c]: kept this far off the walk mesh's walls
-	float sphere = 0.0f;             // [0x290]: the proximity sphere's radius (E-0705)
+	float radius = 0.0f;             // [0x28c]: off the walls; the body sphere's radius (E-1405)
+	float sphere = 0.0f;             // [0x290]: the body sphere's height above the position
 	float reach = 0.0f;              // [0x5fc]: the reaction sphere's radius (E-1460)
 	int face = -1;                   // +0x44c: the walk-mesh face under it
 	int floorType = -1;              // +0x450
