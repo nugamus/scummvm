@@ -337,7 +337,7 @@ void EventVM::deliverOne(int id, int op, int arg1, int arg2) {
 		case kOpClick: {
 			Common::Point p((int16)(arg1 & 0xffff), (int16)((uint32)arg1 >> 16));
 			if (triggerClickable(*tr) && tr->poly.size() >= 3 && pointInPolygon(tr->poly, p) &&
-				(!tr->hasConds || conditionsHold(tr->conds))) {
+				(!walker() || triggerGate(*tr)) && (!tr->hasConds || conditionsHold(tr->conds))) {
 				debug(1, "Grumpa: trigger %u fired (%u commands)", tr->id, (uint)tr->cmds.size());
 				triggerFire(*tr);
 			}
@@ -393,10 +393,54 @@ bool EventVM::triggerClickable(const SceneTrigger &tr) const {
 		return false;
 	if (tr.view != -1 && _scene && tr.view != _scene->view)
 		return false;
-	// ponytail: no player character to walk yet (Q-0202): a click stands in for walking
-	// there, so it passes the proximity gate and fires walk-in triggers (click == false)
-	// too. Replace with the player's sphere test once characters move.
+	// With no player in the scene a click stands in for walking there (Q-0202): it passes the
+	// proximity gate and fires walk-in triggers too.
+	if (walker() && !tr.click)
+		return false;
 	return !tr.proximity || tr.proximityOn;
+}
+
+Character *EventVM::walker() const {
+	Character *p = _engine->_characters.player();
+	return p && _engine->_characters.present(*p) ? p : nullptr;
+}
+
+// The proximity gate (E-0207, E-0705) for the player's character: its sphere overlaps the
+// trigger's; with `once` it passes once per stay inside. ponytail: bit 1 only; actor 4's
+// character and actors 91..94 (bits 2, 4) are not modelled (Q-0811).
+bool EventVM::triggerGate(SceneTrigger &tr) {
+	if (!tr.proximity)
+		return true;
+	Character *p = walker();
+	if (!tr.proximityOn || !p || !(tr.gate & 1) || (tr.who != -1 && tr.who != (int)p->id))
+		return false;
+	if (!Characters::touches(*p, tr.centre, tr.radius)) {
+		tr.inside = false;
+		return false;
+	}
+	if (tr.once && tr.inside)
+		return false;
+	tr.inside = true;
+	return true;
+}
+
+// The triggers' update (E-0207): a walk-in trigger fires on each update its gate passes; a
+// click trigger's latch clears while the player is outside.
+void EventVM::triggerUpdate() {
+	if (!_scene || !walker())
+		return;
+	for (uint i = 0; i < _scene->triggers.size(); i++) {
+		SceneTrigger &tr = _scene->triggers[i];
+		if (!tr.proximity || tr.spent || !tr.active || (tr.view != -1 && tr.view != _scene->view))
+			continue;
+		if (tr.click) {
+			if (!Characters::touches(*walker(), tr.centre, tr.radius))
+				tr.inside = false;
+		} else if (triggerGate(tr) && (!tr.hasConds || conditionsHold(tr.conds))) {
+			debug(1, "Grumpa: walk-in trigger %u fired", tr.id);
+			triggerFire(tr);
+		}
+	}
 }
 
 void EventVM::triggerFire(SceneTrigger &tr) {
@@ -726,7 +770,9 @@ void EventVM::update() {
 			meshUpdate(*m, _run[m->id]);
 		}
 	}
+	_engine->updatePlayer();
 	_engine->_characters.update();
+	triggerUpdate();
 	_engine->_inventory.update(_engine->playerCharacter(), g_system->getEventManager()->getMousePos());
 	_score.update();
 	_ambience.update();

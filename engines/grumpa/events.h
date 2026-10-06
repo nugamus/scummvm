@@ -33,6 +33,7 @@
 namespace Grumpa {
 
 class GrumpaEngine;
+struct Character;
 
 /** Ray-cast point-in-polygon for a trigger's clickable region (E-0108; scene.cpp). */
 bool pointInPolygon(const Common::Array<Common::Point> &poly, const Common::Point &p);
@@ -123,6 +124,9 @@ private:
 	void meshTimerLoad(SceneMesh &m);
 	const SpriteHooks *hooks(uint32 id) const;
 	void triggerFire(SceneTrigger &tr);
+	Character *walker() const;
+	bool triggerGate(SceneTrigger &tr);
+	void triggerUpdate();
 	void logicCommand(SceneLogic &a, int op, int arg1);
 	void logicUpdate(SceneLogic &a);
 	SceneLogic *logicActor(int id);

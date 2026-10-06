@@ -39,6 +39,7 @@ GrumpaEngine::GrumpaEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	_events = new EventVM(this);
 	_voices = new Voices(_mixer, &_characters);
 	_inventory.attach(&_characters, _events);
+	_characters.attach(this);
 }
 
 GrumpaEngine::~GrumpaEngine() {
@@ -116,10 +117,13 @@ Common::Error GrumpaEngine::run() {
 			if (count == 0)
 				continue;
 			if (state == kScene) {
+				if (event.type == Common::EVENT_LBUTTONUP)
+					_leftHeld = false;  // actor 3 stops (E-0811)
 				if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE) {
 					if (!_events->fadeIdle())  // not during a fade or on black (E-0700)
 						continue;
 					state = kMenu;
+					_leftHeld = _leftWas = false;
 					dirty = true;
 				} else if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_h) {
 					_showHotspots = !_showHotspots;  // overlay the clickable trigger polygons
@@ -127,6 +131,8 @@ Common::Error GrumpaEngine::run() {
 				} else if (event.type == Common::EVENT_MOUSEMOVE) {
 					if (!_inventory.showHeldCursor())  // the held item is the cursor
 						updateHoverCursor(event.mouse);  // hand over a clickable exit/interaction
+				} else if (event.type == Common::EVENT_LBUTTONDOWN) {
+					_leftHeld = true;  // actor 3 walks while it is held (E-0811)
 				} else if (event.type == Common::EVENT_RBUTTONUP) {
 					_inventory.command(Inventory::kPanelId, 19, 0, 0);  // right click: the inventory
 					dirty = true;
@@ -135,7 +141,7 @@ Common::Error GrumpaEngine::run() {
 						_cursorName = "", updateHoverCursor(event.mouse);
 					int request = _inventory.takeRequest();  // the panel's buttons (E-0901)
 					if (request == 60)
-						state = kMenu;
+						state = kMenu, _leftHeld = _leftWas = false;
 					else if (request == 61)
 						saveGameDialog();
 					dirty = true;

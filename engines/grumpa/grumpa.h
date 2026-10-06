@@ -97,6 +97,11 @@ public:
 	void setCursorImage(const Common::String &name);
 	/** Update the cursor for the point `p`: a hand over a clickable trigger, else the pointer. */
 	void updateHoverCursor(const Common::Point &p);
+	/** Whether `p` is over a clickable trigger or an item (the hotspot cursor). */
+	bool overHotspot(const Common::Point &p);
+	/** Actor 3, the player controller (walk.cpp, docs/spec/walking.md): steers the player's
+	 *  character by the mouse, the views by its floor type, the exits. One 20 ms update. */
+	void updatePlayer();
 	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */
 	bool drawMenu(int selected);
 	/** Play an MPEG-1 film from a Movies_<lang> folder; Esc/click skips. */
@@ -149,6 +154,14 @@ private:
 	friend class EventVM;
 	bool _showHotspots = false;  // H toggles the trigger-polygon overlay
 	Common::String _cursorName;  // the current cursor image, to avoid redundant reloads
+	// Actor 3 (walk.cpp): the left button as it holds it, the last update's, its clock, the
+	// scene it last saw, the floor type its view follows; the exits' latch, first-update flag
+	// and remembered scene (CFXToScene +0x15c, +0x160, +0x168).
+	bool _leftHeld = false, _leftWas = false;
+	float _playerClock = 0.0f;
+	int _playerScene = -1, _playerView = -1;
+	bool _exitLatch = true, _exitFirst = true;
+	int _exitScene = 0;
 	Mesh _glowMesh;              // Meshes/effect_item.ANB, the glow of a placed item
 	Graphics::Surface _glowSkin;
 	bool _glowAlpha = false, _glowLoaded = false;

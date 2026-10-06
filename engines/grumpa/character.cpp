@@ -23,6 +23,7 @@
 #include "common/file.h"
 
 #include "grumpa/character.h"
+#include "grumpa/grumpa.h"
 
 namespace Grumpa {
 
@@ -112,7 +113,10 @@ bool Characters::load() {
 		r.skip(4);
 		c.yaw = r.f32();
 		r.skip(4);
-		r.skip(20);                  // [0x28c], [0x5fc], [0x290], [0x48c], [0x490]
+		c.radius = r.f32();          // [0x28c]
+		r.skip(4);                   // [0x5fc]
+		c.sphere = r.f32();          // [0x290]
+		r.skip(8);                   // [0x48c], [0x490]
 		uint32 n = r.count();        // rules: EC vector + CC vector each
 		for (uint32 i = 0; i < n && r.ok; i++) {
 			r.skip(20 * r.count());
@@ -131,7 +135,7 @@ bool Characters::load() {
 			r.skip(4);
 			r.ccVec();
 		}
-		r.skip(4);                   // [0x434]
+		const uint32 start = r.u32();  // [0x434]: the clip slot playing (E-0603)
 		r.names(c.anims);
 		r.names(c.sounds);
 		c.texture = (int)r.u32();
@@ -150,9 +154,13 @@ bool Characters::load() {
 		n = r.count();
 		for (uint32 i = 0; i < 2 * n && r.ok; i++)
 			c.pairs.push_back(r.u32());
+		c.clips.resize(44);          // SetDevice sizes the slot table to 0x2c (E-0815)
+		c.clip = MIN<uint32>(start, 43);
+		debug(3, "Grumpa: character %u clip %u, first .anb %s", c.id, start, c.anims.empty() ? "-" : c.anims[0].c_str());
 		if (r.ok)
 			_chars.push_back(c);
 	}
+	_scene = -1;                     // a new game: no scene entered yet
 	debug(1, "Grumpa: %u characters loaded%s", (uint)_chars.size(), r.ok ? "" : " (read error)");
 	return r.ok;
 }
@@ -172,26 +180,230 @@ bool Characters::stateOf(int id, int slot, int32 &value) {
 	return true;
 }
 
-// The animation clock (E-0603): 0.46 a update, a frame each time it passes 1.0; at the end the
-// clip starts over. ponytail: the idle only, no clip queue (Q-0403).
+// A clip slot (E-0815): the .anb whose name starts with the slot's number, and its .amb, a
+// u32 count and per frame 24 bytes: the root motion x, y, z, then a rotation (unused).
+Character::Clip *Characters::clip(Character &c, int slot) {
+	if (slot < 0 || slot >= (int)c.clips.size())
+		return nullptr;
+	Character::Clip &k = c.clips[slot];
+	if (!k.loaded && _vm) {
+		k.loaded = true;
+		for (uint i = 0; i < c.anims.size(); i++) {
+			if (!Common::isDigit(c.anims[i].firstChar()) || atoi(c.anims[i].c_str()) != slot)
+				continue;
+			Common::String base = c.anims[i];
+			if (base.size() > 4 && base[base.size() - 4] == '.')
+				base = Common::String(base.c_str(), base.size() - 4);
+			_vm->loadMesh(base, k.mesh);
+			Common::File f;
+			if (f.open(Common::Path("Meshes/" + base + ".amb"))) {
+				for (uint32 n = f.readUint32LE(); n > 0 && n < 10000 && f.pos() + 24 <= f.size(); n--) {
+					float x = f.readFloatLE(), y = f.readFloatLE(), z = f.readFloatLE();
+					f.skip(12);
+					k.motion.push_back(Vec3(x, y, z));
+				}
+			}
+			break;
+		}
+	}
+	return k.mesh.empty() ? nullptr : &k;
+}
+
+const Mesh *Characters::mesh(Character &c) {
+	Character::Clip *k = clip(c, c.clip);
+	return k ? &k->mesh : nullptr;
+}
+
+static float wrapAngle(float a) {
+	while (a > (float)M_PI)
+		a -= 2.0f * (float)M_PI;
+	while (a < -(float)M_PI)
+		a += 2.0f * (float)M_PI;
+	return a;
+}
+
+// The request table (E-0813). A "cut" ends the clip playing, so the queue takes over on the
+// next animation tick. ponytail: walk, run, stop and reset; jump, death, attacks and the turn
+// lock +0x4dc come with combat (Q-0806).
+void Characters::request(Character &c, int req, float turn) {
+	c.yaw = wrapAngle(c.yaw);
+	c.turnSteps = 10;
+	c.turnStep = wrapAngle(turn) * 0.1f;
+	if (req == -1)
+		return;
+	const int cur = c.clip;
+	Character::Clip *k = clip(c, cur);
+	const int cutFrame = k ? k->mesh.frames : 0;
+	static const int walkIdle[] = { 1, 2, -1 }, walkOn[] = { 2, -1 }, walkUp[] = { 0x21, 1, 2, -1 };
+	static const int runIdle[] = { 1, 4, 5, 6, 2, -1 }, runWalk[] = { 4, 5, 6, 2, -1 };
+	static const int runRun[] = { 5, 6, 2, -1 }, runUp[] = { 0x21, 1, 4, 5, 6, 2, -1 };
+	static const int stopWalk[] = { 3, 0, -1 }, stopRun[] = { 7, 0, -1 }, stopIdle[] = { 0, -1 };
+	const int *push = nullptr;
+	bool cut = false;
+	switch (req) {
+	case 0:
+		if (cur == 0 || cur == 0xb || cur == 0xd)
+			push = walkIdle, cut = true;
+		else if (cur >= 1 && cur <= 3)
+			push = walkOn;
+		else if (cur == 0x20)
+			push = walkUp, cut = true;
+		break;
+	case 1:
+		if (cur == 0 || cur == 0xb || cur == 3)
+			push = runIdle;
+		else if (cur == 1 || cur == 2)
+			push = runWalk;
+		else if (cur == 5)
+			push = runRun;
+		else if (cur == 0x20)
+			push = runUp;
+		break;
+	case 2:
+		push = cur == 1 || cur == 2 ? stopWalk : cur == 5 ? stopRun : stopIdle;
+		break;
+	case 5:
+		c.clip = 0;
+		c.frame = 0;
+		c.clock = 0.6f;
+		c.queue.clear();
+		return;
+	default:
+		return;
+	}
+	c.queue.clear();
+	for (; push && *push >= 0; push++)
+		c.queue.push_back(*push);
+	if (cut)
+		c.frame = cutFrame;
+}
+
+void Characters::syncState(Common::Serializer &s) {
+	for (uint i = 0; i < _chars.size(); i++) {
+		Character &c = _chars[i];
+		s.syncAsFloatLE(c.pos.x);
+		s.syncAsFloatLE(c.pos.y);
+		s.syncAsFloatLE(c.pos.z);
+		s.syncAsFloatLE(c.yaw);
+		s.syncAsSint32LE(c.home);
+		s.syncAsByte(c.active);
+		s.syncAsByte(c.visible);
+	}
+}
+
+bool Characters::touches(const Character &c, const Vec3 &centre, float r) {
+	const Vec3 d = Vec3(c.pos.x, c.pos.y + c.sphere, c.pos.z) - centre;
+	return d.dot(d) < (c.sphere + r) * (c.sphere + r);
+}
+
+// The character update (E-0603, E-0813, E-0814, E-0802/E-0803): on each animation tick (0.46
+// an update) the frame steps and, at the clip's end, the queue's next slot starts (else the
+// clip loops); the yaw takes one step of its turn; the clip's root motion for the frame, turned
+// by the yaw, goes through the walk mesh. ponytail: no idle fidget (slots 0x1f/0x20 after 11
+// idle loops), no swimming mode [0x48c], no platforms.
 void Characters::update() {
 	for (uint i = 0; i < _chars.size(); i++) {
 		Character &c = _chars[i];
-		if (!c.active || c.home != _scene || c.mesh.frames <= 0)
+		if (!c.active || c.home != _scene)
+			continue;
+		Character::Clip *k = clip(c, c.clip);
+		if (!k || k->mesh.frames <= 0)
 			continue;
 		c.clock += 0.46f;
 		if (c.clock <= 1.0f)
 			continue;
 		c.clock -= 1.0f;
-		if (++c.frame >= c.mesh.frames)
+		if (c.frame + 1 >= k->mesh.frames) {
 			c.frame = 0;
+			while (!c.queue.empty()) {  // slots a character lacks are passed over
+				int next = c.queue.front();
+				c.queue.remove_at(0);
+				if (clip(c, next)) {
+					c.clip = next;
+					k = clip(c, next);
+					break;
+				}
+			}
+		} else {
+			c.frame++;
+		}
+		if (c.turnSteps > 0 && c.clip != 8 && c.clip != 0xc && (c.clip < 0x12 || c.clip > 0x14)) {
+			c.yaw += c.turnStep;
+			c.turnSteps--;
+		}
+		Vec3 delta;
+		if (c.clip != 0 && !k->motion.empty()) {
+			const Vec3 &m = k->motion[MIN<int>(c.frame, k->motion.size() - 1)];  // Q-0807
+			const float sn = sinf(c.yaw), cs = cosf(c.yaw);
+			delta = Vec3(m.z * sn + m.x * cs, 0.0f, m.z * cs - m.x * sn);
+		}
+		if (_floor.empty())
+			continue;
+		const Vec3 old = c.pos;
+		const int oldFace = c.face;
+		_floor.move(c.pos, delta, c.radius, c.face);
+		// Off the mesh, a step up of more than 20 or a closed wall type: back (E-0803).
+		int type = c.face >= 0 ? _floor.types[c.face] : -1;
+		if (c.face < 0 || c.pos.y > old.y + 20.0f || (type > 18 && type <= 28 && _floor.closed[type])) {
+			c.pos = old;
+			c.face = oldFace;
+		} else {
+			c.floorType = type;
+		}
 	}
+}
+
+// Actor 3 on scene entry (E-0804): the player is placed at the entry from the scene left, or
+// stays where it is (an entry for scene -2), or takes the first entry; not on the first entry
+// of a new game or a load. Then, on every entry, the request 5 back to the idle (E-0830).
+void Characters::enter(int scene) {
+	const int prev = _scene;
+	_floor.load(scene);
+	Character *p = player();
+	if (!p)
+		return;
+	if (_firstEntry && !_floor.entries.empty()) {  // a save without the characters
+		p->pos = _floor.entries[0].pos;
+		p->yaw = _floor.entries[0].rot.y;
+		p->home = scene;
+	}
+	_firstEntry = false;
+	if (prev != -1) {
+		const Floor::Entry *e = nullptr;
+		bool stay = false;
+		for (uint i = 0; i < _floor.entries.size() && !e; i++)
+			if (_floor.entries[i].scene == prev)
+				e = &_floor.entries[i];
+		for (uint i = 0; i < _floor.entries.size() && !e && !stay; i++)
+			stay = _floor.entries[i].scene == -2;
+		if (!e && !stay && !_floor.entries.empty())
+			e = &_floor.entries[0];
+		if (e) {
+			p->pos = e->pos;
+			p->yaw = e->rot.y;
+		}
+		// The player goes along (E-0816). The original does it on the first entry too, for the
+		// character op 0x2c has made the player (Q-0812); a new game enters scene 1, Grumpa's
+		// home, so only a first entry elsewhere differs.
+		if (p->active)
+			p->home = scene;
+	}
+	p->face = -1;
+	p->floorType = -1;
+	request(*p, 5, 0.0f);
+	p->turnSteps = 0;
 }
 
 bool Characters::command(int id, int op, int arg1, int arg2) {
 	if (id == -1) {
+		if (op == 0x17)
+			enter(arg1);
 		for (uint i = 0; i < _chars.size(); i++)
 			apply(_chars[i], op, arg1);
+		return true;
+	}
+	if (id == kFloor) {
+		_floor.command(op, arg1);
 		return true;
 	}
 	Character *c = find(id);

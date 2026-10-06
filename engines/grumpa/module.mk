@@ -13,7 +13,8 @@ MODULE_OBJS = \
 	character.o \
 	dialogue.o \
 	score.o \
-	items.o
+	items.o \
+	walk.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_GRUMPA), DYNAMIC_PLUGIN)
