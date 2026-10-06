@@ -216,13 +216,27 @@ bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
 // The cursor's pictures (inventory.md "The cursor's picture", E-1720): UI/002_Cursor/
 // <name>_0000.jpg (default, grabing, ...) or, for the walk arrows, arrow<n>_.tga; keyed on
 // the colour of pixel (0, 0), drawn with the top-left corner at the mouse point. Cached by
-// name so the per-update refresh is cheap. ponytail: frame 0 only (the timing is Q-1710).
-void GrumpaEngine::setCursorImage(const Common::String &name) {
-	if (name == _cursorName)
+// name and frame so the per-update refresh is cheap. The pictures animate (E-1773): the one
+// on show steps a frame every 5 updates, there and back (0, 1, .., last, .., 1, 0, 1, ..); a
+// hidden one keeps its frame; the arrows never animate.
+void GrumpaEngine::setCursorImage(const Common::String &name, bool tick) {
+	const bool arrow = name.hasSuffix("_");
+	CursorAnim &a = _cursorAnims[name];
+	if (!arrow && a.frames == 0)
+		while (a.frames < 100 && Common::File::exists(Common::Path(Common::String::format(
+			"UI/002_Cursor/%s_%04d.jpg", name.c_str(), a.frames))))
+			a.frames++;
+	if (tick && a.frames > 1 && ++a.tick >= 5) {
+		a.tick = 0;
+		if (a.frame + a.dir < 0 || a.frame + a.dir >= a.frames)
+			a.dir = -a.dir;
+		a.frame += a.dir;
+	}
+	const Common::String file = arrow ? name + ".tga" : Common::String::format("%s_%04d.jpg", name.c_str(), a.frame);
+	if (file == _cursorName)
 		return;
 	Common::File f;
-	const bool arrow = name.hasSuffix("_");
-	if (!f.open(Common::Path("UI/002_Cursor/" + name + (arrow ? ".tga" : "_0000.jpg"))))
+	if (!f.open(Common::Path("UI/002_Cursor/" + file)))
 		return;
 	Image::JPEGDecoder jpeg;
 	Image::TGADecoder tga;
@@ -235,7 +249,7 @@ void GrumpaEngine::setCursorImage(const Common::String &name) {
 	CursorMan.showMouse(true);
 	cur->free();
 	delete cur;
-	_cursorName = name;
+	_cursorName = file;
 }
 
 void GrumpaEngine::setGameCursor() {
@@ -248,7 +262,7 @@ void GrumpaEngine::setGameCursor() {
 // original leaves the pointer after the panel closes until a drop or message 0x23 (E-1721),
 // here the arrow is back at once; no 8-update hover hold, no hand over filled slots. In the
 // combat stance the attack cursor (7), as actor 3 sets it each tick.
-void GrumpaEngine::updateHoverCursor(const Common::Point &p) {
+void GrumpaEngine::updateHoverCursor(const Common::Point &p, bool tick) {
 	const int held = _inventory.held();
 	if (held >= 0) {
 		const Common::String name = Common::String::format("*%d", held);
@@ -258,15 +272,15 @@ void GrumpaEngine::updateHoverCursor(const Common::Point &p) {
 		return;
 	}
 	if (_stance) {
-		setCursorImage("attack");
+		setCursorImage("attack", tick);
 		_cursorState = 7;
 		return;
 	}
 	const bool hand = overHotspot(p);
 	if (hand)
-		setCursorImage("grabing");
+		setCursorImage("grabing", tick);
 	else if (_inventory.shown())
-		setCursorImage("default");
+		setCursorImage("default", tick);
 	else
 		setCursorImage(Common::String::format("arrow%d_", _arrowKind - 8));
 	_cursorState = hand ? 2 : 1;

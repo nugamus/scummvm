@@ -881,7 +881,7 @@ void EventVM::update() {
 		}
 	}
 	// The mouse (actor 2) updates first: its picture, and its State for conditions (E-1800).
-	_engine->updateHoverCursor(g_system->getEventManager()->getMousePos());
+	_engine->updateHoverCursor(g_system->getEventManager()->getMousePos(), true);
 	_engine->updatePlayer();
 	_engine->_characters.update();
 	triggerUpdate();
