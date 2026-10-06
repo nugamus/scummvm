@@ -7,15 +7,15 @@ no game data lives here.
 | Engine | Game | Branch |
 | --- | --- | --- |
 | `x3d` | Monet: The Mystery of the Orangerie Museum (4X Technologies) | [`x3d-upstream`](../../tree/x3d-upstream) |
-| `peintre` | Mission Sunlight | not published yet |
+| `peintre` | Mission Sunlight | [`peintre`](../../tree/peintre) |
 | `ring` | Ring: The Legend of the Nibelungen (Arxel Tribe) | [`ring`](../../tree/ring) |
-| `gilbert` | Gilbert og den kemystiske ø | not published yet |
-| `grumpa` | Grumpa | not published yet |
+| `gilbert` | Gilbert og den kemystiske ø | [`gilbert`](../../tree/gilbert) |
+| `grumpa` | Grumpa | [`grumpa`](../../tree/grumpa) |
 
 ### Branches
 
-- [`x3d-upstream`](../../tree/x3d-upstream) and [`ring`](../../tree/ring) each hold one engine, cleaned up for
-  submitting to ScummVM. The other engines get a branch like them once they're ready.
+- Each engine has its own branch, based on ScummVM's master and holding only that engine's commits, so any of
+  them can be submitted to ScummVM on its own. Grumpa is still early work.
 - [`avi-fxtc`](../../tree/avi-fxtc) and [`engine-hotspot-markers`](../../tree/engine-hotspot-markers) are small fixes
   to ScummVM itself.
 
