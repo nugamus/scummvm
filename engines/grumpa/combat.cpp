@@ -128,8 +128,8 @@ void Characters::react(Character &c) {
 }
 
 // Character opcodes 0x2e..0x30, 0x4b, 0x54 (E-1430): the character fights, held by fighter
-// `f`, against `target`. ponytail: the follower (actor 4) does not join as the companion and
-// actor 301 is not told (Q-1420).
+// `f`, against `target`; the follower's character joins as the companion (fighter 95) when it
+// can attack. ponytail: actor 301 is not told (Q-1420).
 void Characters::engage(int f, Character &c, int target, int role) {
 	if (c.slot(1) <= 0)
 		return;
@@ -151,15 +151,31 @@ void Characters::engage(int f, Character &c, int target, int role) {
 	c.home = _scene;
 	c.active = c.visible = true;
 	c.setRole(role);
+	Character *comp = find(_follow.id);
+	if (comp && comp != &c && _fighters[kFighters - 1].held < 0 && clip(*comp, 0x12)) {
+		_follow.id = -1;             // actor 4 lets go
+		apply(*comp, 0x54, c.id);
+	}
 }
 
-// The release (E-1433): when only the companion is left the fight is over. ponytail: the
-// companion's hand-back to the follower is not modelled (only the follower makes one).
+// The release (E-1433): when only the companion is left the fight is over and it goes back.
 void Characters::releaseFighter(int f) {
 	_fighters[f].held = _fighters[f].target = -1;
 	_fightCount = MAX(_fightCount - 1, 0);
-	if (_fightCount == 1 && _fighters[kFighters - 1].held >= 0)
+	if (_fightCount == 1 && _fighters[kFighters - 1].held >= 0) {
+		if (_fighters[kFighters - 1].backToFollower)
+			handBack();
+		else if (Character *comp = find(_fighters[kFighters - 1].held))
+			comp->setRole(0);
+		_fighters[f].backToFollower = true;
 		_fightCount = 0;
+	}
+}
+
+// Fighter 95's character becomes the follower's again (op 0x2d, E-1223).
+void Characters::handBack() {
+	if (Character *comp = find(_fighters[kFighters - 1].held))
+		apply(*comp, 0x2d, 0);
 }
 
 // The scene-change broadcasts (E-1433): leaving (0x19) ends every fight, entering (0x17)
@@ -168,8 +184,18 @@ void Characters::fightersCommand(int op, int arg1) {
 	for (int f = 0; f < kFighters; f++) {
 		Fighter &fi = _fighters[f];
 		Character *c = fi.held >= 0 ? find(fi.held) : nullptr;
+		if (op == 0x17)
+			fi.backToFollower = true;
 		if (!c || (op == 0x17 && f > 2))
 			continue;
+		if (f == kFighters - 1) {    // the companion goes back, or loses its role
+			if (fi.backToFollower)
+				handBack();
+			else
+				c->setRole(0);
+			fi.held = fi.target = -1;
+			continue;
+		}
 		c->deathTimer = c->hideTimer = -1;
 		request(*c, 5, 0.0f);
 		if (f <= 2) {
@@ -221,6 +247,12 @@ void Characters::fighterRule(int f) {
 	Fighter &fi = _fighters[f];
 	Character *c = find(fi.held);
 	if (!c || fi.target < 0 || c->slot(1) <= 0)
+		return;
+	// Original bug: fighter 95 keeps the companion after handing it back (only leaving the
+	// scene clears it, so it joins no other fight there), and its rule turns from Grumpa back
+	// to the dead enemy, its last attacker: the companion swings at nothing until the scene
+	// changes (E-1431, E-1433). A companion no longer fighting (role 7) is left to follow.
+	if (f == kFighters - 1 && c->role() != 7)
 		return;
 	Character *t = find(fi.target);
 	if (!t || t->slot(1) <= 0 || !t->visible) {
@@ -278,9 +310,8 @@ void Characters::fighterRule(int f) {
 		c->pos.x += 4.0f * d.x / dist;
 		c->pos.z += 4.0f * d.z / dist;
 	}
-	// ponytail: the follower's character (actor 4) is not pushed off.
-	for (int g = 0; g < kFighters; g++) {
-		const Character *o = g != f ? fighterCharacter(kFirstFighter + g) : nullptr;
+	for (int g = 0; g <= kFighters; g++) {  // the other fighters' characters, then the follower's
+		const Character *o = g == kFighters ? find(_follow.id) : g != f ? fighterCharacter(kFirstFighter + g) : nullptr;
 		if (!o || o == c)
 			continue;
 		const Vec3 e = c->pos - o->pos;

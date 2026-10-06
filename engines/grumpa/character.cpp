@@ -428,6 +428,12 @@ bool Characters::syncState(Common::Serializer &s) {
 		_follow.state = -1;
 		setRoles();
 		endFights();
+		// Original bug: fights are not saved (E-1300), so a companion saved while fighting
+		// (role 7, held by fighter 95 rather than actor 4) would be held by no one after a
+		// load; it goes back to the follower (op 0x2d, E-1223).
+		for (uint i = 0; i < _chars.size() && _follow.id == -1; i++)
+			if (_chars[i].role() == 7)
+				apply(_chars[i], 0x2d, 0);
 	}
 	return !s.err();
 }
