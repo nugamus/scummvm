@@ -884,6 +884,7 @@ void EventVM::update() {
 	_engine->updateHoverCursor(g_system->getEventManager()->getMousePos(), true);
 	_engine->updatePlayer();
 	_engine->_characters.update();
+	_engine->updateExits();
 	triggerUpdate();
 	_engine->_inventory.update(_engine->playerCharacter(), g_system->getEventManager()->getMousePos());
 	_score.update();
