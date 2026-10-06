@@ -152,6 +152,7 @@ private:
 	Voices *_voices = nullptr;   // the scene's sound actors (dialogue.cpp)
 	uint32 _lastUpdate = 0;      // the VM runs one update per 20 ms of this clock
 	friend class EventVM;
+	friend class Console;
 	bool _showHotspots = false;  // H toggles the trigger-polygon overlay
 	Common::String _cursorName;  // the current cursor image, to avoid redundant reloads
 	// Actor 3 (walk.cpp): the left button as it holds it, the last update's, its clock, the
