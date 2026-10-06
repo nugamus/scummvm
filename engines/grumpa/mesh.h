@@ -131,9 +131,15 @@ struct SceneTrigger {
 	bool active = true, visible = true;  // +0x10c, +0x110
 	int view = -1;           // +0x174: the view it belongs to (-1 any)
 	bool click = true;       // +0x178: 1 click, 0 walk-in
-	bool proximity = true;   // +0x17c: gated on the player character (Q-0202)
+	bool proximity = true;   // +0x17c: gated on the player character's sphere (E-0705)
 	bool hasConds = false;   // +0x180
 	bool proximityOn = true; // +0x154 (opcodes 14/15)
+	bool once = true;        // +0x170: the gate passes once per stay in the sphere
+	uint32 gate = 1;         // +0x188: bit 1 the player's character (bits 2, 4: Q-0811)
+	int32 who = -1;          // +0x150: the player's character id required (-1 any)
+	Vec3 centre;             // +0x13c: the sphere, after the polygon
+	float radius = 0.0f;
+	bool inside = false;     // +0x158: the player's latch for `once`
 };
 
 // A CFXSound actor (0x18/0x2a, dialogue.cpp, docs/spec/dialogue.md).

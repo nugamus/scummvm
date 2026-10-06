@@ -252,17 +252,16 @@ void GrumpaEngine::setGameCursor() {
 // Hover feedback: over a clickable trigger show the "grabing" hand so exits/interactions are
 // discoverable; otherwise the default pointer.
 void GrumpaEngine::updateHoverCursor(const Common::Point &p) {
-	bool overTrigger = false;
+	setCursorImage(overHotspot(p) ? "grabing" : "default");
+}
+
+bool GrumpaEngine::overHotspot(const Common::Point &p) {
 	for (uint i = 0; i < _sceneData.triggers.size(); i++) {
 		const SceneTrigger &tr = _sceneData.triggers[i];
-		if (_events->triggerClickable(tr) && tr.poly.size() >= 3 && pointInPolygon(tr.poly, p)) {
-			overTrigger = true;
-			break;
-		}
+		if (_events->triggerClickable(tr) && tr.poly.size() >= 3 && pointInPolygon(tr.poly, p))
+			return true;
 	}
-	if (_inventory.itemAt(p))  // a hovered item takes the hotspot cursor too (E-0900)
-		overTrigger = true;
-	setCursorImage(overTrigger ? "grabing" : "default");
+	return _inventory.itemAt(p);  // a hovered item takes the hotspot cursor too (E-0900)
 }
 
 // ---- .abi scene-graph reader (docs/spec/scene.md; mirrors tools/parsers/abi.py) ----------
@@ -509,12 +508,14 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			SceneTrigger tr;
 			tr.id = id;
 			readHead(c, tr.active, tr.visible);
-			c.skip(4);                     // +0x170
+			tr.once = c.u32() == 1;        // +0x170
 			tr.view = c.i32();             // +0x174
 			tr.click = c.u32() == 1;       // +0x178
 			tr.proximity = c.u32() == 1;   // +0x17c
 			tr.hasConds = c.u32() == 1;    // +0x180
-			c.skip(12);                    // +0x188, +0x14c, +0x150
+			tr.gate = c.u32();             // +0x188
+			c.skip(4);                     // +0x14c
+			tr.who = c.i32();              // +0x150
 			c.skip(76); sub56(c);
 			readConds(c, tr.conds);        // +0x190
 			readCmds(c, tr.cmds);          // +0x12c
@@ -524,7 +525,12 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 				float py = READ_LE_FLOAT(c.d + c.o); c.skip(4);
 				tr.poly.push_back(Common::Point((int16)px, (int16)py));
 			}
-			c.skip(16); c.skip(4);
+			for (int j = 0; j < 4 && c.ok; j++) {  // the sphere x, y, z, r (E-0705)
+				float v = READ_LE_FLOAT(c.d + c.o);
+				c.skip(4);
+				(j == 0 ? tr.centre.x : j == 1 ? tr.centre.y : j == 2 ? tr.centre.z : tr.radius) = v;
+			}
+			c.skip(4);
 			uint32 mode = c.u32();
 			if (mode == 2) {
 				int32 nb = acount(c);
@@ -841,34 +847,27 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 						   _events->spriteFrame(m.id));  // animated by the VM (E-0601)
 		}
 		drawItems(cam, depth);  // the items lying here (E-0900)
-		// The characters at home in this scene (characters.md, E-0403): the idle mesh turned by
-		// yaw about +Y and moved to the position. ponytail: the idle clip only, no state machine
-		// (Q-0403); the yaw sign follows D3DX's RotationY, not yet checked against the original.
+		// The characters at home in this scene (characters.md, E-0403): their clip's mesh turned
+		// by yaw about +Y as D3DX's RotationY (E-0814) and moved to the position.
 		Common::Array<Character> &chars = _characters.list();
 		for (uint i = 0; i < chars.size(); i++) {
 			Character &c = chars[i];
-			if (!_characters.present(c) || c.anims.empty())
+			if (!_characters.present(c))
 				continue;
-			if (!c.loaded) {
-				c.loaded = true;
-				Common::String base = c.anims[0];
-				if (base.size() > 4 && base[base.size() - 4] == '.')
-					base = Common::String(base.c_str(), base.size() - 4);
-				loadMesh(base, c.mesh);
-			}
+			const Mesh *clip = _characters.mesh(c);
 			if (c.skinIndex != c.texture && c.texture >= 0 && c.texture < (int)c.textures.size()) {
 				c.skinIndex = c.texture;
 				loadActorTexture(c.textures[c.texture], c.skin, c.alpha);
 			}
-			if (c.mesh.empty())
+			if (!clip)
 				continue;
-			// The current frame of the idle (its clock: Characters::update, E-0603), placed.
+			// The current frame of the clip (its clock: Characters::update, E-0603), placed.
 			Mesh placed;
 			placed.frames = 1;
-			const int fr = CLIP(c.frame, 0, c.mesh.frames - 1);
+			const int fr = CLIP(c.frame, 0, clip->frames - 1);
 			float cs = cosf(c.yaw), sn = sinf(c.yaw);
-			for (uint s = 0; s < c.mesh.sections.size(); s++) {
-				const MeshSection &src = c.mesh.sections[s];
+			for (uint s = 0; s < clip->sections.size(); s++) {
+				const MeshSection &src = clip->sections[s];
 				MeshSection sec;
 				sec.nv = src.nv;
 				sec.faces = src.faces;

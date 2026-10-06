@@ -23,11 +23,15 @@
 #define GRUMPA_CHARACTER_H
 
 #include "common/array.h"
+#include "common/serializer.h"
 #include "common/str.h"
 
 #include "grumpa/mesh.h"
+#include "grumpa/walk.h"
 
 namespace Grumpa {
+
+class GrumpaEngine;
 
 // One CFXCharacter form from Actors/Characters.abi (docs/spec/characters.md).
 struct Character {
@@ -48,9 +52,22 @@ struct Character {
 	Common::Array<uint32> pairs;     // (other id, form id) pairs, flattened
 	bool latched = false;            // disabled by 0xd until 0x34
 	bool talking = false;            // the speaker of a playing voice line (Q-0401)
-	// Drawing (scene.cpp): the idle mesh and the texture in use, loaded on first draw.
-	bool loaded = false;
-	Mesh mesh;
+	// One animation slot (E-0815): the .anb and its .amb per-frame root motion, on first use.
+	struct Clip {
+		bool loaded = false;
+		Mesh mesh;
+		Common::Array<Vec3> motion;
+	};
+	Common::Array<Clip> clips;       // +0x2dc: 44 slots, by the number the .anb name starts with
+	int clip = 0;                    // +0x434: the slot playing
+	Common::Array<int> queue;        // +0x404: the slots to play next
+	int turnSteps = 0;               // +0x4ac: yaw steps left
+	float turnStep = 0.0f;           // +0x4b8
+	float radius = 0.0f;             // [0x28c]: kept this far off the walk mesh's walls
+	float sphere = 0.0f;             // [0x290]: the proximity sphere's radius (E-0705)
+	int face = -1;                   // +0x44c: the walk-mesh face under it
+	int floorType = -1;              // +0x450
+	// Drawing (scene.cpp): the texture in use, loaded on first draw.
 	Graphics::Surface skin;          // ARGB8888, like SceneMesh::texture
 	bool alpha = false;
 	int skinIndex = -1;              // the texture index `skin` was loaded for
@@ -72,16 +89,42 @@ public:
 	int scene() const { return _scene; }
 	const Common::Array<Character> &all() const { return _chars; }
 	Common::Array<Character> &list() { return _chars; }
-	/** The 20 ms update: present characters step their clip's frames (E-0603). */
+	/** The 20 ms update: present characters step their clips and move on the walk mesh. */
 	void update();
+	/** A movement request (E-0813): 0 walk, 1 run, 2 stop, 5 reset; any request (-1 only
+	 *  that) also aims the yaw `turn` radians round over the next 10 animation ticks. */
+	void request(Character &c, int req, float turn);
+	/** The mesh of the clip `c` plays (loaded on first use); nullptr if it has none. */
+	const Mesh *mesh(Character &c);
+	/** The player's character (actor 3's, E-0811), present or not; nullptr if none. */
+	Character *player() { return find(kPlayer); }
+	/** The sphere test (E-0705): `c`'s sphere and (centre, r) overlap. */
+	static bool touches(const Character &c, const Vec3 &centre, float r);
+	const Floor &floor() const { return _floor; }
+	/** A load: the next scene entry is a first one (no entry placement), or, with
+	 *  `firstEntry`, puts the player at the scene's first entry, at home there. */
+	void forgetScene(bool firstEntry) { _scene = -1; _firstEntry = firstEntry; }
+	/** Saves (version 4): each character's position, yaw, home, active and visible. */
+	void syncState(Common::Serializer &s);
+	/** The engine, for loading meshes. */
+	void attach(GrumpaEngine *vm) { _vm = vm; }
+
+	// ponytail: Grumpa; the original takes whoever character opcode 0x2c names (E-0816), the
+	// mounts' rider forms (11, 12, 13, 88) come with them (Q-0403).
+	enum { kPlayer = 10, kFloor = 600 };
 	/** State slot `slot` of character `id` for a condition (E-0201); false if `id` is no character. */
 	bool stateOf(int id, int slot, int32 &value);
 
 private:
 	void apply(Character &c, int op, int arg1);
+	Character::Clip *clip(Character &c, int slot);
+	void enter(int scene);
 
 	Common::Array<Character> _chars;
 	int _scene = -1;                 // +0x448, set by the scene-entry broadcast 0x17
+	Floor _floor;                    // the scene's walk mesh (walk.cpp)
+	bool _firstEntry = false;        // the next entry places the player at the first entry
+	GrumpaEngine *_vm = nullptr;
 };
 
 } // End of namespace Grumpa
