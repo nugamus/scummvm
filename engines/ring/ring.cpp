@@ -32,7 +32,6 @@
 #include "engines/util.h"
 
 #include "graphics/fonts/winfont.h"
-#include "image/png.h"
 
 #include "ring/bag.h"
 #include "ring/medianames.h"
@@ -223,13 +222,12 @@ void RingEngine::pollEvents(uint32 ms) {
 				_keys.push_back(0x2e);
 			else if (event.kbd.ascii && event.kbd.ascii < 256)
 				_keys.push_back(event.kbd.ascii);
-		} else if (event.type == Common::EVENT_MOUSEMOVE && !_scripted)
+		} else if (event.type == Common::EVENT_MOUSEMOVE)
 			_mouse = event.mouse;
-		else if ((event.type == Common::EVENT_LBUTTONDOWN || event.type == Common::EVENT_LBUTTONUP) && !_scripted) {
-			// While dev_input drives the mouse the real buttons are ignored.
+		else if ((event.type == Common::EVENT_LBUTTONDOWN || event.type == Common::EVENT_LBUTTONUP)) {
 			_mouse = event.mouse;
 			_buttons.push_back(Button{ event.type == Common::EVENT_LBUTTONDOWN, event.mouse, false });
-		} else if (event.type == Common::EVENT_RBUTTONUP && !_scripted) {
+		} else if (event.type == Common::EVENT_RBUTTONUP) {
 			_buttons.push_back(Button{ false, event.mouse, true });
 		}
 	}
@@ -364,141 +362,15 @@ Common::Error RingEngine::run() {
 	wait(2000);
 	_escapeDown = false;
 
-	// Development: dev_skip_startup=true in the game domain goes straight to the menu.
-	if (!ConfMan.getBool("dev_skip_startup"))
-		showStartupScreens();
+	showStartupScreens();
 
 	startMenu(false);
 	_buttons.clear();
 	// A game chosen in the launcher.
 	if (ConfMan.hasKey("save_slot"))
 		loadGameState(ConfMan.getInt("save_slot"));
-	// Development: dev_bag=<id>,<id>... puts objects in the bag.
-	for (const Common::String &id : Common::StringTokenizer(ConfMan.get("dev_bag"), ",").split())
-		_bag->add(atoi(id.c_str()));
-	// Development: dev_place=<id> starts on that rotation (alpha 90, ran 85.3), dev_place=p<id> on
-	// that puzzle, in its zone (the ids of puzzles and rotations overlap).
-	Common::String placeId = ConfMan.get("dev_place");
-	bool isPuzzle = placeId.hasPrefix("p");
-	int place = atoi(placeId.c_str() + (isPuzzle ? 1 : 0));
-	if (Rotation *r = isPuzzle ? nullptr : _world->rotation(place)) {
-		_zone = r->zone;
-		_menuZone = 0;
-		r->setAlpha(90.0f);
-		r->ran = 85.3f;
-		rotSetAct(r->id);
-	} else if (Puzzle *p = isPuzzle ? _world->puzzle(place) : nullptr) {
-		_zone = p->zone;
-		_menuZone = 0;
-		puzSetAct(p->id);
-	}
-	// Development: dev_input="ms:move x y;ms:click x y;ms:key code 0;..." replays input at ms after the menu opens.
-	Common::StringArray script;
-	for (const Common::String &step : Common::StringTokenizer(ConfMan.get("dev_input"), ";").split())
-		script.push_back(step);
-	_scripted = !script.empty(); // the real mouse (moves and buttons) is ignored while scripted
-	uint32 menuStart = g_system->getMillis();
-	uint32 lastRun = menuStart; // "+ms:..." steps run ms after the previous step ran
 	while (!shouldQuit()) {
 		pollEvents();
-		while (!script.empty()) {
-			if (script[0].hasPrefix("+")) {
-				size_t colon = script[0].findFirstOf(':');
-				uint dt = atoi(script[0].c_str() + 1);
-				script[0] = Common::String::format("%u", lastRun + dt - menuStart) + (colon == Common::String::npos ? "" : script[0].substr(colon));
-			}
-			uint ms, x, y;
-			char what[8], file[256];
-			if (sscanf(script[0].c_str(), "%u:snap %255s", &ms, file) == 2) {
-				// "snap C:/tmp/x.png" saves the screen as it was last presented
-				if (g_system->getMillis() - menuStart < ms)
-					break;
-				Common::DumpFile out;
-				if (!out.open(Common::FSNode(Common::Path(file, '/'))) || !::Image::writePNG(out, *_screen.surfacePtr()))
-					warning("Ring: cannot write %s", file);
-				script.remove_at(0);
-				lastRun = g_system->getMillis();
-				continue;
-			}
-			int n = sscanf(script[0].c_str(), "%u:%7s %u %u", &ms, what, &x, &y);
-			if (n < 2) {
-				script.remove_at(0);
-				continue;
-			}
-			if (g_system->getMillis() - menuStart < ms)
-				break;
-			// Handler-level commands: "obj <object> <unk_19>" clicks an object's accessibility in
-			// the current place, "mov <index>" takes one of its movabilities, "hold <object>" puts
-			// an object in hand, "where" logs the zone, place, object in hand and bag.
-			int here = _mode == 1 ? _rotation : _puzzle;
-			Rotation *hereR = _mode == 1 ? _world->rotation(_rotation) : nullptr;
-			Puzzle *hereP = hereR ? nullptr : _world->puzzle(_puzzle);
-			if (!strcmp(what, "obj") && n == 4) {
-				const Common::Array<Common::SharedPtr<Accessibility> > *accs = hereR ? &hereR->accessibilities : hereP ? &hereP->accessibilities : nullptr;
-				const Accessibility *found = nullptr;
-				for (uint i = 0; accs && i < accs->size() && !found; i++)
-					if ((*accs)[i]->object == (int)x && (*accs)[i]->hotSpot.value == (int)y && (*accs)[i]->hotSpot.enabled)
-						found = (*accs)[i].get();
-				if (found)
-					clickObject(_zone, x, y, here);
-				else
-					warning("Ring: dev obj %u %u: no enabled accessibility in %d", x, y, here);
-			} else if (!strcmp(what, "mov") && n >= 3) {
-				Common::Array<Movability> *list = hereR ? &hereR->movabilities : hereP ? &hereP->movabilities : nullptr;
-				if (list && x < list->size() && (*list)[x].hotSpot.enabled) {
-					Movability copy = (*list)[x];
-					move(copy, x);
-				} else {
-					warning("Ring: dev mov %u: no such enabled movability in %d", x, here);
-				}
-			} else if (!strcmp(what, "save") && n >= 3) {
-				saveGameState(x, "dev"); // "save <slot>", "load <slot>"
-			} else if (!strcmp(what, "load") && n >= 3) {
-				loadGameState(x);
-			} else if (!strcmp(what, "zone") && n == 4) {
-				goZone(x, y); // "zone <zone> <entry>": GoZone
-			} else if (!strcmp(what, "hold") && n >= 3) {
-				dropObject();
-				holdObject(x);
-			} else if (!strcmp(what, "pres") && n >= 3) {
-				// "pres <object>": its presentations, shown or not, and their animations' state
-				if (Object *o = _world->object(x)) {
-					Common::String line;
-					for (uint i = 0; i < o->presentations.size(); i++) {
-						const Presentation &pr = o->presentations[i];
-						line += Common::String::format(" %u:%s", i, pr.shown ? "shown" : "-");
-						for (auto &a : pr.puzzleAnimations)
-							line += Common::String::format("[%s f%d%s]", a->active ? "on" : "off", a->frame, a->paused ? " paused" : "");
-					}
-					debug("Ring: object %u%s", x, line.c_str());
-				}
-			} else if ((!strcmp(what, "varb") || !strcmp(what, "varw") || !strcmp(what, "vard")) && n >= 3) {
-				World::VarType t = what[3] == 'b' ? World::kVarByte : what[3] == 'w' ? World::kVarWord : World::kVarDword;
-				debug("Ring: %s %u = %d", what, x, _world->var(t, x));
-			} else if (!strcmp(what, "hot")) {
-				toggleHotspots();
-			} else if (!strcmp(what, "where")) {
-				Common::String bag;
-				for (int id : _bag->contents())
-					bag += Common::String::format(" %d", id);
-				debug("Ring: zone %d %s %d, held %d, bag%s", _zone, _mode == 1 ? "rotation" : "puzzle", here, _bag->held(), bag.c_str());
-			} else if (n < 4) {
-				warning("Ring: dev_input: cannot read '%s'", script[0].c_str());
-			} else if (!strcmp(what, "key")) {
-				key(x);
-			} else {
-				// "down" and "up" press and release the left button, "click" does both, "rclick" is the right button.
-				_mouse = Common::Point(x, y);
-				if (!strcmp(what, "down") || !strcmp(what, "click"))
-					_buttons.push_back(Button{ true, _mouse, false });
-				if (!strcmp(what, "up") || !strcmp(what, "click"))
-					_buttons.push_back(Button{ false, _mouse, false });
-				if (!strcmp(what, "rclick"))
-					_buttons.push_back(Button{ false, _mouse, true });
-			}
-			script.remove_at(0);
-			lastRun = g_system->getMillis();
-		}
 		while (!_keys.empty()) {
 			int k = _keys.remove_at(0);
 			key(k);
