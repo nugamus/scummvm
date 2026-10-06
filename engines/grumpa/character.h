@@ -51,7 +51,6 @@ struct Character {
 	int parts[2] = { 0, 0 };
 	Common::Array<uint32> pairs;     // (other id, form id) pairs, flattened
 	bool latched = false;            // disabled by 0xd until 0x34
-	bool talking = false;            // the speaker of a playing voice line (Q-0401)
 	// One animation slot (E-0815): the .anb and its .amb per-frame root motion, on first use.
 	struct Clip {
 		bool loaded = false;
