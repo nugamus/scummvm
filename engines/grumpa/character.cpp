@@ -19,10 +19,14 @@
  *
  */
 
+#include "audio/audiostream.h"
+#include "audio/decoders/wave.h"
 #include "common/debug.h"
 #include "common/file.h"
+#include "common/system.h"
 
 #include "grumpa/character.h"
+#include "grumpa/dialogue.h"
 #include "grumpa/events.h"
 #include "grumpa/grumpa.h"
 
@@ -384,6 +388,7 @@ void Characters::update() {
 		} else {
 			c.floorType = type;
 		}
+		pumpSpeech(c);  // the update's last call
 	}
 }
 
@@ -485,6 +490,7 @@ void Characters::apply(Character &c, int op, int arg1) {
 		break;
 	case 0x17:
 		_scene = arg1;
+		flushSpeech(c);
 		break;
 	case 0x35:
 		c.texture = arg1;            // clamped as the original does (count < arg -> count - 1)
@@ -522,6 +528,23 @@ void Characters::apply(Character &c, int op, int arg1) {
 	case 0x46:
 		split(c);
 		break;
+	case 0x48:                       // say slot arg1: below 60 (but 32) at once, else queued
+		if (arg1 < 0 || arg1 > 99 || Common::find(c.speech.begin(), c.speech.end(), arg1) != c.speech.end())
+			break;
+		if (arg1 < 60 && arg1 != 32) {
+			playVoice(c, arg1);
+			break;
+		}
+		c.speech.push_back(arg1);
+		if (c.speech.size() == 1 && voiceLoaded(c, arg1) && c.state.size() > 5 && c.state[5] == 0) {
+			playVoice(c, arg1);
+			c.state[5] = 1;
+		}
+		break;
+	case 0x60:                       // stop every slot; the queue stays
+		for (int i = 0; i < 100; i++)
+			g_system->getMixer()->stopHandle(c.voices[i]);
+		break;
 	case 0x47: {                     // E-1530
 		Character *o = find(arg1);
 		if (!o)
@@ -549,6 +572,82 @@ void Characters::apply(Character &c, int op, int arg1) {
 	default:
 		debug(2, "Grumpa: character %u opcode %#x not modelled", c.id, op);
 		break;
+	}
+}
+
+// A load: besides the entry handling, the speech of the session left is silenced (the queue
+// is not saved).
+void Characters::forgetScene(bool firstEntry) {
+	_scene = -1;
+	_firstEntry = firstEntry;
+	for (uint i = 0; i < _chars.size(); i++) {
+		Character &c = _chars[i];
+		for (int n = 0; n < 100; n++)
+			g_system->getMixer()->stopHandle(c.voices[n]);
+		c.speech.clear();
+		if (c.state.size() > 5)
+			c.state[5] = 0;
+	}
+}
+
+// The sound slots (E-1640): slot n is the character's .wav whose name starts with the number
+// n, loaded once; a missing file leaves it empty.
+bool Characters::voiceLoaded(Character &c, int n) {
+	if (c.voiceFiles.empty()) {
+		c.voiceFiles.resize(100);
+		for (uint i = 0; i < c.sounds.size(); i++) {
+			int k = atoi(c.sounds[i].c_str());
+			Common::SeekableReadStream *f = k >= 0 && k < 100 ? openSound(c.sounds[i]) : nullptr;
+			if (f)
+				c.voiceFiles[k] = c.sounds[i];
+			delete f;
+		}
+	}
+	return n >= 0 && n < 100 && !c.voiceFiles[n].empty();
+}
+
+// A slot already playing carries on.
+void Characters::playVoice(Character &c, int n) {
+	Audio::Mixer *mixer = g_system->getMixer();
+	if (!voiceLoaded(c, n) || mixer->isSoundHandleActive(c.voices[n]))
+		return;
+	Common::SeekableReadStream *f = openSound(c.voiceFiles[n]);
+	Audio::SeekableAudioStream *s = f ? Audio::makeWAVStream(f, DisposeAfterUse::YES) : nullptr;
+	if (!s)
+		return;
+	// Slots below 60 but 32 are the clips' effects; the queued ones are speech.
+	const bool effect = n < 60 && n != 32;
+	mixer->playStream(effect ? Audio::Mixer::kSFXSoundType : Audio::Mixer::kSpeechSoundType, &c.voices[n], s);
+	debug(1, "Grumpa: character %u says %s", c.id, c.voiceFiles[n].c_str());
+}
+
+// Away from the current scene: the line speaking stops and the queue empties (E-1620).
+void Characters::flushSpeech(Character &c) {
+	if (c.home == _scene || c.speech.empty())
+		return;
+	if (voiceLoaded(c, c.speech[0]))
+		g_system->getMixer()->stopHandle(c.voices[c.speech[0]]);
+	c.speech.clear();
+}
+
+void Characters::flushSpeech(int id) {
+	if (Character *c = find(id))
+		flushSpeech(*c);
+}
+
+// On an animation step at home (E-1620, E-1640): a front line that has ended leaves the queue
+// and the next one speaks. An empty slot at the front is never popped.
+void Characters::pumpSpeech(Character &c) {
+	if (c.speech.empty() || !voiceLoaded(c, c.speech[0]) ||
+		g_system->getMixer()->isSoundHandleActive(c.voices[c.speech[0]]))
+		return;
+	c.speech.remove_at(0);
+	if (c.state.size() > 5)
+		c.state[5] = 0;
+	if (!c.speech.empty() && voiceLoaded(c, c.speech[0])) {
+		playVoice(c, c.speech[0]);
+		if (c.state.size() > 5)
+			c.state[5] = 1;
 	}
 }
 
