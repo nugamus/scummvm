@@ -37,7 +37,7 @@ class Characters;
 // (docs/spec/dialogue.md, E-0405).
 // SceneSound lives in mesh.h (SceneData::sounds).
 
-/** Open Sounds\<name> (the voices of a language, then the common sounds). */
+/** Open Sounds\<name> (the voices of the game's language, then the common sounds). */
 Common::SeekableReadStream *openSound(const Common::String &name);
 
 /** Read a sound record's body (after `u32 type, u32 id`) at `d[o]`, `n` bytes in all;

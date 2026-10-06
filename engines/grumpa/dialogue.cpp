@@ -27,6 +27,7 @@
 
 #include "grumpa/character.h"
 #include "grumpa/dialogue.h"
+#include "grumpa/grumpa.h"
 
 namespace Grumpa {
 
@@ -34,16 +35,15 @@ namespace Grumpa {
 // a language and the common sounds (dialogue.md, Q-0400). Names with non-ASCII letters were
 // extracted with '_' in their place.
 Common::SeekableReadStream *openSound(const Common::String &name) {
-	static const char *const dirs[] = { "Sounds_Swedish/", "Sounds_Danish/", "Sounds_Norwegian/",
-										"Sounds_Finnish/", "Sounds_/", "Sounds/" };
+	const Common::String dirs[] = { Common::String("Sounds_") +
+		static_cast<GrumpaEngine *>(g_engine)->languageFolder() + "/", "Sounds_/", "Sounds/" };
 	Common::String ascii = name;
 	for (uint i = 0; i < ascii.size(); i++)
 		if ((byte)ascii[i] >= 0x80)
 			ascii.setChar('_', i);
 	for (uint i = 0; i < ARRAYSIZE(dirs); i++) {
 		Common::File *f = new Common::File();
-		if (f->open(Common::Path(Common::String(dirs[i]) + name)) ||
-			f->open(Common::Path(Common::String(dirs[i]) + ascii)))
+		if (f->open(Common::Path(dirs[i] + name)) || f->open(Common::Path(dirs[i] + ascii)))
 			return f;
 		delete f;
 	}
