@@ -53,6 +53,12 @@ enum {
 	kScreenHeight = 600
 };
 
+// Keymapper actions (metaengine.cpp).
+enum GrumpaAction {
+	kActionNone,
+	kActionDismount  // Backspace: leave a mount, else let the companion go (E-1503)
+};
+
 class GrumpaEngine : public Engine {
 public:
 	GrumpaEngine(OSystem *syst, const ADGameDescription *gameDesc);
