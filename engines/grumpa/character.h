@@ -52,7 +52,6 @@ struct Character {
 	int parts[2] = { 0, 0 };
 	Common::Array<uint32> pairs;     // (other id, form id) pairs, flattened
 	bool latched = false;            // disabled by 0xd until 0x34
-	int role = 0;                    // +0x564: 0 none, 1 the player's, 2 the follower's
 	Vec3 pending;                    // +0x294: a move the next animation tick takes (0x47)
 	// One animation slot (E-0815): the .anb and its .amb per-frame root motion, on first use.
 	struct Clip {
@@ -77,6 +76,13 @@ struct Character {
 	float clock = 0.0f;              // +0x4a4: the animation clock (E-0603)
 	int frame = 0;                   // +0x494: the frame of the clip shown
 	Common::Array<int32> state;      // the state slots (E-0201, E-0407): 6 per character
+	/** State slot 4 (+0x564) is the role: 0 none, 1 the player's, 2 the follower's, 3..7 a
+	 *  fighter's (E-1530, combat.md). */
+	int role() const { return state.size() > 4 ? state[4] : 0; }
+	void setRole(int r) {
+		if (state.size() > 4)
+			state[4] = r;
+	}
 };
 
 /** The character database, loaded once and kept for the whole game. */
@@ -103,6 +109,8 @@ public:
 	Character *player() { return find(_player); }
 	/** The character actor 3 or 4 holds (-1: none, or no such actor). */
 	int held(int actor) const { return actor == kPlayerActor ? _player : actor == kFollowerActor ? _follow.id : -1; }
+	/** The companion actor 4 holds, present or not; nullptr if none. */
+	Character *follower() { return find(_follow.id); }
 	/** Opcodes actors 3 and 4 pass on to their character (E-0811, E-1222). */
 	static bool passedOn(int op) {
 		return op <= 3 || (op >= 0xb && op <= 0xd) || (op >= 0x32 && op <= 0x36) || op == 0x48 || op == 500 || op == 501;
@@ -116,7 +124,7 @@ public:
 	 *  `firstEntry`, puts the player at the scene's first entry, at home there. */
 	void forgetScene(bool firstEntry) { _scene = -1; _firstEntry = firstEntry; }
 	/** Saves: each character's position, yaw, home, active and visible (version 4), the
-	 *  characters actors 3 and 4 hold (5). */
+	 *  characters actors 3 and 4 hold (6). */
 	void syncState(Common::Serializer &s);
 	/** The engine, for loading meshes, and the VM, for the commands characters send. */
 	void attach(GrumpaEngine *vm, EventVM *events) { _vm = vm; _events = events; }
@@ -135,6 +143,7 @@ private:
 	void release(int actor);
 	void split(Character &form);
 	void follow();
+	void enterFollower(int scene);
 	void shuffleAside(Character &c);
 	void setRoles();
 
