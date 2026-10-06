@@ -362,6 +362,8 @@ void Characters::startClip(Character &c, int slot) {
 	c.clip = slot;
 	c.frame = 0;
 	c.starts++;
+	if (slot == 0)
+		c.lift = 0.0f;
 	if (c.state.size() > 3) {
 		if (slot == 0x15)
 			c.state[3] += 5;
@@ -514,6 +516,7 @@ void Characters::update() {
 			const Vec3 &m = k->motion[MIN<int>(c.frame, k->motion.size() - 1)];  // Q-0807
 			const float sn = sinf(c.yaw), cs = cosf(c.yaw);
 			delta = Vec3(delta.x + m.z * sn + m.x * cs, 0.0f, delta.z + m.z * cs - m.x * sn);
+			c.lift += m.y;  // drawn only: a jump's arc, never the position (E-1406)
 		}
 		if (_floor.empty())
 			continue;

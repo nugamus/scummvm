@@ -60,7 +60,8 @@ enum GrumpaAction {
 	kActionNone,
 	kActionDismount, // Backspace: leave a mount, else let the companion go (E-1503)
 	kActionStance,   // Ctrl held: the combat stance (E-1400)
-	kActionJump      // Space held: jump (E-0812)
+	kActionJump,     // Space held: jump (E-0812)
+	kActionRun       // Shift held with the left button: run (E-0812)
 };
 
 class GrumpaEngine : public Engine {
@@ -194,7 +195,7 @@ private:
 	bool _backspace = false;     // pressed since actor 3's last tick (E-1503)
 	// Its combat (combat.md, E-1400): the right button, the keys it polls, the stance, the
 	// swing's hit timer and the clip starts it has seen.
-	bool _rightHeld = false, _rightWas = false, _ctrlHeld = false, _spaceHeld = false;
+	bool _rightHeld = false, _rightWas = false, _ctrlHeld = false, _spaceHeld = false, _shiftHeld = false;
 	bool _stance = false;
 	int _hitTimer = 0, _playerStarts = 0;
 	float _playerClock = 0.0f;

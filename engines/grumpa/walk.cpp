@@ -382,7 +382,7 @@ void GrumpaEngine::updatePlayer() {
 	_stance = _ctrlHeld && _characters.clipFrames(*p, 0x12) > 0;
 	if (_spaceHeld && !_stance && type != 13)
 		_characters.request(*p, 3, turn);
-	if (_leftHeld && (g_system->getEventManager()->getModifierState() & Common::KBD_SHIFT))
+	if (_leftHeld && _shiftHeld)
 		_characters.request(*p, 1, turn);
 	if (dx * dx + dy * dy > 20.0f * 20.0f && (p->clip < 0xf || p->clip > 0x11))
 		_characters.request(*p, -1, turn);  // turn only, not while jumping
