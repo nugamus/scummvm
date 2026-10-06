@@ -100,7 +100,7 @@ public:
 	/** The player's character and the VM (counted items go to actor 8, E-0503). */
 	void attach(Characters *chars, EventVM *vm) { _chars = chars; _vm = vm; }
 	/** The 20 ms update of the items lying in the scene: spin, glow, hover (E-0900).
-	 *  `player` is the player's character (nullptr: none, no distance limit). */
+	 *  `player` is the player's character (nullptr: none), where a full panel drops items. */
 	void update(const Character *player, const Common::Point &mouse);
 	Common::Array<Item> &items() { return _items; }
 	/** Whether a hovered item lies under `p` (the hotspot cursor). */

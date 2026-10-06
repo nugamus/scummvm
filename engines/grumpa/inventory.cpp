@@ -480,12 +480,14 @@ void Inventory::update(const Character *player, const Common::Point &mouse) {
 		it.rot[1] += 0.05f;
 		if (it.rot[1] > 6.2831855f)
 			it.rot[1] -= 6.2831855f;
-		bool near = true;
+		// With no player's character in the scene a click stands in for walking there, as for
+		// the triggers (Q-0202); otherwise he must be within 160 units (E-0900).
+		bool inReach = true;
 		if (player) {
-			float dx = it.pos[0] - player->pos.x, dy = it.pos[1] - player->pos.y, dz = it.pos[2] - player->pos.z;
-			near = sqrtf(dx * dx + dy * dy + dz * dz) < 160.0f;
+			float dx = player->pos.x - it.pos[0], dy = player->pos.y - it.pos[1], dz = player->pos.z - it.pos[2];
+			inReach = dx * dx + dy * dy + dz * dz <= 160.0f * 160.0f;
 		}
-		if (!_shown && near && !it.rect.isEmpty() && clickRect(it.rect).contains(mouse)) {  // drawn once
+		if (!_shown && inReach && !it.rect.isEmpty() && clickRect(it.rect).contains(mouse)) {  // drawn once
 			if (it.sayArmed)
 				say(it.voice);
 			it.sayArmed = false;
