@@ -41,6 +41,7 @@ enum {
 	kPlayerHolder = 3,     // actor 3 holds the player's character (E-0810)
 	kSceneManager = 185,   // fades, views and scene changes (E-0206)
 	kProxy = 186,          // forwards to its target (E-0206)
+	kSceneLinks = 601,     // CFXToScene, the scene's exits and entries (walk.cpp)
 	kFirstItem = 100,      // Items.abi: type 5, ids 100..179
 	kLastItem = 179
 };
@@ -140,6 +141,10 @@ bool EventVM::stateOf(int id, int slot, int32 &value) const {
 	}
 	if (Inventory::owns(id))
 		return _engine->_inventory.stateOf(id, slot, value);
+	if (id == kSceneLinks) {  // CFXToScene: State, and "Scene ID" set by the entry (E-1682)
+		value = slot == 1 ? _sceneNum : 0;
+		return true;
+	}
 	if (_engine->_characters.stateOf(id, slot, value))
 		return true;
 	const SceneLogic *a = const_cast<EventVM *>(this)->logicActor(id);
@@ -384,13 +389,15 @@ void EventVM::deliverOne(int id, int op, int arg1, int arg2) {
 		case kOpActivate: m->active = true; break;
 		case kOpDeactivate: m->active = false; break;
 		case kOpLatch: m->active = m->visible = false; r.latch = true; break;
+		case kOpProxOn: m->contactOn = true; break;
+		case kOpProxOff: m->contactOn = false; break;
 		case kOpEnter:
 			if (m->autoplay)
 				meshPlay(*m, r);
 			break;
 		case kOpOn: m->active = m->visible = true; meshPlay(*m, r); break;
 		case kOpOff: m->active = m->visible = r.playing = false; break;
-		default: break;  // 14/15 bubble tests (Q-0600); 86/92 reload what is already loaded
+		default: break;  // 86/92 reload what is already loaded
 		}
 		return;
 	}
@@ -704,6 +711,43 @@ void EventVM::meshPlay(SceneMesh &m, Run &r) {
 void EventVM::meshUpdate(SceneMesh &m, Run &r) {
 	if (!m.active)
 		return;
+	meshAnimate(m, r);
+	meshContacts(m);
+}
+
+// The contact spheres (E-1681): each rides its vertex in the current frame; with bit 1 of the
+// flags, the player's sphere touching one runs the third list, once per touch with `once`.
+// ponytail: the +0x220 character filter is -1 in every file and not read.
+void EventVM::meshContacts(SceneMesh &m) {
+	Character *p = walker();
+	if (m.contacts.empty() || !m.contactOn || !(m.contactFlags & 1) || !p)
+		return;
+	const uint32 frame = (uint32)MAX(spriteFrame(m.id), 0);
+	for (uint i = 0; i < m.contacts.size(); i++) {
+		// The vertex counts across the sections in order; every contact mesh has one (E-1681).
+		uint32 v = m.contacts[i].vertex;
+		const Vec3 *centre = nullptr;
+		for (uint s = 0; s < m.mesh.sections.size(); v -= m.mesh.sections[s++].nv) {
+			const MeshSection &sec = m.mesh.sections[s];
+			if (v < sec.nv) {
+				if (frame * sec.nv + v < sec.verts.size())
+					centre = &sec.verts[frame * sec.nv + v];
+				break;
+			}
+		}
+		if (!centre || !Characters::touches(*p, *centre, m.contacts[i].radius))
+			continue;
+		if (!(m.contactOnce && m.contactLatch)) {
+			if (const SpriteHooks *h = hooks(m.id))
+				runList(h->onContact, m.id);
+		}
+		m.contactLatch = true;
+		return;
+	}
+	m.contactLatch = false;
+}
+
+void EventVM::meshAnimate(SceneMesh &m, Run &r) {
 	if (r.running) {
 		// one frame every 50 / fps updates, as for sprites (E-0701)
 		if (m.fps > 0 && ++r.counter >= 50 / m.fps) {

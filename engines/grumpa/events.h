@@ -126,6 +126,8 @@ private:
 	void meshUpdate(SceneMesh &m, Run &r);
 	void meshTimerLoad(SceneMesh &m);
 	const SpriteHooks *hooks(uint32 id) const;
+	void meshAnimate(SceneMesh &m, Run &r);
+	void meshContacts(SceneMesh &m);
 	void triggerFire(SceneTrigger &tr);
 	Character *walker() const;
 	bool triggerGate(SceneTrigger &tr);

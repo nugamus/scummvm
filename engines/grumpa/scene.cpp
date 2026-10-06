@@ -570,6 +570,8 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			m.frame = af[14];
 			m.autoplay = af[15] == 1;
 			m.platform = af[6] == 1;
+			m.contactFlags = (uint32)af[2];
+			m.contactOnce = af[3] == 1;
 			// The delay timer: on, (+0x104), (+0x10c), counting, (+0x114), random, (2),
 			// min, max, (+0x12c), fixed, (+0x134), ticks left.
 			int32 tm[14];
@@ -582,14 +584,23 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			m.timerMax = tm[9];
 			m.timerFixed = tm[11];
 			m.timerTicks = tm[13];
-			sub24(c); sub24(c); pairVec(c);
-			// Lists 1, 2 and 7 end the animation (forward end, backward end, end; E-1807);
-			// 3, 4, 6 and 8 belong to the contact tests, 5 is never read (Q-0600).
+			sub24(c); sub24(c);
+			for (int32 k = acount(c); k > 0 && c.ok; k--) {  // (vertex, radius as a float)
+				SceneMesh::Contact ct;
+				ct.vertex = c.u32();
+				uint32 r = c.u32();
+				memcpy(&ct.radius, &r, 4);
+				m.contacts.push_back(ct);
+			}
+			// Lists 1, 2 and 7 end the animation (forward end, backward end, end; E-1807), 3
+			// runs on a contact (E-1681); 4 and 6 belong to the contact tests too, 5 is never
+			// read (Q-0600), 8 is the fighters' contact list.
 			SpriteHooks hk;
 			hk.id = id;
 			readCmds(c, hk.onForward);
 			readCmds(c, hk.onBackward);
-			for (int v = 2; v < 6 && c.ok; v++) ccVec(c);
+			readCmds(c, hk.onContact);
+			for (int v = 3; v < 6 && c.ok; v++) ccVec(c);
 			readCmds(c, hk.onEnd);
 			ccVec(c);
 			int32 na = c.i32();

@@ -510,6 +510,7 @@ void Characters::update() {
 		// Off the mesh, a step up of more than 20 (80 on a platform, type 15), a closed wall
 		// type, or a boat off the water: back (E-0803, E-1600). Then the water (E-1660): a boat
 		// floats at -0.5 on type 13, so does a dragonfly; a jump over 12/13 keeps its height.
+		// ponytail: the water ripple and the shadow under a character are not drawn (Q-1660).
 		int type = c.platform >= 0 ? 15 : c.face >= 0 ? _floor.types[c.face] : -1;
 		bool back = c.face < 0 || c.pos.y > old.y + (c.platform >= 0 ? 80.0f : 20.0f);
 		if (!back && c.mode == kBoat) {
