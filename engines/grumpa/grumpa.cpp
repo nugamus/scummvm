@@ -175,12 +175,12 @@ Common::Error GrumpaEngine::run() {
 			if (state == kScene) {
 				if (event.type == Common::EVENT_LBUTTONUP)
 					_leftHeld = false;  // actor 3 stops (E-0811)
-				if (event.type == Common::EVENT_KEYDOWN || event.type == Common::EVENT_KEYUP) {
-					const bool down = event.type == Common::EVENT_KEYDOWN;
-					if (event.kbd.keycode == Common::KEYCODE_LCTRL || event.kbd.keycode == Common::KEYCODE_RCTRL)
-						_ctrlHeld = down;  // the stance (E-1400)
-					else if (event.kbd.keycode == Common::KEYCODE_SPACE)
-						_spaceHeld = down;  // jump (E-0812)
+				if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START || event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_END) {
+					const bool down = event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START;
+					if (event.customType == kActionStance)
+						_ctrlHeld = down;   // polled by actor 3 (E-1400)
+					else if (event.customType == kActionJump)
+						_spaceHeld = down;  // polled by actor 3 (E-0812)
 				}
 				if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE) {
 					if (!_events->fadeIdle())  // not during a fade or on black (E-0700)

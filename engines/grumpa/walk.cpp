@@ -398,8 +398,8 @@ void GrumpaEngine::updatePlayer() {
 	}
 	if (_hitTimer > 0 && --_hitTimer == 0)
 		_characters.playerStrike(*p);
-	// Ctrl: the stance, for a character with attacks. Space: jump. ponytail: no stance cursor
-	// (kind 7) and the global that also stops the jump (0x4c04b4) is not read.
+	// Ctrl: the stance, for a character with attacks. Space: jump. ponytail: the global that
+	// also stops the jump (0x4c04b4) is not read.
 	_stance = _ctrlHeld && _characters.clipFrames(*p, 0x12) > 0;
 	if (_spaceHeld && !_stance && type != 13)
 		_characters.request(*p, 3, turn);

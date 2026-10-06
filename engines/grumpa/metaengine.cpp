@@ -45,6 +45,15 @@ public:
 		act->setCustomEngineActionEvent(Grumpa::kActionDismount);
 		act->addDefaultInputMapping("BACKSPACE");
 		keymap->addAction(act);
+		act = new Action("STANCE", _("Combat stance"));
+		act->setCustomEngineActionEvent(Grumpa::kActionStance);
+		act->addDefaultInputMapping("LCTRL");
+		act->addDefaultInputMapping("RCTRL");
+		keymap->addAction(act);
+		act = new Action("JUMP", _("Jump"));
+		act->setCustomEngineActionEvent(Grumpa::kActionJump);
+		act->addDefaultInputMapping("SPACE");
+		keymap->addAction(act);
 		return Keymap::arrayOf(keymap);
 	}
 };

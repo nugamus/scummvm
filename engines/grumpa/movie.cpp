@@ -67,7 +67,8 @@ bool GrumpaEngine::playMovie(const Common::String &film, bool cutScene) {
 		Common::Event event;
 		while (g_system->getEventManager()->pollEvent(event)) {
 			bool skip = cutScene
-				? event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_SPACE
+				? (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_SPACE)
+				  || (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START && event.customType == kActionJump)
 				: (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE)
 				  || event.type == Common::EVENT_LBUTTONUP;
 			skipped |= skip;

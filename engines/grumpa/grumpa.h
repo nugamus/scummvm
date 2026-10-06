@@ -56,7 +56,9 @@ enum {
 // Keymapper actions (metaengine.cpp).
 enum GrumpaAction {
 	kActionNone,
-	kActionDismount  // Backspace: leave a mount, else let the companion go (E-1503)
+	kActionDismount, // Backspace: leave a mount, else let the companion go (E-1503)
+	kActionStance,   // Ctrl held: the combat stance (E-1400)
+	kActionJump      // Space held: jump (E-0812)
 };
 
 class GrumpaEngine : public Engine {
