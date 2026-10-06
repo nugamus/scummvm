@@ -114,6 +114,8 @@ public:
 	/** Actor 3, the player controller (walk.cpp, docs/spec/walking.md): steers the player's
 	 *  character by the mouse, the views by its floor type, the exits. One 20 ms update. */
 	void updatePlayer();
+	/** A world point on the screen through the current view (walk.cpp); the view must exist. */
+	void screenPoint(const Vec3 &v, float &x, float &y) const;
 	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */
 	bool drawMenu(int selected);
 	/** Play an MPEG-1 film from a Movies_<lang> folder; Esc/click skips. */
@@ -175,6 +177,11 @@ private:
 	// and remembered scene (CFXToScene +0x15c, +0x160, +0x168).
 	bool _leftHeld = false, _leftWas = false;
 	bool _backspace = false;     // pressed since actor 3's last tick (E-1503)
+	// Its combat (combat.md, E-1400): the right button, the keys it polls, the stance, the
+	// swing's hit timer and the clip starts it has seen.
+	bool _rightHeld = false, _rightWas = false, _ctrlHeld = false, _spaceHeld = false;
+	bool _stance = false;
+	int _hitTimer = 0, _playerStarts = 0;
 	float _playerClock = 0.0f;
 	int _playerScene = -1, _playerView = -1;
 	bool _exitLatch = true, _exitFirst = true;

@@ -257,10 +257,11 @@ void Score::command(int op, int arg1, int arg2, Characters &chars) {
 			if (form && form->state.size() > 1)
 				form->state[1] = _slot[kLife];
 		} else if (arg2 > 0) {
-			if (c && c->state.size() > 1)
+			if (c && c->state.size() > 1) {
 				c->state[1] += op == 50 ? arg1 : -arg1;
-			// ponytail: a character hit and still alive plays its animation 0x17; no
-			// character animation state machine yet (Q-0403).
+				if (op == 51 && c->state[1] > 0)
+					chars.request(*c, 0x17, 0.0f);  // hit, still alive (E-1402)
+			}
 			if (arg2 == formChar) {
 				if (op == 50)
 					add(kLife, arg1);

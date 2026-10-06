@@ -164,11 +164,18 @@ Common::Error GrumpaEngine::run() {
 			if (state == kScene) {
 				if (event.type == Common::EVENT_LBUTTONUP)
 					_leftHeld = false;  // actor 3 stops (E-0811)
+				if (event.type == Common::EVENT_KEYDOWN || event.type == Common::EVENT_KEYUP) {
+					const bool down = event.type == Common::EVENT_KEYDOWN;
+					if (event.kbd.keycode == Common::KEYCODE_LCTRL || event.kbd.keycode == Common::KEYCODE_RCTRL)
+						_ctrlHeld = down;  // the stance (E-1400)
+					else if (event.kbd.keycode == Common::KEYCODE_SPACE)
+						_spaceHeld = down;  // jump (E-0812)
+				}
 				if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE) {
 					if (!_events->fadeIdle())  // not during a fade or on black (E-0700)
 						continue;
 					state = kMenu;
-					_leftHeld = _leftWas = false;
+					_leftHeld = _leftWas = _rightHeld = _ctrlHeld = _spaceHeld = false;  // key-ups go to the menu
 					dirty = true;
 				} else if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START && event.customType == kActionDismount) {
 					_backspace = true;  // leave a mount, else let the companion go (no key repeats)
@@ -179,14 +186,19 @@ Common::Error GrumpaEngine::run() {
 					updateHoverCursor(event.mouse);
 				} else if (event.type == Common::EVENT_LBUTTONDOWN) {
 					_leftHeld = true;  // actor 3 walks while it is held (E-0811)
+				} else if (event.type == Common::EVENT_RBUTTONDOWN) {
+					_rightHeld = true;  // in the stance: block (E-1400)
+					if (!_ctrlHeld) {   // else: the inventory (E-0810)
+						_inventory.command(Inventory::kPanelId, 19, 0, 0);
+						dirty = true;
+					}
 				} else if (event.type == Common::EVENT_RBUTTONUP) {
-					_inventory.command(Inventory::kPanelId, 19, 0, 0);  // right click: the inventory
-					dirty = true;
+					_rightHeld = false;
 				} else if (event.type == Common::EVENT_LBUTTONUP && _inventory.click(event.mouse)) {
 					updateHoverCursor(event.mouse);
 					int request = _inventory.takeRequest();  // the panel's buttons (E-0901)
 					if (request == 60)
-						state = kMenu, _leftHeld = _leftWas = false;
+						state = kMenu, _leftHeld = _leftWas = _rightHeld = _ctrlHeld = _spaceHeld = false;
 					else if (request == 61)
 						saveGameDialog();
 					dirty = true;
