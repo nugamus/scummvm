@@ -246,8 +246,8 @@ void GrumpaEngine::setGameCursor() {
 // (0); over a clickable trigger or an item in reach the hand (2); with the panel shown the
 // pointer (1); else the walk arrow actor 3 aims (9..24). ponytail: the kind is not kept: the
 // original leaves the pointer after the panel closes until a drop or message 0x23 (E-1721),
-// here the arrow is back at once; no 8-update hover hold, no hand over filled slots; Ctrl's
-// attack cursor (7) comes with combat.
+// here the arrow is back at once; no 8-update hover hold, no hand over filled slots. In the
+// combat stance the attack cursor (7), as actor 3 sets it each tick.
 void GrumpaEngine::updateHoverCursor(const Common::Point &p) {
 	const int held = _inventory.held();
 	if (held >= 0) {
@@ -255,6 +255,11 @@ void GrumpaEngine::updateHoverCursor(const Common::Point &p) {
 		if (name != _cursorName && _inventory.showHeldCursor())
 			_cursorName = name;
 		_cursorState = 0;
+		return;
+	}
+	if (_stance) {
+		setCursorImage("attack");
+		_cursorState = 7;
 		return;
 	}
 	const bool hand = overHotspot(p);
