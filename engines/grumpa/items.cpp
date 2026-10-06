@@ -58,7 +58,7 @@ void placeMesh(const Mesh &src, int frame, const float rot[3], const float pos[3
 
 // The screen bounding rectangle of the 8 corners of a placed mesh's bounding box, as the
 // original keeps it for clicks (E-0900).
-static Common::Rect screenRect(const Mesh &m, const Camera &cam) {
+Common::Rect screenRect(const Mesh &m, const Camera &cam) {
 	Vec3 lo(1e30f, 1e30f, 1e30f), hi(-1e30f, -1e30f, -1e30f);
 	for (uint s = 0; s < m.sections.size(); s++)
 		for (uint v = 0; v < m.sections[s].verts.size(); v++) {

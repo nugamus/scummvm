@@ -227,6 +227,9 @@ struct SceneData {
 	Common::Array<SceneSound> sounds;        // 0x18/0x2a (dialogue.cpp)
 };
 
+/** The screen bounding rectangle of the 8 projected corners of a placed mesh's box (E-0900). */
+Common::Rect screenRect(const Mesh &m, const Camera &cam);
+
 /** A look-at camera (dev views of a lone mesh): Direct3D-style left-handed matrices. */
 Camera lookAtCamera(const Vec3 &eye, const Vec3 &target, float fovY, float zn, float zf);
 

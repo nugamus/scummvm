@@ -156,6 +156,8 @@ void Characters::release(int actor) {
 	if (c) {
 		request(*c, 2, 0.0f);
 		c->setRole(0);
+		if (actor == kFollowerActor)
+			pushList(c->releaseList);  // +0x640 (E-1610)
 	}
 	if (actor == kPlayerActor) {
 		_player = -1;
@@ -193,6 +195,7 @@ void Characters::split(Character &form) {
 		rider->pending = Vec3(d * cosf(rider->yaw), 0.0f, -d * sinf(rider->yaw));
 	}
 	makePlayer(*rider);
+	pushList(form.splitList);  // +0x650, last (E-1610)
 }
 
 // Backspace on actor 3's tick (E-1503).

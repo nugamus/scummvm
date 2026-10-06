@@ -85,8 +85,7 @@ void Characters::combatTick(Character &c) {
 	}
 	if (c.deathTimer > 0 && --c.deathTimer == 0) {
 		debug(1, "Grumpa: character %u dies", c.id);
-		for (uint i = 0; i < c.deathList.size() && _vm; i++)
-			_vm->events().push(c.deathList[i]);
+		pushList(c.deathList);
 		const int role = c.role();
 		if (role >= 3 && role <= 7)
 			releaseFighter(role - 3);

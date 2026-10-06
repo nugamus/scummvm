@@ -112,6 +112,15 @@ struct Character {
 		bool fired = false;
 	};
 	Common::Array<Reaction> reactions;
+	// The other command lists (E-1610): click rules (+0x660), the follower's letting go
+	// (+0x640) and the rider form's split (+0x650).
+	struct Rule {
+		Common::Array<SceneCond> conds;
+		CommandList cmds;
+	};
+	Common::Array<Rule> rules;
+	CommandList releaseList, splitList;
+	Common::Rect screen;             // +0x148: where it was last drawn (scene.cpp)
 	int32 slot(int i) const { return i < (int)state.size() ? state[i] : 0; }
 };
 
@@ -226,6 +235,9 @@ private:
 
 	Fighter _fighters[kFighters];
 	int _fightCount = 0;             // the fighters engaged (a global, E-1430)
+	bool _ruleFired = false;         // 0x4ba77c: one click rule an update (E-1610)
+	void clickRules(Character &c, const Common::Point &p);
+	void pushList(const CommandList &list);
 	Common::RandomSource _rnd;
 
 	Common::Array<Character> _chars;

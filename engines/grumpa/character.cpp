@@ -84,13 +84,16 @@ struct Reader {
 			SceneCommand cmd;
 			cmd.when = (int32)u32(); cmd.targetId = (int32)u32(); cmd.opcode = (int32)u32();
 			cmd.arg1 = (int32)u32(); cmd.arg2 = (int32)u32();
-			for (uint32 k = count(); k > 0 && ok; k--) {
-				SceneCond e;
-				e.id = (int32)u32(); e.slot = (int32)u32(); e.value = (int32)u32();
-				e.mode = (int32)u32(); e.link = (int32)u32();
-				cmd.conds.push_back(e);
-			}
+			conds(cmd.conds);
 			out.push_back(cmd);
+		}
+	}
+	void conds(Common::Array<SceneCond> &out) {  // an EC vector: id, slot, value, mode, link
+		for (uint32 k = count(); k > 0 && ok; k--) {
+			SceneCond e;
+			e.id = (int32)u32(); e.slot = (int32)u32(); e.value = (int32)u32();
+			e.mode = (int32)u32(); e.link = (int32)u32();
+			out.push_back(e);
 		}
 	}
 	void ccVec() {                   // CC = 5 u32 + u32 m + m * EC (5 u32)
@@ -139,13 +142,15 @@ bool Characters::load() {
 		c.sphere = r.f32();          // [0x290]
 		c.mode = (int)r.u32();       // [0x48c]
 		r.skip(4);                   // [0x490]
-		uint32 n = r.count();        // rules: EC vector + CC vector each
+		uint32 n = r.count();        // click rules: EC vector + CC vector each (E-1610)
 		for (uint32 i = 0; i < n && r.ok; i++) {
-			r.skip(20 * r.count());
-			r.ccVec();
+			Character::Rule rule;
+			r.conds(rule.conds);
+			r.cmds(rule.cmds);
+			c.rules.push_back(rule);
 		}
-		r.ccVec();
-		r.ccVec();
+		r.cmds(c.releaseList);       // +0x640
+		r.cmds(c.splitList);         // +0x650
 		n = r.count();               // messages: text + CC vector (none in the data)
 		for (uint32 i = 0; i < n && r.ok; i++) {
 			r.str();
@@ -450,6 +455,7 @@ bool Characters::touches(const Character &c, const Vec3 &centre, float r) {
 // by the yaw, goes through the walk mesh and the platforms; eleven idle loops in a row play
 // the fidget.
 void Characters::update() {
+	_ruleFired = false;  // each character's vtable[4] clears it before its update (E-1610)
 	// The platform list (E-1600): the scene's 0x1a meshes with +0x1d0 set, when active; the
 	// files list them by ascending id, the original's order.
 	Common::Array<Floor::Platform> platforms;
@@ -605,10 +611,12 @@ bool Characters::command(int id, int op, int arg1, int arg2) {
 	if (id == -1) {
 		if (op == 0x17)
 			enter(arg1);
-		if (op == 0x17 || op == 0x19)
+		if (op == 0x17)
 			fightersCommand(op, arg1);
-		for (uint i = 0; i < _chars.size(); i++)
+		for (uint i = 0; i < _chars.size(); i++)  // the characters (ids 10..88) before 91..95
 			apply(_chars[i], op, arg1);
+		if (op == 0x19)
+			fightersCommand(op, arg1);
 		return true;
 	}
 	if (id == kFloor) {
@@ -652,8 +660,20 @@ void Characters::apply(Character &c, int op, int arg1) {
 		c.home = -1;
 		c.latched = true;
 		break;
+	case 0x12:                       // the left button (the VM's click broadcast)
+		clickRules(c, Common::Point((int16)(arg1 & 0xffff), (int16)((uint32)arg1 >> 16)));
+		break;
+	case 0x19:                       // leaving the scene while dying: the death list now (E-1610)
+		if (c.deathTimer > 0) {
+			pushList(c.deathList);
+			c.active = c.visible = false;
+			c.home = -1;
+			c.deathTimer = c.hideTimer = -1;
+		}
+		break;
 	case 0x17:
 		_scene = arg1;
+		c.screen = Common::Rect();  // drawn afresh in the new scene
 		flushSpeech(c);
 		if (c.home == arg1 && !_floor.empty()) {  // at home here: placed afresh (E-1460)
 			for (uint i = 0; i < c.reactions.size(); i++)
@@ -824,6 +844,31 @@ void Characters::pumpSpeech(Character &c) {
 		if (c.state.size() > 5)
 			c.state[5] = 1;
 	}
+}
+
+// The click rules (E-1610): a click on a character at home here, while the player's reaction
+// sphere touches its own, pushes the first rule whose conditions hold; one rule an update.
+// ponytail: the hover test that arms the mouse glitter is not run.
+void Characters::clickRules(Character &c, const Common::Point &p) {
+	const Character *pl = find(held(kPlayerActor));
+	if (_ruleFired || c.rules.empty() || !c.active || c.home != _scene || !c.screen.contains(p) || !pl || !_vm)
+		return;
+	const Vec3 d = Vec3(c.pos.x, c.pos.y + c.sphere, c.pos.z) - Vec3(pl->pos.x, pl->pos.y + pl->sphere, pl->pos.z);
+	if (d.dot(d) >= (c.reach + pl->reach) * (c.reach + pl->reach))
+		return;
+	for (uint i = 0; i < c.rules.size(); i++) {
+		if (!_vm->events().conditionsHold(c.rules[i].conds))
+			continue;
+		debug(1, "Grumpa: character %u click rule %u", c.id, i);
+		pushList(c.rules[i].cmds);
+		_ruleFired = true;
+		return;
+	}
+}
+
+void Characters::pushList(const CommandList &list) {
+	for (uint i = 0; i < list.size() && _vm; i++)
+		_vm->events().push(list[i]);
 }
 
 } // End of namespace Grumpa
