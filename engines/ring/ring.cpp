@@ -188,6 +188,7 @@ Common::Path RingEngine::mediaPath(const Common::Path &path) const {
 }
 
 RingEngine::~RingEngine() {
+	SY::shutdown();
 	g_engine = nullptr;
 }
 
