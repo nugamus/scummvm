@@ -213,35 +213,29 @@ bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
 	return true;
 }
 
-// Set the system cursor to UI/002_Cursor/<name>_0000.jpg (the game's cursor set, 002_Cursor.atx:
-// default, grabing, pointpush, pull, push, stop, attack, itemglitter, ...). The JPEGs key out
-// their blue background (E-0107). Cached by name so hover updates are cheap.
-
+// The cursor's pictures (inventory.md "The cursor's picture", E-1720): UI/002_Cursor/
+// <name>_0000.jpg (default, grabing, ...) or, for the walk arrows, arrow<n>_.tga; keyed on
+// the colour of pixel (0, 0), drawn with the top-left corner at the mouse point. Cached by
+// name so the per-update refresh is cheap. ponytail: frame 0 only (the timing is Q-1710).
 void GrumpaEngine::setCursorImage(const Common::String &name) {
 	if (name == _cursorName)
 		return;
 	Common::File f;
-	if (!f.open(Common::Path("UI/002_Cursor/" + name + "_0000.jpg")))
+	const bool arrow = name.hasSuffix("_");
+	if (!f.open(Common::Path("UI/002_Cursor/" + name + (arrow ? ".tga" : "_0000.jpg"))))
 		return;
 	Image::JPEGDecoder jpeg;
-	Graphics::PixelFormat rgba(4, 8, 8, 8, 8, 0, 8, 16, 24);
-	jpeg.setOutputPixelFormat(rgba);
-	if (!jpeg.loadStream(f))
+	Image::TGADecoder tga;
+	jpeg.setOutputPixelFormat(_screen.format);
+	Image::ImageDecoder &dec = arrow ? (Image::ImageDecoder &)tga : (Image::ImageDecoder &)jpeg;
+	if (!dec.loadStream(f) || !dec.getSurface())
 		return;
-	const Graphics::Surface *src = jpeg.getSurface();
-	Graphics::Surface cur;
-	cur.create(src->w, src->h, rgba);
-	for (int y = 0; y < src->h; y++) {
-		for (int x = 0; x < src->w; x++) {
-			byte r, g, b, a;
-			rgba.colorToARGB(src->getPixel(x, y), a, r, g, b);
-			a = (b > 200 && r < 96 && g < 96) ? 0 : 255;  // key out the blue background (E-0107)
-			cur.setPixel(x, y, rgba.ARGBToColor(a, r, g, b));
-		}
-	}
-	CursorMan.replaceCursor(cur, src->w / 2, src->h / 2, 0, nullptr);
+	Graphics::Surface *cur = dec.getSurface()->convertTo(_screen.format, dec.getPalette().data(),
+														 dec.getPalette().size());
+	CursorMan.replaceCursor(*cur, 0, 0, cur->getPixel(0, 0));
 	CursorMan.showMouse(true);
-	cur.free();
+	cur->free();
+	delete cur;
 	_cursorName = name;
 }
 
@@ -249,10 +243,24 @@ void GrumpaEngine::setGameCursor() {
 	setCursorImage("default");
 }
 
-// Hover feedback: over a clickable trigger show the "grabing" hand so exits/interactions are
-// discoverable; otherwise the default pointer.
+// The cursor's kind, refreshed every update and on mouse moves (E-1721): the held item's icon
+// (0); over a clickable trigger or an item in reach the hand (2); with the panel shown the
+// pointer (1); else the walk arrow actor 3 aims (9..24). ponytail: the hover's 8-update hold
+// and the filled slots' hand are not modelled; Ctrl's attack cursor (7) comes with combat.
 void GrumpaEngine::updateHoverCursor(const Common::Point &p) {
-	setCursorImage(overHotspot(p) ? "grabing" : "default");
+	const int held = _inventory.held();
+	if (held >= 0) {
+		const Common::String name = Common::String::format("*%d", held);
+		if (name != _cursorName && _inventory.showHeldCursor())
+			_cursorName = name;
+		return;
+	}
+	if (overHotspot(p))
+		setCursorImage("grabing");
+	else if (_inventory.shown())
+		setCursorImage("default");
+	else
+		setCursorImage(Common::String::format("arrow%d_", _arrowKind - 8));
 }
 
 bool GrumpaEngine::overHotspot(const Common::Point &p) {

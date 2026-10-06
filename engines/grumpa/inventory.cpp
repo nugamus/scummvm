@@ -544,7 +544,7 @@ bool Inventory::showHeldCursor() {
 	const Graphics::ManagedSurface *ic = it ? icon(*it) : nullptr;
 	if (!ic)
 		return false;
-	CursorMan.replaceCursor(ic->rawSurface(), ic->w / 2, ic->h / 2, ic->format.RGBToColor(0, 0, 255));
+	CursorMan.replaceCursor(ic->rawSurface(), 0, 0, ic->format.RGBToColor(0, 0, 255));  // top-left (E-1720)
 	CursorMan.showMouse(true);
 	return true;
 }
