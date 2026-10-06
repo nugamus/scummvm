@@ -162,6 +162,7 @@ struct SpriteHooks {
 	uint32 id = 0;
 	bool autoplay = false;   // +0x1d4: plays on the scene-entry broadcast
 	CommandList onEnd, onForward, onBackward;  // +0x14c, +0x12c, +0x13c
+	CommandList onContact;   // a 0x1a mesh's third list: a contact sphere touched (E-1681)
 };
 
 // A logic actor (E-0204/E-0205): 0x21 script, 0x22/0x25 counter, 0x23/0x26 timer,
@@ -196,6 +197,16 @@ struct SceneMesh {
 	int frame = 0;               // +0x1c0
 	bool autoplay = false;       // +0x1dc: plays on the scene-entry broadcast
 	bool platform = false;       // +0x1d0: walked on (E-1600)
+	// Contact spheres riding a vertex of the current frame (E-1681): the air bubbles.
+	struct Contact {
+		uint32 vertex;
+		float radius;
+	};
+	Common::Array<Contact> contacts;  // +0x25c
+	uint32 contactFlags = 0;     // +0x1bc: bit 1 tests the player's character
+	bool contactOnce = false;    // +0x1e4: once per touch
+	bool contactOn = true;       // +0x1e0: opcodes 14 / 15
+	bool contactLatch = false;   // +0x234
 	// The delay timer (+0x278): a play waits `ticks` updates before running.
 	bool timerOn = false, timerCounting = false, timerRandom = false;
 	int32 timerMin = 0, timerMax = 0, timerFixed = 0;  // ms
