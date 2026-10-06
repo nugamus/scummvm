@@ -911,6 +911,13 @@ void EventVM::keep() {
 		Status s = { m.active, m.visible, r.latch, 0, Common::Array<int32>(), r.frame, r.dir, r.playing, r.running };
 		kept[m.id] = s;
 	}
+	// Sounds keep their playing flag, not their play position: a line playing when the scene is left
+	// or saved plays again from its start (E-1760).
+	for (uint i = 0; i < _scene->sounds.size(); i++) {
+		Status s = { false, false, false, 0, Common::Array<int32>(), 0, 0, false, false };
+		if (_engine->_voices->status(_scene->sounds[i].id, s.active, s.visible, s.latch, s.playing))
+			kept[_scene->sounds[i].id] = s;
+	}
 	for (uint i = 0; i < _scene->logic.size(); i++) {
 		const SceneLogic &a = _scene->logic[i];
 		// a script keeps its latch, the others their state; a flag's latch is not kept (E-0203)
@@ -959,6 +966,8 @@ void EventVM::enterScene(int num, SceneData *scene) {
 				r.dir = s.dir;
 				r.playing = s.playing;
 				r.running = s.running;
+			} else if (_engine->_voices->restore(it->_key, s.active, s.visible, s.latch, s.playing)) {
+				// a sound (E-1760)
 			} else if (SceneLogic *a = logicActor(it->_key)) {
 				a->active = s.active;
 				a->visible = s.visible;
