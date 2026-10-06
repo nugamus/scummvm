@@ -124,7 +124,8 @@ bool Floor::load(int num) {
 }
 
 // ponytail: the flags start closed on every entry; whether a scene's status keeps them is not
-// read. Opcode 23 empties the platform list, which the engine does not keep (Q-0810).
+// read. Opcode 23 empties the platform list, which entry then refills with the scene's flagged
+// meshes (E-1600): the engine takes those meshes directly (Characters::update).
 void Floor::command(int op, int arg) {
 	if (op != 5 && op != 6)
 		return;
@@ -134,8 +135,7 @@ void Floor::command(int op, int arg) {
 }
 
 // The face test (E-0800): the x/z box, then three x/z edge functions, all strictly positive.
-bool Floor::inFace(int f, float x, float z) const {
-	const Vec3 &a = verts[faces[3 * f]], &b = verts[faces[3 * f + 1]], &c = verts[faces[3 * f + 2]];
+static bool inTriangle(const Vec3 &a, const Vec3 &b, const Vec3 &c, float x, float z) {
 	if (x < MIN(a.x, MIN(b.x, c.x)) || x > MAX(a.x, MAX(b.x, c.x)) ||
 		z < MIN(a.z, MIN(b.z, c.z)) || z > MAX(a.z, MAX(b.z, c.z)))
 		return false;
@@ -146,6 +146,10 @@ bool Floor::inFace(int f, float x, float z) const {
 			return false;
 	}
 	return true;
+}
+
+bool Floor::inFace(int f, float x, float z) const {
+	return inTriangle(verts[faces[3 * f]], verts[faces[3 * f + 1]], verts[faces[3 * f + 2]], x, z);
 }
 
 int Floor::faceAt(float x, float z, int hint) const {
@@ -208,9 +212,37 @@ void Floor::contacts(int f, float x, float z, float radius, Common::Array<bool> 
 	}
 }
 
-// CFXFloor::Move without the platforms (E-0802). ponytail: no platform meshes (0x1a actors
-// with +0x1d0 = 1); add them with the bridges and rafts that need them.
-void Floor::move(Vec3 &pos, Vec3 delta, float radius, int &face) const {
+// CFXFloor::Move (E-0802). The platforms first (E-1600): the first face of theirs, at frame 0,
+// under the target takes the move, with the height of its first corner in the current frame
+// and no wall slide. The original indexes one buffer of every section (frame * all vertices +
+// the uv index); per section is the same for the flagged meshes, one section each (E-1600).
+// The frame clamp and the bounds checks are ours: the original reads unchecked.
+void Floor::move(Vec3 &pos, Vec3 delta, float radius, int &face, int &platform,
+				 const Common::Array<Platform> &platforms) const {
+	const float x = pos.x + delta.x, z = pos.z + delta.z;
+	for (uint i = 0; i < platforms.size(); i++) {
+		const Mesh &m = *platforms[i].mesh;
+		const int frame = CLIP(platforms[i].frame, 0, MAX(m.frames - 1, 0));
+		int base = 0;
+		for (uint s = 0; s < m.sections.size(); s++) {
+			const MeshSection &sec = m.sections[s];
+			for (uint f = 0; f < sec.faces.size(); f++) {
+				const uint16 *v = sec.faces[f].v;
+				if (MAX(v[0], MAX(v[1], v[2])) >= sec.nv || !inTriangle(sec.verts[v[0]], sec.verts[v[1]], sec.verts[v[2]], x, z))
+					continue;
+				face = base + (int)f;
+				platform = (int)i;
+				pos = Vec3(x, pos.y + delta.y, z);
+				const uint h = frame * sec.nv + v[0];
+				if (h < sec.verts.size())
+					pos.y = 0.4f * pos.y + 0.6f * sec.verts[h].y;
+				return;
+			}
+			base += sec.faces.size();
+		}
+	}
+	if (platform >= 0)
+		platform = face = -1;
 	if (face < 0 || face >= (int)types.size())
 		face = faceAt(pos.x, pos.z);
 	Common::Array<bool> seen;

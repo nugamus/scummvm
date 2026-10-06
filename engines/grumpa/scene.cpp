@@ -557,6 +557,7 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			m.playing = af[13] == 1;
 			m.frame = af[14];
 			m.autoplay = af[15] == 1;
+			m.platform = af[6] == 1;
 			// The delay timer: on, (+0x104), (+0x10c), counting, (+0x114), random, (2),
 			// min, max, (+0x12c), fixed, (+0x134), ticks left.
 			int32 tm[14];
