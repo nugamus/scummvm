@@ -48,6 +48,7 @@ bool pointInPolygon(const Common::Array<Common::Point> &poly, const Common::Poin
 class EventVM {
 public:
 	enum { kUpdateMs = 20 };  // 50 updates a second (E-0202)
+	enum { kMouseId = 2 };    // the mouse actor (E-1800)
 
 	explicit EventVM(GrumpaEngine *engine) : _engine(engine), _rnd("grumpa") {}
 

@@ -131,6 +131,10 @@ void EventVM::collectIds(Common::Array<int> &ids) const {
 bool EventVM::stateOf(int id, int slot, int32 &value) const {
 	if (id == Score::kId)
 		return _score.stateOf(slot, value);
+	if (id == kMouseId) {  // its State mirrors the cursor kind (E-1800)
+		value = slot == 0 ? _engine->cursorState() : 0;
+		return true;
+	}
 	if (Inventory::owns(id))
 		return _engine->_inventory.stateOf(id, slot, value);
 	if (_engine->_characters.stateOf(id, slot, value))
@@ -779,6 +783,8 @@ void EventVM::update() {
 			meshUpdate(*m, _run[m->id]);
 		}
 	}
+	// The mouse (actor 2) updates first: its picture, and its State for conditions (E-1800).
+	_engine->updateHoverCursor(g_system->getEventManager()->getMousePos());
 	_engine->updatePlayer();
 	_engine->_characters.update();
 	triggerUpdate();

@@ -261,8 +261,6 @@ Common::Error GrumpaEngine::run() {
 				_events->update();
 				dirty = true;
 			}
-			if (dirty)  // the walk arrow follows the player; hovers come and go (E-1721)
-				updateHoverCursor(g_system->getEventManager()->getMousePos());
 			if (_nextScene >= 0) {  // 185 op 31 (E-0206)
 				enterScene(_nextScene);
 				_nextScene = -1;
