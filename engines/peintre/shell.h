@@ -60,8 +60,9 @@ enum {
 	kCursorDrag = 13
 };
 
-inline Common::Rect rectWH(int x, int y, int w, int h) {
-	return Common::Rect(x, y, x + w, y + h);
+// constexpr (through Rect's point-and-size constructor) so tables of rects need no global constructor.
+constexpr Common::Rect rectWH(int x, int y, int w, int h) {
+	return Common::Rect(Common::Point(x, y), w, h);
 }
 
 /** The screen rectangle a sprite frame covers when drawn at (x, y). */

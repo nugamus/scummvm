@@ -74,20 +74,20 @@ static Common::String objectSound(uint object) {
 static const int kSlotDrawY[3] = { 29, 116, 222 };
 static const int kSlotRectY[3] = { 53, 143, 233 };   // (12, y, 59, 58)
 static const int kFlyFromY[3] = { 83, 172, 263 };    // x 40
-static const Common::Rect kRetourRect(605, 437, 605 + 24, 437 + 29);
-static const Common::Rect kRetourMRect(11, 437, 11 + 24, 437 + 29);
+static const Common::Rect kRetourRect = rectWH(605, 437, 24, 29);
+static const Common::Rect kRetourMRect = rectWH(11, 437, 24, 29);
 static const Common::Rect kArrowRects[2] = {
-	Common::Rect(13, 435, 13 + 23, 435 + 30), Common::Rect(509, 435, 509 + 22, 435 + 30)
+	rectWH(13, 435, 23, 30), rectWH(509, 435, 22, 30)
 };
 static const Common::Rect kTournRects[3] = {
-	Common::Rect(127, 313, 127 + 30, 313 + 26), Common::Rect(111, 244, 111 + 24, 244 + 32),
-	Common::Rect(148, 290, 148 + 30, 290 + 26)
+	rectWH(127, 313, 30, 26), rectWH(111, 244, 24, 32),
+	rectWH(148, 290, 30, 26)
 };
 // Where TOURN rests: dragged, it is centred on this point moved with the cursor (0x410ce4, E-0442).
 static const Common::Point kTournGrab[3] = {
 	Common::Point(122, 344), Common::Point(132, 295), Common::Point(166, 333)
 };
-static const Common::Rect kPotArea(590, 400, 590 + 45, 400 + 80);
+static const Common::Rect kPotArea = rectWH(590, 400, 45, 80);
 
 static Common::Rect slotRect(uint s) {
 	return Common::Rect(12, kSlotRectY[s], 12 + 59, kSlotRectY[s] + 58);
