@@ -272,6 +272,11 @@ Common::Error GrumpaEngine::run() {
 				_events->update();
 				dirty = true;
 			}
+			int request = _events->takeRequest();  // actor 1: 60 the main menu, 61 the saves
+			if (request == 60)
+				state = kMenu, _leftHeld = _leftWas = false, dirty = true;
+			else if (request == 61)
+				saveGameDialog(), dirty = true;
 			if (_nextScene >= 0) {  // 185 op 31 (E-0206)
 				enterScene(_nextScene);
 				_nextScene = -1;

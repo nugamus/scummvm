@@ -84,6 +84,8 @@ public:
 	int fadeLevel() const { return _fade.level; }
 	/** Escape is taken only while no fade runs and the screen is not black (E-0700). */
 	bool fadeIdle() const { return !_fade.running && _fade.level != 0; }
+	/** Actor 1's last request: 60 the main menu, 61 the saved games (0 none); clears it. */
+	int takeRequest() { int r = _request; _request = 0; return r; }
 	/** Play the ambience's pending sound now (the boot, before the main menu). */
 	void startAmbience() { _ambience.enterScene(); }
 	/** The score display (actor 8), drawn over the scene. */
@@ -130,6 +132,7 @@ private:
 	bool gateSource(const SceneTrigger &tr, const Character *c, int32 who, bool &inside);
 	void triggerUpdate();
 	void logicCommand(SceneLogic &a, int op, int arg1);
+	void playFilm(SceneLogic &a);
 	void logicUpdate(SceneLogic &a);
 	SceneLogic *logicActor(int id);
 	SceneSprite *sprite(int id);
@@ -149,6 +152,8 @@ private:
 	Common::HashMap<int, StatusMap> _kept;         // scene number -> its actors' status
 	int _proxyTarget = -1;                         // actor 186 (E-0206)
 	bool _fired = false;                           // a trigger fired during click()
+	CommandList _afterFilm;                        // a cut scene's list, for the next update
+	int _request = 0;                              // actor 1's 60 / 61, for the main loop
 	Common::RandomSource _rnd;                     // mesh delay timers
 	Fade _fade;
 	Score _score;
