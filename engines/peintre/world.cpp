@@ -500,7 +500,7 @@ bool World::load(int scene, int prevScene, bool keepCamera) {
 
 	_bundle = bundle;
 	SceneSession &ss = _vm->session(bundle);
-	if (!ss.script && !ConfMan.getBool("dev_noscript"))
+	if (!ss.script)
 		ss.script = createSceneScript(scene, bundle);
 	_script = ss.script;
 	if (_script)

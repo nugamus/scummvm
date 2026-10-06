@@ -22,9 +22,7 @@
 #include "common/config-manager.h"
 #include "common/endian.h"
 #include "common/events.h"
-#include "common/file.h"
 #include "common/system.h"
-#include "common/tokenizer.h"
 
 #include "backends/keymapper/keymap.h"
 #include "backends/keymapper/keymapper.h"
@@ -35,14 +33,11 @@
 
 #include "graphics/pixelformat.h"
 
-#include "image/png.h"
 
-#include "peintre/bfg.h"
 #include "peintre/detection.h"
 #include "peintre/display.h"
 #include "peintre/gfx.h"
 #include "peintre/movie.h"
-#include "peintre/obj3d.h"
 #include "peintre/peintre.h"
 #include "peintre/sound.h"
 #include "peintre/world.h"
@@ -123,120 +118,6 @@ void PeintreEngine::drawHotspots() {
 	_world->hotspotsDrawn();
 }
 
-static Common::KeyCode devKey(const Common::String &name, char &ascii) {
-	static const struct {
-		const char *name;
-		Common::KeyCode code;
-		char ascii;
-	} kKeys[] = {
-		{ "space", Common::KEYCODE_SPACE, ' ' }, { "esc", Common::KEYCODE_ESCAPE, 27 },
-		{ "backspace", Common::KEYCODE_BACKSPACE, 8 }, { "enter", Common::KEYCODE_RETURN, 13 },
-		{ "up", Common::KEYCODE_UP, 0 }, { "down", Common::KEYCODE_DOWN, 0 },
-		{ "left", Common::KEYCODE_LEFT, 0 }, { "right", Common::KEYCODE_RIGHT, 0 },
-		{ "pageup", Common::KEYCODE_PAGEUP, 0 }, { "pagedown", Common::KEYCODE_PAGEDOWN, 0 },
-		// Pushed events skip the keymapper: its actions by name.
-		{ "strafeleft", (Common::KeyCode)kKeyStrafeLeft, 0 }, { "straferight", (Common::KeyCode)kKeyStrafeRight, 0 },
-		{ "hotspots", (Common::KeyCode)kKeyHotspots, 0 }
-	};
-	for (const auto &k : kKeys) {
-		if (name.equalsIgnoreCase(k.name)) {
-			ascii = k.ascii;
-			return k.code;
-		}
-	}
-	ascii = name.empty() ? 0 : name[0];
-	return name.empty() ? Common::KEYCODE_INVALID : (Common::KeyCode)tolower(name[0]);
-}
-
-void PeintreEngine::devStep() {
-	if (_devCommands.empty())
-		return;
-	const uint32 now = _system->getMillis() - _devStart;
-	while (!_devCommands.empty() && _devCommands[0].time <= now) {
-		const Common::String c = _devCommands[0].command;
-		_devCommands.remove_at(0);
-		Common::Array<Common::String> w;
-		Common::String cur;
-		for (uint i = 0; i <= c.size(); i++) {
-			if (i == c.size() || c[i] == ' ') {
-				if (!cur.empty())
-					w.push_back(cur);
-				cur.clear();
-			} else {
-				cur += c[i];
-			}
-		}
-		if (w.empty())
-			continue;
-		debugC(1, kDebugInput, "dev_commands: %s", c.c_str());
-		Common::EventManager *em = _system->getEventManager();
-		Common::Event e;
-		if ((w[0] == "click" || w[0] == "tap" || w[0] == "press" || w[0] == "move") && w.size() >= 3) {
-			e.type = Common::EVENT_MOUSEMOVE;
-			e.mouse = _display->toWindow(Common::Point(atoi(w[1].c_str()), atoi(w[2].c_str())));
-			_system->warpMouse(e.mouse.x, e.mouse.y);
-			em->pushEvent(e);
-			if (w[0] == "press") {
-				// The button stays down until "release x y" (drags).
-				e.type = Common::EVENT_LBUTTONDOWN;
-				em->pushEvent(e);
-			} else if (w[0] == "click" || w[0] == "tap") {
-				// A tap is down for exactly one poll: its release is due at the next one.
-				e.type = Common::EVENT_LBUTTONDOWN;
-				em->pushEvent(e);
-				DevCommand up = { now + (w[0] == "tap" ? 1 : 150), Common::String::format("release %s %s", w[1].c_str(), w[2].c_str()) };
-				_devCommands.insert_at(0, up);
-			}
-		} else if (w[0] == "look" && w.size() >= 3) {
-			// Relative mouse motion (modern controls' mouse look).
-			e.type = Common::EVENT_MOUSEMOVE;
-			e.mouse = _display->toWindow(Common::Point(320, 240));
-			e.relMouse = Common::Point(atoi(w[1].c_str()), atoi(w[2].c_str()));
-			em->pushEvent(e);
-		} else if (w[0] == "release" && w.size() >= 3) {
-			e.type = Common::EVENT_LBUTTONUP;
-			e.mouse = _display->toWindow(Common::Point(atoi(w[1].c_str()), atoi(w[2].c_str())));
-			em->pushEvent(e);
-		} else if ((w[0] == "key" || w[0] == "hold" || w[0] == "keyup") && w.size() >= 2) {
-			char ascii;
-			e.kbd.keycode = devKey(w[1], ascii);
-			e.kbd.ascii = ascii;
-			e.type = w[0] == "keyup" ? Common::EVENT_KEYUP : Common::EVENT_KEYDOWN;
-			em->pushEvent(e);
-			if (w[0] != "keyup") {
-				const uint32 hold = w[0] == "hold" && w.size() >= 3 ? atoi(w[2].c_str()) : 100;
-				DevCommand up = { now + hold, "keyup " + w[1] };
-				uint at = 0;
-				while (at < _devCommands.size() && _devCommands[at].time <= up.time)
-					at++;
-				_devCommands.insert_at(at, up);
-			}
-		} else if (w[0] == "type" && w.size() >= 2) {
-			for (uint i = 0; i < w[1].size(); i++) {
-				e.type = Common::EVENT_KEYDOWN;
-				e.kbd.ascii = w[1][i];
-				e.kbd.keycode = (Common::KeyCode)tolower(w[1][i]);
-				em->pushEvent(e);
-				e.type = Common::EVENT_KEYUP;
-				em->pushEvent(e);
-			}
-		} else if (w[0] == "snap" && w.size() >= 2) {
-			Common::DumpFile out;
-			Graphics::Surface frame;
-			if (out.open(Common::Path(w[1], '/')))
-				Image::writePNG(out, _display->snapshot(frame) ? frame : _screen);
-			frame.free();
-		} else if (w[0] == "where") {
-			if (_world) {
-				const Camera &cam = _world->camera();
-				debug("where: %d, %d, %d pitch %d yaw %d", cam.x, cam.y, cam.z, cam.pitch, cam.yaw);
-			}
-		} else if (w[0] == "quit") {
-			quitGame();
-		}
-	}
-}
-
 void PeintreEngine::pollInput() {
 	endTick();
 	pollEvents();
@@ -249,7 +130,6 @@ void PeintreEngine::endTick() {
 }
 
 void PeintreEngine::pollEvents() {
-	devStep();
 	Common::Event event;
 	while (_eventMan->pollEvent(event)) {
 		if (Common::isMouseEvent(event))
@@ -280,10 +160,6 @@ void PeintreEngine::pollEvents() {
 			_button = false;
 			break;
 		case Common::EVENT_KEYDOWN:
-			if (event.kbd.keycode == (Common::KeyCode)kKeyHotspots) { // dev_commands
-				toggleHotspots();
-				break;
-			}
 			if (Common::find(_keysDown.begin(), _keysDown.end(), event.kbd.keycode) == _keysDown.end())
 				_keysDown.push_back(event.kbd.keycode);
 			if (event.kbd.keycode == Common::KEYCODE_BACKSPACE)
@@ -371,53 +247,10 @@ Common::Error PeintreEngine::run() {
 	const Graphics::PixelFormat format(2, 5, 6, 5, 0, 11, 5, 0, 0);
 	_screen.create(640, 480, format);
 
-	if (ConfMan.getBool("dev_load_all"))
-		loadAllScenes();
-
-	_devStart = _system->getMillis();
-	if (ConfMan.hasKey("dev_commands")) {
-		// ms:command;ms:command... (peintre.h devStep)
-		const Common::String all = ConfMan.get("dev_commands");
-		Common::String item;
-		for (uint i = 0; i <= all.size(); i++) {
-			if (i == all.size() || all[i] == ';') {
-				const int colon = item.findFirstOf(':');
-				if (colon > 0) {
-					DevCommand d = { (uint32)atoi(item.substr(0, colon).c_str()), item.substr(colon + 1) };
-					d.command.trim();
-					_devCommands.push_back(d);
-				}
-				item.clear();
-			} else {
-				item += all[i];
-			}
-		}
-	}
 	_sound = new Sound(_mixer);
 	_movies = new MoviePlayer(this);
 	if (!_movies->loadTable())
 		warning("Cannot read the movie table from mission.___");
-	if (ConfMan.hasKey("dev_movie")) {
-		// dev_movie=credits runs the end credits instead.
-		if (ConfMan.get("dev_movie") == "credits")
-			runEndCredits();
-		else
-			_movies->play(ConfMan.get("dev_movie"));
-		return Common::kNoError;
-	}
-
-	if (ConfMan.hasKey("dev_scene")) {
-		// Dev harness: straight into a 3D scene (from dev_prev_scene, default 0), as a
-		// player with view size dev_view_size (default 0).
-		if (_players.empty()) {
-			PlayerRecord p;
-			p.viewSize = ConfMan.hasKey("dev_view_size") ? ConfMan.getInt("dev_view_size") : 0;
-			_players.push_back(p);
-			_player = 0;
-		}
-		runWorld(ConfMan.getInt("dev_scene"), ConfMan.hasKey("dev_prev_scene") ? ConfMan.getInt("dev_prev_scene") : 0);
-		return Common::kNoError;
-	}
 
 	// boot.md "Sequence": players, the player-name screen, resume state, loading, intro.
 	loadPlayers();
@@ -457,23 +290,6 @@ Common::Error PeintreEngine::run() {
 	if (!known || !readResume(_player, in2d)) {
 		_state.clear();
 		in2d = 0;
-	}
-	if (ConfMan.hasKey("dev_zone")) {
-		// Dev harness: straight into a 2D zone holding the objects of dev_held ("all" or
-		// "n,n,..."), then stop.
-		Common::StringTokenizer ids(ConfMan.get("dev_held"), ",");
-		while (!ids.empty()) {
-			const Common::String id = ids.nextToken();
-			for (uint o = 0; o < kNumObjects; o++)
-				if (id == "all" || (uint)atoi(id.c_str()) == o)
-					_state.setHeld(o, 1);
-		}
-		_state.block3D[0x3E] = ConfMan.getInt("dev_zone");
-		int code = enterZone(_state.currentZone());
-		while (code >= 0 && readGame(code / 100, code % 100))
-			code = enterZone(_state.currentZone()); // a loaded game resumes in its zone
-		debug("dev_zone: left with %d", code);
-		return Common::kNoError;
 	}
 	if (!in2d) {
 		Graphics::Surface loading;
@@ -628,69 +444,6 @@ void PeintreEngine::leave3D() {
 	if (_system->isOverlayVisible() && _showHotspots)
 		_system->hideOverlay();
 	_hotspotForceRedraw = true;
-}
-
-void PeintreEngine::loadAllScenes() {
-	// Dev check: every object of every BFG loads (the RE validators' counts, obj3d.py).
-	static const char *const kBundles[] = {
-		"auberge", "cafe", "chambreb", "chambrev", "champ", "eglise", "hopiext", "hopiint",
-		"jardin", "maisonet", "maisonj", "mangeurs", "musee", "pont", "terrasse"
-	};
-	uint nodes = 0, polys = 0, textures = 0, anims = 0, boxes = 0, failures = 0;
-	for (const char *name : kBundles) {
-		Bfg bfg;
-		if (!bfg.open(Common::Path(Common::String::format("Scenes_3D/%s.BFG", name)))) {
-			warning("dev_load_all: cannot open %s.BFG", name);
-			failures++;
-			continue;
-		}
-		for (uint i = 0; i < bfg.entryCount(); i++) {
-			Common::Array<byte> data;
-			if (!bfg.readEntry(bfg.entryName(i), data) || data.size() < kObjectHeaderSize) {
-				failures++;
-				continue;
-			}
-			bool ok = true;
-			switch (READ_LE_UINT32(data.data() + 8)) {
-			case kObjScene: {
-				Scene3D s;
-				ok = s.load(data);
-				nodes += s.nodes.size();
-				for (const Node &n : s.nodes)
-					for (const FaceGroup &g : n.faceGroups)
-						polys += g.polys.size();
-				break;
-			}
-			case kObjTexture: {
-				Texture3D *t = new Texture3D();
-				ok = t->load(data);
-				delete t;
-				textures++;
-				break;
-			}
-			case kObjAnim: {
-				Anim3D a;
-				ok = a.load(data);
-				anims++;
-				break;
-			}
-			case kObjBoxes: {
-				Boxes3D b;
-				ok = b.load(data);
-				boxes++;
-				break;
-			}
-			default:
-				ok = false;
-			}
-			if (!ok) {
-				warning("dev_load_all: %s:%s failed", name, bfg.entryName(i).c_str());
-				failures++;
-			}
-		}
-	}
-	debug("dev_load_all: %u nodes, %u polys, %u textures, %u animations, %u box sets, %u failures",
-		  nodes, polys, textures, anims, boxes, failures);
 }
 
 } // End of namespace Peintre

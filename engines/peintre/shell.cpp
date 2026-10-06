@@ -19,7 +19,6 @@
  *
  */
 
-#include "common/config-manager.h"
 #include "common/system.h"
 
 #include "peintre/movie.h"
@@ -590,14 +589,6 @@ void Shell::step() {
 		} else {
 			startRetour();
 			_state = kIdle;
-		}
-		if (ConfMan.hasKey("dev_place")) {
-			// Dev harness: the object is dropped on its slot at once (the bar would have
-			// closed the magnifier).
-			_mag = kMagClosed;
-			for (uint i = 0; i < _list.size(); i++)
-				if (_list[i] == (uint)ConfMan.getInt("dev_place") && slotOf(_list[i]) >= 0)
-					place(i);
 		}
 		break;
 

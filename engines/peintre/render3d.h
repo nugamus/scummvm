@@ -92,8 +92,6 @@ public:
 			  const float *poses = nullptr, Common::Array<Tri3D> *out = nullptr);
 	/** The node under (x, y) after the last draw, -1 for none (render.md "Picking"). */
 	int pick(int x, int y) const;
-	/** The same through a whole-view buffer, built on first use (many points, dev harness). */
-	int pickBuffered(int x, int y);
 	/** A point where the last draw can pick the node: its centre or else a vertex. */
 	bool nodeScreenPoint(int node, Common::Point &p) const;
 	/**

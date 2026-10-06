@@ -449,30 +449,6 @@ int Renderer3D::pick(int x, int y) const {
 	return node;
 }
 
-int Renderer3D::pickBuffered(int x, int y) {
-	if (!_pickBuilt) {
-		const uint area = _viewport.width() * _viewport.height();
-		_zbuf.resize(area);
-		_pickZ.resize(area);
-		_pickNode.resize(area);
-		for (uint i = 0; i < area; i++) {
-			_zbuf[i] = 0.0f;
-			_pickZ[i] = 0.0f;
-			_pickNode[i] = -1;
-		}
-		Fill fill;
-		fill.type = 3;
-		fill.tex = nullptr;
-		fill.colour = 0;
-		for (const PickTri &t : _pickTris) {
-			fill.node = t.node;
-			drawTriangle(t.v, fill);
-		}
-		_pickBuilt = true;
-	}
-	return pick(x, y);
-}
-
 bool Renderer3D::nodeScreenPoint(int node, Common::Point &p) const {
 	if (node < 0 || (uint)node >= _verts.size() || !_visible[node] || _verts[node].empty())
 		return false;

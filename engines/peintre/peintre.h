@@ -153,13 +153,6 @@ public:
 	const Common::String &typed() const { return _typed; }
 	/** Waits until `ms` after the previous tick. */
 	void waitTick(uint32 ms);
-	/**
-	 * Dev harness: dev_commands=ms:command[;ms:command...] from the start of run():
-	 * click x y, tap x y (down for one poll), move x y, look dx dy (relative motion), key <name>,
-	 * hold <name> ms, type <text>, snap <file.png>, quit.
-	 * Input is pushed as events, so movies and every screen see it.
-	 */
-	void devStep();
 
 	// Players and saves (players.cpp, save.md).
 	Common::Array<PlayerRecord> &players() { return _players; }
@@ -203,7 +196,6 @@ private:
 	void runWorld(int scene, int prevScene, int zone = -1, int zoneCode = 0);
 	/** Out of the 3D: the cursor manager's cursor, the mouse capture and the hotspots go. */
 	void leave3D();
-	void loadAllScenes();
 
 	const ADGameDescription *_gameDescription;
 	Graphics::Surface _screen;
@@ -216,12 +208,6 @@ private:
 	Common::Array<Common::KeyCode> _keysDown, _keysFired;
 	Common::String _typed;
 	uint32 _lastTick = 0;
-	struct DevCommand {
-		uint32 time;
-		Common::String command;
-	};
-	Common::Array<DevCommand> _devCommands;
-	uint32 _devStart = 0;
 
 	bool _modern = false, _invertY = false, _captured = false;
 	float _lookScale = 2.0f;
