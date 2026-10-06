@@ -91,6 +91,9 @@ public:
 	/** The score display (actor 8), drawn over the scene. */
 	const Score &score() const { return _score; }
 
+	/** A command list's conditions hold now (E-0201). */
+	bool conditionsHold(const Common::Array<SceneCond> &conds);
+
 private:
 	struct Run {      // sprite animation state and the sprite / mesh latch (E-0208)
 		int frame = 0, dir = 0, counter = 0;
@@ -113,7 +116,7 @@ private:
 	void fadeStart(int level, int step);
 	void fadeUpdate();
 
-	bool conditionsHold(const Common::Array<SceneCond> &conds);
+
 	bool stateOf(int id, int slot, int32 &value) const;
 	void runList(const CommandList &list, int selfId);
 	void collectIds(Common::Array<int> &ids) const;

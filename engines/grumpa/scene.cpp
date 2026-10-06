@@ -961,6 +961,7 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 		Common::Array<Character> &chars = _characters.list();
 		for (uint i = 0; i < chars.size(); i++) {
 			Character &c = chars[i];
+			c.screen = Common::Rect();  // only what is drawn can be clicked
 			if (!_characters.present(c))
 				continue;
 			const Mesh *clip = _characters.mesh(c);
@@ -992,6 +993,8 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 			}
 			renderMesh(_screen, placed, cam, _sceneData.lights, depth,
 					   c.skin.getPixels() ? &c.skin : nullptr, c.alpha);
+			// Where it is drawn, for its click rules (+0x148; assumed the drawn bounds, E-1610).
+			c.screen = screenRect(placed, cam);
 		}
 	}
 	// Hotspot overlay (H): outline each unspent trigger's clickable polygon (E-0108), so the
