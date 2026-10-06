@@ -418,23 +418,35 @@ Character *EventVM::walker() const {
 	return p && _engine->_characters.present(*p) ? p : nullptr;
 }
 
-// The proximity gate (E-0207, E-0705) for the player's character: its sphere overlaps the
-// trigger's; with `once` it passes once per stay inside. ponytail: bit 1 only; actor 4's
-// character and actors 91..94 (bits 2, 4) are not modelled (Q-0811).
+// One source of the proximity gate (E-0705): a present character, of the id required (-1
+// any), whose sphere overlaps the trigger's; with `once` it passes once per stay inside.
+bool EventVM::gateSource(const SceneTrigger &tr, const Character *c, int32 who, bool &inside) {
+	if (!c || !_engine->_characters.present(*c) || (who != -1 && who != (int)c->id))
+		return false;
+	if (!Characters::touches(*c, tr.centre, tr.radius)) {
+		inside = false;
+		return false;
+	}
+	if (tr.once && inside)
+		return false;
+	inside = true;
+	return true;
+}
+
+// The proximity gate (E-0207, E-0705): bit 1 the player's character, bit 2 the companion's
+// (actor 4's), each with its own latch. ponytail: bit 4, the fighters' characters, is combat's.
 bool EventVM::triggerGate(SceneTrigger &tr) {
 	if (!tr.proximity)
 		return true;
-	Character *p = walker();
-	if (!tr.proximityOn || !p || !(tr.gate & 1) || (tr.who != -1 && tr.who != (int)p->id))
+	if (!tr.proximityOn)
 		return false;
-	if (!Characters::touches(*p, tr.centre, tr.radius)) {
-		tr.inside = false;
-		return false;
-	}
-	if (tr.once && tr.inside)
-		return false;
-	tr.inside = true;
-	return true;
+	Characters &chars = _engine->_characters;
+	bool pass = false;
+	if (tr.gate & 1)
+		pass = gateSource(tr, chars.player(), tr.who, tr.inside);
+	if (tr.gate & 2)
+		pass = gateSource(tr, chars.follower(), tr.whoCompanion, tr.insideCompanion) || pass;
+	return pass;
 }
 
 // The triggers' update (E-0207): a walk-in trigger fires on each update its gate passes; a
@@ -449,6 +461,9 @@ void EventVM::triggerUpdate() {
 		if (tr.click) {
 			if (!Characters::touches(*walker(), tr.centre, tr.radius))
 				tr.inside = false;
+			const Character *f = _engine->_characters.follower();
+			if (!f || !Characters::touches(*f, tr.centre, tr.radius))
+				tr.insideCompanion = false;
 		} else if (triggerGate(tr) && (!tr.hasConds || conditionsHold(tr.conds))) {
 			debug(1, "Grumpa: walk-in trigger %u fired", tr.id);
 			triggerFire(tr);

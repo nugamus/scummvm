@@ -93,12 +93,25 @@ void Characters::follow() {
 		_follow.state = 2;
 	}
 	if (dist < 70.0f && dist > 0.0f) {
-		f->pos.x += 4.0f * d.x / dist;
-		f->pos.z += 4.0f * d.z / dist;
+		nudge(*f, d.x / dist, d.z / dist);
 		request(*f, 0, turn + (float)M_PI * 0.5f);
 		_follow.state = 0;
 		_follow.freeze = 20;
 	}
+}
+
+// The follower's 4-unit step along (ux, uz), placed without the floor test (the setter at
+// 0x4250a0 forgets the face). Original bug: the step runs while a script has stopped the
+// companion, so scene 211's opening pushes it off the walk mesh, where every later move is
+// undone and it stays stuck (E-1533); a step off the mesh is not taken.
+void Characters::nudge(Character &c, float ux, float uz) {
+	const float x = c.pos.x + 4.0f * ux, z = c.pos.z + 4.0f * uz;
+	if (!_floor.empty() && _floor.faceAt(x, z, c.face) < 0)
+		return;
+	c.pos.x = x;
+	c.pos.z = z;
+	c.face = -1;
+	c.floorType = -1;
 }
 
 // A character with no role standing in the player's or the companion's sphere steps 4 away
@@ -115,6 +128,7 @@ void Characters::shuffleAside(Character &c) {
 			continue;
 		c.pos.x += 4.0f * d.x / len;
 		c.pos.z += 4.0f * d.z / len;
+		c.face = c.floorType = -1;
 		request(c, 0, (float)M_PI * 0.5f);
 		request(c, 2, 0.0f);
 	}

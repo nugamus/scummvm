@@ -127,6 +127,7 @@ private:
 	void triggerFire(SceneTrigger &tr);
 	Character *walker() const;
 	bool triggerGate(SceneTrigger &tr);
+	bool gateSource(const SceneTrigger &tr, const Character *c, int32 who, bool &inside);
 	void triggerUpdate();
 	void logicCommand(SceneLogic &a, int op, int arg1);
 	void logicUpdate(SceneLogic &a);

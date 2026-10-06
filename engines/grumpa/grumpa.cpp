@@ -170,9 +170,8 @@ Common::Error GrumpaEngine::run() {
 					state = kMenu;
 					_leftHeld = _leftWas = false;
 					dirty = true;
-				} else if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_BACKSPACE) {
-					if (!event.kbdRepeat)
-						_backspace = true;  // leave a mount, else let the companion go
+				} else if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START && event.customType == kActionDismount) {
+					_backspace = true;  // leave a mount, else let the companion go (no key repeats)
 				} else if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_h) {
 					_showHotspots = !_showHotspots;  // overlay the clickable trigger polygons
 					dirty = true;

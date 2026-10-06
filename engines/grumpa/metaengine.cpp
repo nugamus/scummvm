@@ -19,6 +19,9 @@
  *
  */
 
+#include "backends/keymapper/action.h"
+#include "backends/keymapper/keymap.h"
+#include "common/translation.h"
 #include "engines/advancedDetector.h"
 
 #include "grumpa/detection.h"
@@ -33,6 +36,16 @@ public:
 	Common::Error createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override {
 		*engine = new Grumpa::GrumpaEngine(syst, desc);
 		return Common::kNoError;
+	}
+
+	Common::KeymapArray initKeymaps(const char *target) const override {
+		using namespace Common;
+		Keymap *keymap = new Keymap(Keymap::kKeymapTypeGame, "grumpa", _("Game keymappings"));
+		Action *act = new Action("DISMOUNT", _("Leave the mount / let the companion go"));
+		act->setCustomEngineActionEvent(Grumpa::kActionDismount);
+		act->addDefaultInputMapping("BACKSPACE");
+		keymap->addAction(act);
+		return Keymap::arrayOf(keymap);
 	}
 };
 

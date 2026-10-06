@@ -526,7 +526,7 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			tr.proximity = c.u32() == 1;   // +0x17c
 			tr.hasConds = c.u32() == 1;    // +0x180
 			tr.gate = c.u32();             // +0x188
-			c.skip(4);                     // +0x14c
+			tr.whoCompanion = c.i32();     // +0x14c
 			tr.who = c.i32();              // +0x150
 			c.skip(76); sub56(c);
 			readConds(c, tr.conds);        // +0x190

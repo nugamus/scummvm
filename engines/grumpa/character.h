@@ -168,6 +168,7 @@ private:
 	void follow();
 	void enterFollower(int scene);
 	void shuffleAside(Character &c);
+	void nudge(Character &c, float ux, float uz);
 	void setRoles();
 	bool voiceLoaded(Character &c, int n);
 	void playVoice(Character &c, int n);
