@@ -137,7 +137,8 @@ bool Characters::load() {
 		c.radius = r.f32();          // [0x28c]
 		c.reach = r.f32();           // [0x5fc]
 		c.sphere = r.f32();          // [0x290]
-		r.skip(8);                   // [0x48c], [0x490]
+		c.mode = (int)r.u32();       // [0x48c]
+		r.skip(4);                   // [0x490]
 		uint32 n = r.count();        // rules: EC vector + CC vector each
 		for (uint32 i = 0; i < n && r.ok; i++) {
 			r.skip(20 * r.count());
@@ -440,7 +441,7 @@ bool Characters::touches(const Character &c, const Vec3 &centre, float r) {
 // an update) the frame steps and, at the clip's end, the queue's next slot starts (else the
 // clip loops); the yaw takes one step of its turn; the clip's root motion for the frame, turned
 // by the yaw, goes through the walk mesh and the platforms; eleven idle loops in a row play
-// the fidget. ponytail: no swimming mode [0x48c].
+// the fidget.
 void Characters::update() {
 	// The platform list (E-1600): the scene's 0x1a meshes with +0x1d0 set, when active; the
 	// files list them by ascending id, the original's order.
@@ -503,19 +504,31 @@ void Characters::update() {
 		}
 		if (_floor.empty())
 			continue;
-		const Vec3 old = c.pos;
+		Vec3 old = c.pos;
 		const int oldFace = c.face, oldPlatform = c.platform;
 		_floor.move(c.pos, delta, c.radius, c.face, c.platform, platforms);
-		// Off the mesh, a step up of more than 20 (80 on a platform, type 15) or a closed wall
-		// type: back (E-0803, E-1600).
+		// Off the mesh, a step up of more than 20 (80 on a platform, type 15), a closed wall
+		// type, or a boat off the water: back (E-0803, E-1600). Then the water (E-1660): a boat
+		// floats at -0.5 on type 13, so does a dragonfly; a jump over 12/13 keeps its height.
 		int type = c.platform >= 0 ? 15 : c.face >= 0 ? _floor.types[c.face] : -1;
-		if (c.face < 0 || c.pos.y > old.y + (c.platform >= 0 ? 80.0f : 20.0f) ||
-			(type > 18 && type <= 28 && _floor.closed[type])) {
+		bool back = c.face < 0 || c.pos.y > old.y + (c.platform >= 0 ? 80.0f : 20.0f);
+		if (!back && c.mode == kBoat) {
+			c.pos.y = -0.5f;
+			old.y = 0.0f;
+		}
+		back = back || (type > 18 && type <= 28 && _floor.closed[type]) || (c.mode == kBoat && type != 13);
+		if (back) {
 			c.pos = old;
 			c.face = oldFace;
 			c.platform = oldPlatform;
 		} else {
 			c.floorType = type;
+			if (type == 13 && c.mode == kDragonfly) {
+				c.pos.y = -0.5f;
+				old.y = 0.0f;
+			}
+			if ((type == 12 || type == 13) && ((c.clip >= 0xf && c.clip <= 0x11) || (type == 12 && c.mode == kDragonfly)))
+				c.pos.y = old.y;
 		}
 		pumpSpeech(c);  // the update's last call
 	}

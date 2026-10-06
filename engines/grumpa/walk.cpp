@@ -369,9 +369,10 @@ void GrumpaEngine::updatePlayer() {
 	if (_playerClock <= 1.0f)
 		return;
 	_playerClock -= 1.0f;
-	// Floor types 0..4 are view numbers: the first selects the view, a change fades to it.
+	// Floor types 0..4 are view numbers, except in a boat (E-1660): the first selects the view,
+	// a change fades to it.
 	const int type = p->floorType;
-	if (type >= 0 && type <= 4 && type < (int)_sceneData.views.size() && type != _playerView) {
+	if (p->mode != Characters::kBoat && type >= 0 && type <= 4 && type < (int)_sceneData.views.size() && type != _playerView) {
 		if (_playerView == -1)
 			setView(type);
 		else
