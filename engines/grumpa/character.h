@@ -182,6 +182,8 @@ public:
 	static bool passedOn(int op) {
 		return op <= 3 || (op >= 0xb && op <= 0xd) || (op >= 0x32 && op <= 0x36) || op == 0x48 || op == 500 || op == 501;
 	}
+	/** Load scene `scene`'s walk mesh with its kept walls (E-1540), before its entry. */
+	void loadFloor(int scene);
 	/** Backspace (E-1503): a rider form splits, else the companion is let go. */
 	void backspace();
 	/** The sphere test (E-0705): `c`'s sphere and (centre, r) overlap. */
@@ -245,6 +247,15 @@ private:
 	int _scene = -1;                 // +0x448, set by the scene-entry broadcast 0x17
 	Floor _floor;                    // the scene's walk mesh (walk.cpp)
 	bool _firstEntry = false;        // the next entry places the player at the first entry
+	// Each visited scene's walk-mesh walls (CFXFloor +0x3048), kept in its scene status (E-1540).
+	struct Walls {
+		int32 scene;
+		byte closed[29];
+	};
+	Common::Array<Walls> _walls;
+	Walls *walls(int scene);
+	int _floorScene = -1;            // the scene `_floor` was loaded for
+	void keepWalls();
 	int _player = kGrumpa;           // actor 3's +0x298
 	struct Follower {                // actor 4, CFXFollower (E-1220)
 		int id = kKraken;            // +0x290

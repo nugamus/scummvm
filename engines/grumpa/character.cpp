@@ -121,6 +121,8 @@ bool Characters::load() {
 	f.read(r.buf.begin(), r.buf.size());
 	freeSurfaces();
 	_chars.clear();
+	_walls.clear();
+	_floorScene = -1;
 	while (r.left() >= 8 && r.ok) {
 		if (r.u32() != 0x03) {
 			r.ok = false;
@@ -395,6 +397,20 @@ void Characters::wear(int id, int k, bool on) {
 	}
 }
 
+// The current scene's walls go into its status (E-1540).
+void Characters::keepWalls() {
+	if (_floorScene < 0 || _floor.empty())
+		return;
+	Walls *w = walls(_floorScene);
+	if (!w) {
+		_walls.push_back(Walls());
+		w = &_walls.back();
+		w->scene = _floorScene;
+	}
+	for (uint i = 0; i < ARRAYSIZE(_floor.closed); i++)
+		w->closed[i] = _floor.closed[i] ? 1 : 0;
+}
+
 bool Characters::syncState(Common::Serializer &s) {
 	for (uint i = 0; i < _chars.size(); i++) {
 		Character &c = _chars[i];
@@ -424,6 +440,21 @@ bool Characters::syncState(Common::Serializer &s) {
 	// Actors 3 and 4 keep the character they hold (E-1530, E-1220).
 	s.syncAsSint32LE(_player, 5);
 	s.syncAsSint32LE(_follow.id, 5);
+	// Version 7: each visited scene's walls (E-1540).
+	if (s.isSaving())
+		keepWalls();
+	uint32 nw = _walls.size();
+	s.syncAsUint32LE(nw, 7);
+	if (s.isLoading()) {
+		if (nw > 1000)
+			return false;  // a corrupt save
+		_walls.resize(s.getVersion() >= 7 ? nw : 0);
+		_floorScene = -1;  // the loaded scene's floor comes from its status
+	}
+	for (uint i = 0; i < _walls.size() && s.getVersion() >= 7; i++) {
+		s.syncAsSint32LE(_walls[i].scene);
+		s.syncBytes(_walls[i].closed, sizeof(_walls[i].closed));
+	}
 	if (s.isLoading()) {
 		if (s.getVersion() < 5) {
 			_player = kGrumpa;
@@ -564,9 +595,29 @@ void Characters::update() {
 // Actor 3 on scene entry (E-0804): the player is placed at the entry from the scene left, or
 // stays where it is (an entry for scene -2), or takes the first entry; not on the first entry
 // of a new game or a load. Then, on every entry, the request 5 back to the idle (E-0830).
+// The new scene's walk mesh, before anything is sent to it (E-1540): the old scene's walls go
+// into its status, the new floor starts closed and takes its status's walls, if any.
+void Characters::loadFloor(int scene) {
+	keepWalls();
+	_floorScene = scene;
+	_floor.load(scene);
+	if (const Walls *w = walls(scene)) {
+		for (uint i = 0; i < ARRAYSIZE(_floor.closed); i++)
+			_floor.closed[i] = w->closed[i] != 0;
+	}
+}
+
+Characters::Walls *Characters::walls(int scene) {
+	for (uint i = 0; i < _walls.size(); i++)
+		if (_walls[i].scene == scene)
+			return &_walls[i];
+	return nullptr;
+}
+
 void Characters::enter(int scene) {
 	const int prev = _scene;
-	_floor.load(scene);
+	if (_floorScene != scene)
+		loadFloor(scene);
 	Character *p = player();
 	if (!p)
 		return;
