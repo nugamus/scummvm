@@ -82,6 +82,7 @@ struct Character {
 	int face = -1;                   // +0x44c: the walk-mesh face under it
 	int floorType = -1;              // +0x450
 	int platform = -1;               // +0x454: the platform it stands on (E-1600)
+	int mode = 0;                    // [0x48c]: 0 walks, 1 a boat, 2 a dragonfly (E-1660)
 	// Drawing (scene.cpp): the texture in use, loaded on first draw.
 	Graphics::Surface skin;          // ARGB8888, like SceneMesh::texture
 	bool alpha = false;
@@ -187,6 +188,7 @@ public:
 
 	// Actor 3 (the player controller) and actor 4 (CFXFollower) start holding Grumpa and the
 	// Scharlakanskraken (global2.atx <22>, <23>; E-1530).
+	enum { kWalker = 0, kBoat = 1, kDragonfly = 2 };
 	enum { kPlayerActor = 3, kFollowerActor = 4, kGrumpa = 10, kKraken = 16, kScore = 8, kFloor = 600 };
 	/** State slot `slot` of character `id` for a condition (E-0201); false if `id` is no character. */
 	bool stateOf(int id, int slot, int32 &value);
