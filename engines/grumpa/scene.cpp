@@ -932,6 +932,56 @@ void GrumpaEngine::drawAttachments(Character &c, const Mesh &body, int fr, const
 	}
 }
 
+// Under a character (E-1660, E-1612): on water (type 13) below y -4, or a boat, the shared
+// ripple, scaled by depth and stepping one frame every 50 / fps draws of any character (fps 5
+// idle, 8 moving); on other floors the shadow, turned and placed as the body, without z
+// writes. Both unlit, blended by their textures' alpha. ponytail: drawn while hit too (the
+// original skips both while its +0x474, set by the hit clip 0x17, is set: Q-1400).
+void GrumpaEngine::drawUnder(const Character &c, const Camera &cam, Common::Array<uint16> &depth) {
+	if (!_underLoaded) {
+		_underLoaded = true;
+		loadMesh("waterripple", _rippleMesh);
+		loadActorTexture("Virvel.tga", _rippleSkin, _rippleAlpha);
+		loadMesh("Shadow", _shadowMesh);
+		loadActorTexture("Shadow.tga", _shadowSkin, _shadowAlpha);
+	}
+	Mesh placed;
+	if (c.floorType == 13) {
+		if ((c.pos.y >= -4.0f && c.mode != Characters::kBoat) || _rippleMesh.empty())
+			return;
+		if (++_rippleCount >= 50 / (c.clip == 0 ? 5 : 8)) {
+			_rippleCount = 0;
+			_rippleFrame = (_rippleFrame + 1) % MAX(_rippleMesh.frames, 1);
+		}
+		const float s = c.mode == Characters::kBoat ? 1.5f : MIN(fabsf(c.pos.y) * 0.03f + 0.2f, 1.0f);
+		placed.frames = 1;
+		for (uint i = 0; i < _rippleMesh.sections.size(); i++) {
+			const MeshSection &src = _rippleMesh.sections[i];
+			MeshSection sec;
+			sec.nv = src.nv;
+			sec.faces = src.faces;
+			sec.u = src.u;
+			sec.v = src.v;
+			for (uint v = 0; v < src.nv && _rippleFrame * src.nv + v < src.verts.size(); v++) {
+				const Vec3 &p = src.verts[_rippleFrame * src.nv + v];
+				sec.verts.push_back(Vec3(p.x * s + c.pos.x, p.y * s + 4.0f, p.z * s + c.pos.z));
+				sec.normals.push_back(src.normals[_rippleFrame * src.nv + v]);
+			}
+			placed.sections.push_back(sec);
+		}
+		renderMesh(_screen, placed, cam, _sceneData.lights, depth,
+				   _rippleSkin.getPixels() ? &_rippleSkin : nullptr, _rippleAlpha, 0, false);
+		return;
+	}
+	if (_shadowMesh.empty())
+		return;
+	const float rot[3] = { 0.0f, c.yaw, 0.0f }, pos[3] = { c.pos.x, c.pos.y, c.pos.z };
+	placeMesh(_shadowMesh, 0, rot, pos, placed);
+	// D3DRENDERSTATE_ZBIAS 16; its depth scale is the device's, 16 steps here.
+	renderMesh(_screen, placed, cam, _sceneData.lights, depth,
+			   _shadowSkin.getPixels() ? &_shadowSkin : nullptr, _shadowAlpha, 0, false, false, 16);
+}
+
 // Redraw the current scene in the original's render order (E-0305): the view's background
 // and depth, then every visible actor by layer: layer-1 sprites, the layer-3 mesh actors
 // (lit, textured, depth-tested against the z-buffer), layer-4 sprites.
@@ -973,6 +1023,7 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 				continue;
 			const int fr = CLIP(c.frame, 0, clip->frames - 1);
 			drawAttachments(c, *clip, fr, cam, depth);
+			drawUnder(c, cam, depth);
 			// The current frame of the clip (its clock: Characters::update, E-0603), placed.
 			Mesh placed;
 			placed.frames = 1;

@@ -67,6 +67,7 @@ bool GrumpaEngine::syncGame(Common::Serializer &s) {
 		// characters were kept puts the player at the scene's first entry.
 		_characters.forgetScene(s.getVersion() < 4);
 		_playerScene = -1;
+		_rippleCount = _rippleFrame = 0;
 		_leftHeld = _leftWas = _backspace = false;
 		_restoring = true;
 	}
