@@ -272,6 +272,15 @@ void EventVM::deliverOne(int id, int op, int arg1, int arg2) {
 		_ambience.command(op, arg1);
 		return;
 	}
+	if (id == Characters::kPlayerActor || id == Characters::kFollowerActor) {
+		// Actors 3 and 4 pass most commands on to the character they hold (E-0811, E-1222).
+		const int held = _engine->_characters.held(id);
+		if (!Characters::passedOn(op))
+			_engine->_characters.command(id, op, arg1, arg2);
+		else if (held >= 0)
+			deliverOne(held, op, arg1, arg2);
+		return;
+	}
 	if ((op == kOpLifeAdd || op == kOpLifeSub) && _engine->_characters.find(id)) {
 		_score.command(op, arg1, id, _engine->_characters);  // a character's life (E-0704)
 		return;

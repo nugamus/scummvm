@@ -45,7 +45,7 @@ GrumpaEngine::GrumpaEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	setDebugger(new Console(this));
 	_voices = new Voices(_mixer, &_characters);
 	_inventory.attach(&_characters, _events);
-	_characters.attach(this);
+	_characters.attach(this, _events);
 }
 
 GrumpaEngine::~GrumpaEngine() {
@@ -170,6 +170,9 @@ Common::Error GrumpaEngine::run() {
 					state = kMenu;
 					_leftHeld = _leftWas = false;
 					dirty = true;
+				} else if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_BACKSPACE) {
+					if (!event.kbdRepeat)
+						_backspace = true;  // leave a mount, else let the companion go
 				} else if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_h) {
 					_showHotspots = !_showHotspots;  // overlay the clickable trigger polygons
 					dirty = true;

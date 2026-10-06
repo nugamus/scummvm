@@ -160,6 +160,7 @@ private:
 	// scene it last saw, the floor type its view follows; the exits' latch, first-update flag
 	// and remembered scene (CFXToScene +0x15c, +0x160, +0x168).
 	bool _leftHeld = false, _leftWas = false;
+	bool _backspace = false;     // pressed since actor 3's last tick (E-1503)
 	float _playerClock = 0.0f;
 	int _playerScene = -1, _playerView = -1;
 	bool _exitLatch = true, _exitFirst = true;

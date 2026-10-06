@@ -243,7 +243,12 @@ void Score::command(int op, int arg1, int arg2, Characters &chars) {
 	case 12: _active = false; break;
 	case 50:
 	case 51:
-		if (arg2 == 0) {
+		if (arg2 == -10 || arg2 == -11) {
+			// To actors 3 / 4, whose character sends it back with its own id (E-1223).
+			const int held = chars.held(arg2 == -10 ? Characters::kPlayerActor : Characters::kFollowerActor);
+			if (held > 0)
+				command(op, arg1, held, chars);
+		} else if (arg2 == 0) {
 			if (op == 50)
 				add(kLife, arg1);
 			else
@@ -263,8 +268,6 @@ void Score::command(int op, int arg1, int arg2, Characters &chars) {
 					sub(kLife, arg1);
 			}
 		}
-		// arg2 -10 / -11 go on to actors 3 / 4, the player holders the engine does not have
-		// yet (Q-0403).
 		break;
 	case 76: add(kAir, arg1); break;
 	case 77: sub(kAir, arg1); break;

@@ -30,7 +30,8 @@ namespace Grumpa {
 // ScummVM saves holding what the original keeps in Save\Current\ (docs/spec/save.md):
 // the current scene, the items and the inventory, then the event VM's state.
 enum {
-	kSaveVersion = 4  // 2: the event VM block; 3: the score and the ambience; 4: the characters
+	kSaveVersion = 5  // 2: the event VM block; 3: the score and the ambience; 4: the characters;
+	                  // 5: the characters actors 3 and 4 hold
 };
 
 bool GrumpaEngine::hasFeature(EngineFeature f) const {
@@ -63,7 +64,7 @@ bool GrumpaEngine::syncGame(Common::Serializer &s) {
 		// characters were kept puts the player at the scene's first entry.
 		_characters.forgetScene(s.getVersion() < 4);
 		_playerScene = -1;
-		_leftHeld = _leftWas = false;
+		_leftHeld = _leftWas = _backspace = false;
 		_restoring = true;
 	}
 	return !s.err();
