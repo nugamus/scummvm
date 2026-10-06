@@ -25,6 +25,7 @@
 #include "common/array.h"
 #include "common/serializer.h"
 #include "common/str.h"
+#include "audio/mixer.h"
 
 #include "grumpa/mesh.h"
 #include "grumpa/walk.h"
@@ -83,6 +84,10 @@ struct Character {
 		if (state.size() > 4)
 			state[4] = r;
 	}
+	// Sound slots and the speech queue (E-1640): slot n is the .wav whose name starts with n.
+	Common::Array<Common::String> voiceFiles;  // +0x324: 100 slots, "" = none; on first use
+	Audio::SoundHandle voices[100];
+	Common::Array<int> speech;       // +0x3d0: the queued slots, the front one speaking
 };
 
 /** The character database, loaded once and kept for the whole game. */
@@ -122,7 +127,7 @@ public:
 	const Floor &floor() const { return _floor; }
 	/** A load: the next scene entry is a first one (no entry placement), or, with
 	 *  `firstEntry`, puts the player at the scene's first entry, at home there. */
-	void forgetScene(bool firstEntry) { _scene = -1; _firstEntry = firstEntry; }
+	void forgetScene(bool firstEntry);
 	/** Saves: each character's position, yaw, home, active and visible (version 4), the
 	 *  characters actors 3 and 4 hold (6). */
 	void syncState(Common::Serializer &s);
@@ -134,6 +139,8 @@ public:
 	enum { kPlayerActor = 3, kFollowerActor = 4, kGrumpa = 10, kKraken = 16, kScore = 8, kFloor = 600 };
 	/** State slot `slot` of character `id` for a condition (E-0201); false if `id` is no character. */
 	bool stateOf(int id, int slot, int32 &value);
+	/** A scene sound of speaker `id` plays: an absent speaker's queue is cut (E-1620). */
+	void flushSpeech(int id);
 
 private:
 	void apply(Character &c, int op, int arg1);
@@ -146,6 +153,10 @@ private:
 	void enterFollower(int scene);
 	void shuffleAside(Character &c);
 	void setRoles();
+	bool voiceLoaded(Character &c, int n);
+	void playVoice(Character &c, int n);
+	void flushSpeech(Character &c);
+	void pumpSpeech(Character &c);
 
 	Common::Array<Character> _chars;
 	int _scene = -1;                 // +0x448, set by the scene-entry broadcast 0x17

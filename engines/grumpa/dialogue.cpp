@@ -225,6 +225,8 @@ void Voices::play(uint idx) {
 	Audio::AudioStream *stream = s.loop ? (Audio::AudioStream *)Audio::makeLoopingAudioStream(wav, 0) : wav;
 	_mixer->playStream(type, &r.handle, stream, -1, vol, bal);
 	r.playing = true;
+	if (s.speaker > 0)
+		_chars->flushSpeech(s.speaker);
 	setTalking(s.speaker, true);
 	debug(1, "Grumpa: sound %u %s%s (speaker %d)", s.id, s.name.c_str(), s.loop ? " looping" : "", s.speaker);
 }
@@ -245,8 +247,7 @@ void Voices::stop(uint idx, bool runList, Common::Array<SceneCommand> &out) {
 }
 
 // "Talking" is the speaker's state slot 5, read only by conditions: the companion's hints wait
-// for it to be 0 (E-1620). ponytail: no speech queue (character op 0x48) yet, so play does not
-// flush an absent speaker's queue.
+// for it to be 0 (E-1620).
 void Voices::setTalking(int speaker, bool on) {
 	Character *c = speaker > 0 ? _chars->find(speaker) : nullptr;
 	if (c && c->state.size() > 5)
