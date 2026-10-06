@@ -175,6 +175,7 @@ struct SceneLogic {
 	int32 count = 0;              // counter count, timer elapsed ms, script pending
 	Common::Array<SceneCond> conds;  // script guard
 	CommandList cmds;
+	Common::String film;          // 0x07 cut scene: the .mpg under Movies/ (E-1806)
 };
 
 // A 3D animated-mesh actor (type 0x1a CFXStaticCharacter, E-0114): an .anb mesh (+ .tga
@@ -210,7 +211,7 @@ struct SceneData {
 	Common::Array<SceneTrigger> triggers;
 	Common::Array<SceneMesh> meshes;
 	Common::Array<SpriteHooks> spriteHooks;  // the event VM's view of the sprites and meshes
-	Common::Array<SceneLogic> logic;         // 0x21..0x27
+	Common::Array<SceneLogic> logic;         // 0x21..0x27, 0x07 films
 	Common::Array<SceneSound> sounds;        // 0x18/0x2a (dialogue.cpp)
 };
 

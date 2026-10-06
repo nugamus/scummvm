@@ -37,6 +37,8 @@ namespace Grumpa {
 
 enum {
 	kFirstSceneId = 600,   // ids 600..979 belong to the current scene (E-0202)
+	kGame = 1,             // opcode 60: the main menu, 61: the saved games (E-0901, E-1806)
+	kPlayerHolder = 3,     // actor 3 holds the player's character (E-0810)
 	kSceneManager = 185,   // fades, views and scene changes (E-0206)
 	kProxy = 186,          // forwards to its target (E-0206)
 	kFirstItem = 100,      // Items.abi: type 5, ids 100..179
@@ -50,7 +52,8 @@ enum {
 	kOpGotoScene = 31, kOpFadeOut = 32, kOpFadeIn = 33, kOpLifeAdd = 50, kOpLifeSub = 51,
 	kOpUnlatch = 52, kOpSetFlag2 = 56, kOpCountAdd = 57, kOpCountSub = 58,
 	kOpCountMax = 59, kOpCountReset = 62, kOpProxyTarget = 63, kOpTimerStart = 64,
-	kOpTimerLimit = 65, kOpTimerOn = 66, kOpTimerStop = 67, kOpReset = 86, kOpOn = 500,
+	kOpMenu = 60, kOpSaves = 61, kOpTimerLimit = 65, kOpTimerOn = 66, kOpTimerStop = 67,
+	kOpReset = 86, kOpFilm = 96, kOpOn = 500,
 	kOpOff = 501
 };
 
@@ -236,6 +239,11 @@ void EventVM::deliver(int id, int op, int arg1, int arg2) {
 void EventVM::deliverOne(int id, int op, int arg1, int arg2) {
 	debug(2, "Grumpa: VM -> %d op %d (%d, %d)", id, op, arg1, arg2);
 	debugC(1, kDebugCoverage, "cov opcode %d", op);
+	if (id == kGame) {           // the main menu or the saved games, taken by the main loop
+		if (op == kOpMenu || op == kOpSaves)
+			_request = op;
+		return;
+	}
 	if (id == kSceneManager) {   // the fade (E-0700); a view or scene waits for its end
 		switch (op) {
 		case kOpGotoView:
@@ -491,6 +499,10 @@ void EventVM::logicCommand(SceneLogic &a, int op, int arg1) {
 	if (a.state.empty())
 		a.state.push_back(0);
 	switch (a.type) {
+	case 0x07:  // cut scene: 0 play, 23 play if autoplay; 1 stop (the film is over by then)
+		if (op == kOpPlay || (op == kOpEnter && a.f0 == 1))
+			playFilm(a);
+		break;
 	case 0x21:  // script
 		if (op == kOpPlay)
 			runList(a.cmds, a.id);
@@ -543,6 +555,22 @@ void EventVM::logicCommand(SceneLogic &a, int op, int arg1) {
 	default:
 		break;
 	}
+}
+
+// A cut scene (E-1806): broadcast 96 (voice lines stop), full brightness at once, the film with
+// the game stopped (Space skips), then its list, actor 3's stop and a full redraw.
+void EventVM::playFilm(SceneLogic &a) {
+	deliver(-1, kOpFilm, 0, 0);
+	runImmediate();
+	_fade.level = 255;  // what this does to a pending view or scene is Q-1803
+	_fade.running = false;
+	_engine->playMovie(a.film, true);
+	for (uint i = 0; i < a.cmds.size(); i++)  // pushed now, delivered on the next update
+		if (conditionsHold(a.cmds[i].conds))
+			_afterFilm.push_back(a.cmds[i]);
+	deliver(kPlayerHolder, kOpStop, 0, 0);
+	// (87 to the view list, a full redraw: the main loop redraws every frame anyway)
+	_engine->_leftHeld = _engine->_leftWas = false;  // the held character stops
 }
 
 void EventVM::logicUpdate(SceneLogic &a) {
@@ -776,6 +804,8 @@ void EventVM::meshAdvance(SceneMesh &m, Run &r) {
 // ---- the loop, scenes (E-0202) -----------------------------------------------------------
 
 void EventVM::update() {
+	_immediate.push_back(_afterFilm);  // a film's list waits for the update after it (E-1806)
+	_afterFilm.clear();
 	runImmediate();
 	CommandList ended;
 	_engine->_voices->update(ended);   // sounds that stopped run their lists (dialogue.cpp)
@@ -884,7 +914,7 @@ void EventVM::keep() {
 	for (uint i = 0; i < _scene->logic.size(); i++) {
 		const SceneLogic &a = _scene->logic[i];
 		// a script keeps its latch, the others their state; a flag's latch is not kept (E-0203)
-		Status s = { a.active, a.visible, a.type == 0x21 && a.latch, a.count, a.state, 0, 0, false, false };
+		Status s = { a.active, a.visible, (a.type == 0x21 || a.type == 0x07) && a.latch, a.count, a.state, 0, 0, false, false };
 		kept[a.id] = s;
 	}
 }

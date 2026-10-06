@@ -118,8 +118,9 @@ public:
 	void screenPoint(const Vec3 &v, float &x, float &y) const;
 	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */
 	bool drawMenu(int selected);
-	/** Play an MPEG-1 film from a Movies_<lang> folder; Esc/click skips. */
-	bool playMovie(const Common::String &name);
+	/** Play Movies/<name>(.mpg) full screen. The boot intro skips on Escape or a click; a
+	 *  cut scene (E-1806) only on Space and ends on black. */
+	bool playMovie(const Common::String &name, bool cutScene = false);
 	/** Index of the menu item at screen point p (-1 if none); valid after drawMenu. */
 	int menuItemAt(const Common::Point &p) const;
 	/** A scrolling text screen (Credits, Help) over the parchment. */

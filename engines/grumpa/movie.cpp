@@ -21,7 +21,8 @@
 
 // MPEG-1 film playback (intro, death, outro): the films are standard MPEG-1 system streams
 // (E-0007), played with ScummVM's MPEGPSDecoder (needs the mpeg2 and mad components). A film
-// is scaled to the 800x600 page; Escape or a click skips it.
+// is scaled to the 800x600 page. The boot intro skips on Escape or a click; a cut scene
+// (type 0x07, E-1806) only on Space, with the game stopped, and leaves the screen black.
 
 #include "common/events.h"
 #include "common/file.h"
@@ -34,14 +35,17 @@
 
 namespace Grumpa {
 
-bool GrumpaEngine::playMovie(const Common::String &name) {
+bool GrumpaEngine::playMovie(const Common::String &film, bool cutScene) {
+	Common::String name = film;
+	if (name.hasSuffixIgnoreCase(".mpg"))
+		name = Common::String(name.c_str(), name.size() - 4);
 	Common::File *f = new Common::File();
 	bool opened = false;
 	// The CD holds the Swedish intro and the shared films in Movies/, the other languages'
 	// intros in the cabinet (E-1000).
 	const char *dirs[] = { "Movies_Swedish/", "Movies/", "Movies_Danish/", "Movies_Norwegian/",
 						   "Movies_Finnish/", "" };
-	for (uint i = 0; i < ARRAYSIZE(dirs); i++) {
+	for (uint i = cutScene ? 1 : 0; i < (cutScene ? 2 : ARRAYSIZE(dirs)); i++) {  // cut scenes: Movies/ only
 		if (f->open(Common::Path(Common::String(dirs[i]) + name + ".mpg"))) {
 			opened = true;
 			break;
@@ -58,16 +62,21 @@ bool GrumpaEngine::playMovie(const Common::String &name) {
 		return false;
 	}
 	dec.start();
-	while (!dec.endOfVideo() && !shouldQuit()) {
+	bool skipped = false;
+	int frames = 0;
+	while (!dec.endOfVideo() && !skipped && !shouldQuit()) {
 		Common::Event event;
 		while (g_system->getEventManager()->pollEvent(event)) {
-			if ((event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE)
-				|| event.type == Common::EVENT_LBUTTONUP)
-				return true;  // skipped
+			bool skip = cutScene
+				? event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_SPACE
+				: (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE)
+				  || event.type == Common::EVENT_LBUTTONUP;
+			skipped |= skip;
 		}
 		if (dec.needsUpdate()) {
 			const Graphics::Surface *frame = dec.decodeNextFrame();
 			if (frame) {
+				frames++;
 				Graphics::Surface *conv = frame->convertTo(_screen.format);
 				int x = (kScreenWidth - conv->w) / 2, y = (kScreenHeight - conv->h) / 2;
 				if (conv->w == kScreenWidth && conv->h == kScreenHeight)
@@ -90,6 +99,12 @@ bool GrumpaEngine::playMovie(const Common::String &name) {
 		g_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, kScreenWidth, kScreenHeight);
 		g_system->updateScreen();
 		g_system->delayMillis(10);
+	}
+	debug(1, "Grumpa: film %s: %d frames%s", name.c_str(), frames, skipped ? ", skipped" : "");
+	if (cutScene) {  // the back surface is filled black (E-1806)
+		_screen.clear();
+		g_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, kScreenWidth, kScreenHeight);
+		g_system->updateScreen();
 	}
 	return true;
 }

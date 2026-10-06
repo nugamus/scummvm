@@ -610,6 +610,25 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			}
 			c.o = o;
 			scene.sounds.push_back(snd);
+		} else if (t == 0x07) {
+			// Cut scene (CFXCutScene, E-1806): a film, autoplay +0x13c, its end list +0x248.
+			SceneLogic a;
+			a.id = id;
+			a.type = t;
+			readHead(c, a.active, a.visible, &a.state);
+			c.skip(4);                   // +0x114, unused
+			int32 n = c.i32();
+			if (n > 0) {
+				a.film = Common::String((const char *)(c.d + c.o), n);
+				while (!a.film.empty() && a.film.lastChar() == '\0')
+					a.film.deleteLastChar();
+				c.skip(n);
+			}
+			a.f0 = c.i32();              // +0x13c autoplay
+			c.skip(76);                  // 19 u32, read and discarded
+			readCmds(c, a.cmds);
+			if (c.ok)
+				scene.logic.push_back(a);
 		} else if (t >= 0x21 && t <= 0x27) {
 			// Logic actors (E-0204): script, counter, timer, flag (0x25..0x27 = 0x22..0x24).
 			SceneLogic a;
