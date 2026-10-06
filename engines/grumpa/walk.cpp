@@ -267,6 +267,20 @@ void Floor::move(Vec3 &pos, Vec3 delta, float radius, int &face, int &platform,
 	pos.y = 0.4f * pos.y + 0.6f * height(face, pos.x, pos.z);
 }
 
+// `v` on the screen, through the view's camera.
+void GrumpaEngine::screenPoint(const Vec3 &v, float &x, float &y) const {
+	const Camera &cam = _sceneData.views[_sceneData.view].cam;
+	const float in[4] = { v.x, v.y, v.z, 1.0f };
+	float e[4], o[4];
+	for (int j = 0; j < 4; j++)
+		e[j] = in[0] * cam.view[j] + in[1] * cam.view[4 + j] + in[2] * cam.view[8 + j] + in[3] * cam.view[12 + j];
+	for (int j = 0; j < 4; j++)
+		o[j] = e[0] * cam.proj[j] + e[1] * cam.proj[4 + j] + e[2] * cam.proj[8 + j] + e[3] * cam.proj[12 + j];
+	const float w = o[3] > 1e-6f ? o[3] : 1e-6f;
+	x = (o[0] / w + 1) * kScreenWidth / 2;
+	y = (1 - o[1] / w) * kScreenHeight / 2;
+}
+
 // Actor 3, the player controller (E-0811, E-0812), with the scene links' exits (E-0804).
 // Holding the left button walks the player's character, Shift runs; the character turns
 // towards the cursor, its screen angle taken from the view's yaw.
@@ -276,6 +290,7 @@ void GrumpaEngine::updatePlayer() {
 		_playerView = -1;
 		_exitLatch = _exitFirst = true;  // the constructor's, each scene (E-0818)
 		_exitScene = 0;
+		_hitTimer = 0;
 	}
 	Character *p = _characters.player();
 	if (!p || !_characters.present(*p) || _sceneData.views.empty()) {
@@ -288,15 +303,10 @@ void GrumpaEngine::updatePlayer() {
 	// angle of the cursor (pi +/- acos of its normalized y) less the yaw off the view's.
 	// ponytail: the screen point is the position projected (Q-0805: where the original's is
 	// written is not read).
-	const float in[4] = { p->pos.x, p->pos.y, p->pos.z, 1.0f };
-	float e[4], o[4];
-	for (int j = 0; j < 4; j++)
-		e[j] = in[0] * cam.view[j] + in[1] * cam.view[4 + j] + in[2] * cam.view[8 + j] + in[3] * cam.view[12 + j];
-	for (int j = 0; j < 4; j++)
-		o[j] = e[0] * cam.proj[j] + e[1] * cam.proj[4 + j] + e[2] * cam.proj[8 + j] + e[3] * cam.proj[12 + j];
-	const float w = o[3] > 1e-6f ? o[3] : 1e-6f;
 	const Common::Point m = g_system->getEventManager()->getMousePos();
-	const float dx = m.x - (o[0] / w + 1) * kScreenWidth / 2, dy = m.y - (1 - o[1] / w) * kScreenHeight / 2;
+	float sx, sy;
+	screenPoint(p->pos, sx, sy);
+	const float dx = m.x - sx, dy = m.y - sy;
 	const float viewYaw = atan2f(cam.view[2], cam.view[10]);  // the camera's forward, in x/z
 	const float turn = viewYaw + atan2f(dx, -dy) - p->yaw;
 	// The walk arrow (E-0817, E-1720): kind 9 + trunc(angle * 2.6 - 0.3925), the angle pi
@@ -307,9 +317,21 @@ void GrumpaEngine::updatePlayer() {
 		_arrowKind = CLIP(9 + (int)(((float)M_PI + (dx > 0 ? -a : a)) * 2.6f - 0.3925f), 9, 24);
 	}
 
-	// The buttons (DoCommand 0x12/0x14): a press over a hotspot, the panel or a held item does
-	// not walk (the cursor kind is not an arrow, 9..25); a release stops.
-	if (_leftHeld && !_leftWas) {
+	// The buttons (DoCommand 0x12..0x15, 0x4473c0): in the stance a left press attacks
+	// from the idle, the right button blocks (E-1400); else a press over a hotspot, the panel
+	// or a held item does not walk (the cursor kind is not an arrow, 9..25); a release stops.
+	if (_stance && (_leftHeld != _leftWas || _rightHeld != _rightWas)) {
+		debug(2, "Grumpa: stance buttons left %d right %d, clip %d", _leftHeld, _rightHeld, p->clip);
+		if (_leftHeld) {
+			if (p->clip == 0 || p->clip == 0x20)
+				_characters.request(*p, 0x12 + _characters.rollDie(2), turn);
+		} else {
+			if (p->clip == 2 || p->clip == 5)
+				_characters.request(*p, 2, turn);
+			if (_rightHeld)
+				_characters.request(*p, 0x15, turn);
+		}
+	} else if (_leftHeld && !_leftWas) {
 		if (overHotspot(m) || _inventory.shown() || _inventory.held() >= 0)
 			_leftHeld = false;
 		else
@@ -318,6 +340,7 @@ void GrumpaEngine::updatePlayer() {
 		_characters.request(*p, 2, turn);
 	}
 	_leftWas = _leftHeld;
+	_rightWas = _rightHeld;
 
 	// The exits (CFXToScene's update, E-0804, E-0818): touching an exit's sphere changes the
 	// scene with the fade unless latched; the latch, set on entry, clears once the player is
@@ -363,10 +386,26 @@ void GrumpaEngine::updatePlayer() {
 		_characters.backspace();
 		return;                       // the player may have changed: steer from the next tick
 	}
+	// The swing's hit timer (E-1400): set when an attack starts, cleared by a hit, the hit test
+	// once it runs out.
+	if (p->starts != _playerStarts) {
+		if (p->clip >= 0x12 && p->clip <= 0x14)
+			_hitTimer = (int)(_characters.clipFrames(*p, p->clip) * 0.6f);
+		else if (p->clip == 0x17)
+			_hitTimer = 0;
+		_playerStarts = p->starts;
+	}
+	if (_hitTimer > 0 && --_hitTimer == 0)
+		_characters.playerStrike(*p);
+	// Ctrl: the stance, for a character with attacks. Space: jump. ponytail: no stance cursor
+	// (kind 7) and the global that also stops the jump (0x4c04b4) is not read.
+	_stance = _ctrlHeld && _characters.clipFrames(*p, 0x12) > 0;
+	if (_spaceHeld && !_stance && type != 13)
+		_characters.request(*p, 3, turn);
 	if (_leftHeld && (g_system->getEventManager()->getModifierState() & Common::KBD_SHIFT))
 		_characters.request(*p, 1, turn);
-	if (dx * dx + dy * dy > 20.0f * 20.0f)
-		_characters.request(*p, -1, turn);  // turn only
+	if (dx * dx + dy * dy > 20.0f * 20.0f && (p->clip < 0xf || p->clip > 0x11))
+		_characters.request(*p, -1, turn);  // turn only, not while jumping
 }
 
 } // End of namespace Grumpa

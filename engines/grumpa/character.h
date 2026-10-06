@@ -23,6 +23,7 @@
 #define GRUMPA_CHARACTER_H
 
 #include "common/array.h"
+#include "common/random.h"
 #include "common/serializer.h"
 #include "common/str.h"
 #include "audio/mixer.h"
@@ -77,6 +78,7 @@ struct Character {
 	float turnStep = 0.0f;           // +0x4b8
 	float radius = 0.0f;             // [0x28c]: kept this far off the walk mesh's walls
 	float sphere = 0.0f;             // [0x290]: the proximity sphere's radius (E-0705)
+	float reach = 0.0f;              // [0x5fc]: the reaction sphere's radius (E-1460)
 	int face = -1;                   // +0x44c: the walk-mesh face under it
 	int floorType = -1;              // +0x450
 	int platform = -1;               // +0x454: the platform it stands on (E-1600)
@@ -98,12 +100,32 @@ struct Character {
 	Common::Array<Common::String> voiceFiles;  // +0x324: 100 slots, "" = none; on first use
 	Audio::SoundHandle voices[100];
 	Common::Array<int> speech;       // +0x3d0: the queued slots, the front one speaking
+	// Combat (docs/spec/combat.md).
+	int starts = 0;                  // +0x43c: clips started
+	int lastAttacker = -1;           // +0x488: who hit it last (a fighter's target)
+	int deathTimer = -1, hideTimer = -1;  // +0x47c, +0x480 (E-1403)
+	CommandList deathList;           // +0x630: posted when the death timer ends (E-1433)
+	struct Reaction {                // +0x608/+0x614 (E-1460)
+		int other = -1;
+		CommandList cmds;
+		bool fired = false;
+	};
+	Common::Array<Reaction> reactions;
+	int32 slot(int i) const { return i < (int)state.size() ? state[i] : 0; }
+};
+
+// Actors 91..95, CFXFighter (E-1430): each fights with one character against a target.
+struct Fighter {
+	int held = -1, target = -1;      // +0x2a0, +0x298
+	float clock = 0.0f;              // +0x29c
+	int hitTimer = 0, starts = 0;    // +0x2a8, +0x2b4
 };
 
 /** The character database, loaded once and kept for the whole game. */
 class Characters {
 public:
 	~Characters();
+	Characters() : _rnd("grumpa_combat") {}
 	/** Read Actors/Characters.abi (the boot load, E-0402). */
 	bool load();
 	Character *find(int id);
@@ -116,14 +138,28 @@ public:
 	Common::Array<Character> &list() { return _chars; }
 	/** The 20 ms update: present characters step their clips and move on the walk mesh. */
 	void update();
-	/** A movement request (E-0813): 0 walk, 1 run, 2 stop, 5 reset; any request (-1 only
-	 *  that) also aims the yaw `turn` radians round over the next 10 animation ticks. */
+	/** A request (E-0813): 0 walk, 1 run, 2 stop, 3 jump, 4 die, 5 reset, or a clip slot
+	 *  (0x12..0x15, 0x17, 0x1f..0x28); any request (-1 only that) also aims the yaw `turn`
+	 *  radians round over the next 10 animation ticks. */
 	void request(Character &c, int req, float turn);
 	/** Wear (or take off) attachment `k` of character `id` (0x421780, E-1700): one shield
 	 *  (0, 5) and one weapon (1..4) at a time, with their bonuses. */
 	void wear(int id, int k, bool on);
 	/** The mesh of the clip `c` plays (loaded on first use); nullptr if it has none. */
 	const Mesh *mesh(Character &c);
+	/** Whether `c` has an animation in clip slot `slot`, and its frame count. */
+	int clipFrames(Character &c, int slot);
+
+	// Combat (combat.cpp, docs/spec/combat.md).
+	enum { kFirstFighter = 91, kFighters = 5, kCompanion = 95 };
+	/** The player's swing lands: every enemy within reach in front takes a hit (E-1401). */
+	void playerStrike(const Character &p);
+	/** `victim` is hit by `attacker` with strength `attack` (E-1432). */
+	void hit(Character &victim, int attacker, int32 attack);
+	/** The character held by fighter `id` (91..95), or nullptr. */
+	Character *fighterCharacter(int id);
+	/** rand() % (max + 1), for the attacks' choice. */
+	int rollDie(int max) { return (int)_rnd.getRandomNumber(max); }
 	/** The player's character (actor 3's, E-0811), present or not; nullptr if none. */
 	Character *player() { return find(_player); }
 	/** The character actor 3 or 4 holds (-1: none, or no such actor). */
@@ -174,6 +210,19 @@ private:
 	void playVoice(Character &c, int n);
 	void flushSpeech(Character &c);
 	void pumpSpeech(Character &c);
+	void startClip(Character &c, int slot);
+	void combatTick(Character &c);
+	void react(Character &c);
+	void engage(int fighter, Character &c, int target, int role);
+	void releaseFighter(int fighter);
+	void endFights();
+	void fighterRule(int fighter);
+	void fightersCommand(int op, int arg1);
+	bool fighterForward(int id, int op, int arg1);
+
+	Fighter _fighters[kFighters];
+	int _fightCount = 0;             // the fighters engaged (a global, E-1430)
+	Common::RandomSource _rnd;
 
 	Common::Array<Character> _chars;
 	int _scene = -1;                 // +0x448, set by the scene-entry broadcast 0x17

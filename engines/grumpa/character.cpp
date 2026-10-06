@@ -78,6 +78,21 @@ struct Reader {
 		for (uint32 i = 0; i < n && ok; i++)
 			out.push_back(str());
 	}
+	void cmds(CommandList &out) {    // a CC vector kept: when, target, opcode, arg1, arg2, conditions
+		uint32 n = count();
+		for (uint32 i = 0; i < n && ok; i++) {
+			SceneCommand cmd;
+			cmd.when = (int32)u32(); cmd.targetId = (int32)u32(); cmd.opcode = (int32)u32();
+			cmd.arg1 = (int32)u32(); cmd.arg2 = (int32)u32();
+			for (uint32 k = count(); k > 0 && ok; k--) {
+				SceneCond e;
+				e.id = (int32)u32(); e.slot = (int32)u32(); e.value = (int32)u32();
+				e.mode = (int32)u32(); e.link = (int32)u32();
+				cmd.conds.push_back(e);
+			}
+			out.push_back(cmd);
+		}
+	}
 	void ccVec() {                   // CC = 5 u32 + u32 m + m * EC (5 u32)
 		uint32 n = count();
 		for (uint32 i = 0; i < n && ok; i++) {
@@ -120,7 +135,7 @@ bool Characters::load() {
 		c.yaw = r.f32();
 		r.skip(4);
 		c.radius = r.f32();          // [0x28c]
-		r.skip(4);                   // [0x5fc]
+		c.reach = r.f32();           // [0x5fc]
 		c.sphere = r.f32();          // [0x290]
 		r.skip(8);                   // [0x48c], [0x490]
 		uint32 n = r.count();        // rules: EC vector + CC vector each
@@ -135,11 +150,13 @@ bool Characters::load() {
 			r.str();
 			r.ccVec();
 		}
-		r.ccVec();
-		n = r.count();               // reactions: character id + CC vector
+		r.cmds(c.deathList);         // +0x630 (E-1433)
+		n = r.count();               // reactions: character id + CC vector (E-1460)
 		for (uint32 i = 0; i < n && r.ok; i++) {
-			r.skip(4);
-			r.ccVec();
+			Character::Reaction re;
+			re.other = (int32)r.u32();
+			r.cmds(re.cmds);
+			c.reactions.push_back(re);
 		}
 		const uint32 start = r.u32();  // [0x434]: the clip slot playing (E-0603)
 		r.names(c.anims);
@@ -169,6 +186,7 @@ bool Characters::load() {
 			_chars.push_back(c);
 	}
 	_scene = -1;                     // a new game: no scene entered yet
+	endFights();
 	_player = kGrumpa;
 	_follow = Follower();
 	setRoles();
@@ -232,6 +250,11 @@ Character::Clip *Characters::clip(Character &c, int slot) {
 	return k.mesh.empty() ? nullptr : &k;
 }
 
+int Characters::clipFrames(Character &c, int slot) {
+	Character::Clip *k = clip(c, slot);
+	return k ? k->mesh.frames : 0;
+}
+
 const Mesh *Characters::mesh(Character &c) {
 	Character::Clip *k = clip(c, c.clip);
 	return k ? &k->mesh : nullptr;
@@ -245,10 +268,12 @@ static float wrapAngle(float a) {
 	return a;
 }
 
-// The request table (E-0813). A "cut" ends the clip playing, so the queue takes over on the
-// next animation tick. ponytail: walk, run, stop and reset; jump, death, attacks and the turn
-// lock +0x4dc come with combat (Q-0806).
+// The request table (E-0813, combat.md). A "cut" ends the clip playing, so the queue takes
+// over on the next animation tick; a "now" starts a clip at once. ponytail: no turn lock
+// +0x4dc (Q-0805).
 void Characters::request(Character &c, int req, float turn) {
+	if (req != 5 && c.deathTimer > 0)
+		return;  // dying (E-1404)
 	c.yaw = wrapAngle(c.yaw);
 	c.turnSteps = 10;
 	c.turnStep = wrapAngle(turn) * 0.1f;
@@ -261,8 +286,12 @@ void Characters::request(Character &c, int req, float turn) {
 	static const int runIdle[] = { 1, 4, 5, 6, 2, -1 }, runWalk[] = { 4, 5, 6, 2, -1 };
 	static const int runRun[] = { 5, 6, 2, -1 }, runUp[] = { 0x21, 1, 4, 5, 6, 2, -1 };
 	static const int stopWalk[] = { 3, 0, -1 }, stopRun[] = { 7, 0, -1 }, stopIdle[] = { 0, -1 };
+	static const int jumpIdle[] = { 0xf, 0, -1 }, jumpWalk[] = { 0x10, 0, -1 };
+	static const int jumpUp[] = { 0x21, 0xf, 0, -1 }, die[] = { 8, 0xc, -1 };
+	int slotThen[] = { req, 0, -1 };
 	const int *push = nullptr;
 	bool cut = false;
+	int now = -1;
 	switch (req) {
 	case 0:
 		if (cur == 0 || cur == 0xb || cur == 0xd)
@@ -285,20 +314,54 @@ void Characters::request(Character &c, int req, float turn) {
 	case 2:
 		push = cur == 1 || cur == 2 ? stopWalk : cur == 5 ? stopRun : stopIdle;
 		break;
+	case 3:
+		if (!clip(c, 0x10))
+			return;
+		if (cur == 0 || cur == 0xb)
+			push = jumpIdle;
+		else if (cur == 1 || cur == 3)
+			push = jumpWalk;
+		else if (cur == 2 || cur == 5)
+			push = stopIdle, now = cur == 2 ? 0x10 : 0x11;
+		else if (cur == 0x20)
+			push = jumpUp;
+		break;
+	case 4:
+		push = die;
+		break;
 	case 5:
-		c.clip = 0;
-		c.frame = 0;
+		startClip(c, 0);
 		c.clock = 0.6f;
 		c.queue.clear();
 		return;
 	default:
-		return;
+		push = (req >= 0x12 && req <= 0x15) || req == 0x17 || (req >= 0x1f && req <= 0x28) ? slotThen : stopIdle;
+		break;
 	}
+	if (!push)
+		return;  // walk, run or jump from a clip with no row: the queue stays (E-1404)
 	c.queue.clear();
 	for (; push && *push >= 0; push++)
 		c.queue.push_back(*push);
 	if (cut)
 		c.frame = cutFrame;
+	if (now >= 0 && clip(c, now))
+		startClip(c, now);
+}
+
+// A clip starts (the update's clip-start block, E-1403): counted, and N2D2N's +5 defence
+// lasts while it plays.
+void Characters::startClip(Character &c, int slot) {
+	const int prev = c.clip;
+	c.clip = slot;
+	c.frame = 0;
+	c.starts++;
+	if (c.state.size() > 3) {
+		if (slot == 0x15)
+			c.state[3] += 5;
+		if (prev == 0x15)
+			c.state[3] -= 5;
+	}
 }
 
 void Characters::wear(int id, int k, bool on) {
@@ -363,6 +426,7 @@ bool Characters::syncState(Common::Serializer &s) {
 		_follow.freeze = _follow.divider = 0;
 		_follow.state = -1;
 		setRoles();
+		endFights();
 	}
 	return !s.err();
 }
@@ -407,7 +471,7 @@ void Characters::update() {
 				int next = c.queue.front();
 				c.queue.remove_at(0);
 				if (clip(c, next)) {
-					c.clip = next;
+					startClip(c, next);
 					k = clip(c, next);
 					break;
 				}
@@ -425,6 +489,7 @@ void Characters::update() {
 		} else {
 			c.frame++;
 		}
+		combatTick(c);
 		if (c.turnSteps > 0 && c.clip != 8 && c.clip != 0xc && (c.clip < 0x12 || c.clip > 0x14)) {
 			c.yaw += c.turnStep;
 			c.turnSteps--;
@@ -453,6 +518,16 @@ void Characters::update() {
 			c.floorType = type;
 		}
 		pumpSpeech(c);  // the update's last call
+	}
+	for (int f = 0; f < kFighters; f++) {  // actors 91..95 update after the characters
+		Fighter &fi = _fighters[f];
+		if (fi.held < 0 || !find(fi.held))
+			continue;
+		fi.clock += 0.46f;
+		if (fi.clock > 1.0f) {
+			fi.clock -= 1.0f;
+			fighterRule(f);
+		}
 	}
 }
 
@@ -509,6 +584,8 @@ bool Characters::command(int id, int op, int arg1, int arg2) {
 	if (id == -1) {
 		if (op == 0x17)
 			enter(arg1);
+		if (op == 0x17 || op == 0x19)
+			fightersCommand(op, arg1);
 		for (uint i = 0; i < _chars.size(); i++)
 			apply(_chars[i], op, arg1);
 		return true;
@@ -517,6 +594,8 @@ bool Characters::command(int id, int op, int arg1, int arg2) {
 		_floor.command(op, arg1);
 		return true;
 	}
+	if (fighterForward(id, op, arg1))
+		return true;
 	Character *c = find(id);
 	if (!c)
 		return false;
@@ -555,6 +634,12 @@ void Characters::apply(Character &c, int op, int arg1) {
 	case 0x17:
 		_scene = arg1;
 		flushSpeech(c);
+		if (c.home == arg1 && !_floor.empty()) {  // at home here: placed afresh (E-1460)
+			for (uint i = 0; i < c.reactions.size(); i++)
+				c.reactions[i].fired = false;
+			c.face = c.floorType = c.platform = -1;
+			request(c, 5, 0.0f);
+		}
 		break;
 	case 0x35:
 		c.texture = arg1;            // clamped as the original does (count < arg -> count - 1)
@@ -609,6 +694,11 @@ void Characters::apply(Character &c, int op, int arg1) {
 		for (int i = 0; i < 100; i++)
 			g_system->getMixer()->stopHandle(c.voices[i]);
 		break;
+	case 0x2e: case 0x2f: case 0x30: case 0x4b: case 0x54: {  // fight (E-1430)
+		const int f = op == 0x4b ? 3 : op == 0x54 ? 4 : op - 0x2e;
+		engage(f, c, op == 0x54 ? arg1 : _player, f + 3);
+		break;
+	}
 	case 0x47: {                     // E-1530
 		Character *o = find(arg1);
 		if (!o)
