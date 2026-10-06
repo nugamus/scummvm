@@ -135,6 +135,32 @@ bool Voices::playing(int id) const {
 	return false;
 }
 
+bool Voices::status(int id, bool &active, bool &visible, bool &latched, bool &playing) const {
+	for (uint i = 0; _sounds && i < _sounds->size(); i++) {
+		if ((int)(*_sounds)[i].id != id)
+			continue;
+		active = (*_sounds)[i].active;
+		visible = (*_sounds)[i].visible;
+		latched = _run[i].latched;
+		playing = _run[i].playing;
+		return true;
+	}
+	return false;
+}
+
+bool Voices::restore(int id, bool active, bool visible, bool latched, bool playing) {
+	for (uint i = 0; _sounds && i < _sounds->size(); i++) {
+		if ((int)(*_sounds)[i].id != id)
+			continue;
+		(*_sounds)[i].active = active;
+		(*_sounds)[i].visible = visible;
+		_run[i].latched = latched;
+		_run[i].pending = playing;
+		return true;
+	}
+	return false;
+}
+
 bool Voices::command(int id, int op, int arg1, Common::Array<SceneCommand> &out) {
 	if (!_sounds)
 		return false;
@@ -153,6 +179,8 @@ bool Voices::command(int id, int op, int arg1, Common::Array<SceneCommand> &out)
 void Voices::apply(uint idx, int op, Common::Array<SceneCommand> &out) {
 	SceneSound &s = (*_sounds)[idx];
 	Run &r = _run[idx];
+	if (op == 0x34)
+		r.latched = false;   // the only opcode a latched sound obeys (E-1760)
 	if (r.latched)
 		return;
 	switch (op) {

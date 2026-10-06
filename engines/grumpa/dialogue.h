@@ -60,6 +60,11 @@ public:
 	void update(Common::Array<SceneCommand> &out);
 	void stopAll();
 	bool playing(int id) const;
+	/** A scene's status of sound `id` (E-1760): false if it is no sound of the scene. */
+	bool status(int id, bool &active, bool &visible, bool &latched, bool &playing) const;
+	/** Restore a kept status; a sound kept playing plays again from its start on the next
+	 *  update (E-1760). False if `id` is no sound of the scene. */
+	bool restore(int id, bool active, bool visible, bool latched, bool playing);
 
 private:
 	struct Run {
