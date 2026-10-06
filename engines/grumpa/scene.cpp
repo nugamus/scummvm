@@ -824,6 +824,52 @@ void GrumpaEngine::setView(int k) {
 		_sceneDepth.clear();  // drawn with a cleared z-buffer
 }
 
+// The worn attachments (characters.md Attachments, E-1700): each a static mesh (frame 0) on
+// the body's face `face`: at the position of the face's first corner in the clip's frame `fr`,
+// pitched (and, for the shields 0 and 5, turned) by that corner's normal, then placed with
+// the character. Faces count across the body's sections.
+void GrumpaEngine::drawAttachments(Character &c, const Mesh &body, int fr, const Camera &cam,
+								   Common::Array<uint16> &depth) {
+	for (uint k = 0; k < c.attachments.size() && k < 32; k++) {
+		if (!(c.worn & (1u << k)))
+			continue;
+		Character::Attachment &a = c.attachments[k];
+		if (!a.loaded) {
+			a.loaded = true;
+			Common::String base = a.anb;
+			if (base.size() > 4 && base[base.size() - 4] == '.')
+				base = Common::String(base.c_str(), base.size() - 4);
+			loadMesh(base, a.mesh);
+			loadActorTexture(a.tga, a.skin, a.alpha);
+		}
+		int face = a.face;
+		const MeshSection *sec = nullptr;
+		for (uint s = 0; s < body.sections.size() && !sec; s++) {
+			if (face < (int)body.sections[s].faces.size())
+				sec = &body.sections[s];
+			else
+				face -= body.sections[s].faces.size();
+		}
+		if (!sec || a.mesh.empty() || face < 0)
+			continue;
+		const uint vi = fr * sec->nv + sec->faces[face].v[0];
+		if (vi >= sec->verts.size() || vi >= sec->normals.size())
+			continue;
+		const Vec3 &p = sec->verts[vi], &n = sec->normals[vi];
+		const float ny = CLIP(n.y, -1.0f, 1.0f);
+		const float pitch = n.z < 0 ? -acosf(ny) : acosf(ny);
+		// Original: the shields' yaw tests n.y again where n.x looks meant (E-1700); kept.
+		const float yaw = (k == 0 || k == 5) ? (n.y < 0 ? -acosf(ny) : acosf(ny)) : 0.0f;
+		const float rot[3] = { pitch, yaw, 0.0f }, at[3] = { p.x, p.y, p.z };
+		const float turn[3] = { 0.0f, c.yaw, 0.0f }, pos[3] = { c.pos.x, c.pos.y, c.pos.z };
+		Mesh local, placed;
+		placeMesh(a.mesh, 0, rot, at, local);
+		placeMesh(local, 0, turn, pos, placed);
+		renderMesh(_screen, placed, cam, _sceneData.lights, depth,
+				   a.skin.getPixels() ? &a.skin : nullptr, a.alpha);
+	}
+}
+
 // Redraw the current scene in the original's render order (E-0305): the view's background
 // and depth, then every visible actor by layer: layer-1 sprites, the layer-3 mesh actors
 // (lit, textured, depth-tested against the z-buffer), layer-4 sprites.
@@ -862,10 +908,11 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 			}
 			if (!clip)
 				continue;
+			const int fr = CLIP(c.frame, 0, clip->frames - 1);
+			drawAttachments(c, *clip, fr, cam, depth);
 			// The current frame of the clip (its clock: Characters::update, E-0603), placed.
 			Mesh placed;
 			placed.frames = 1;
-			const int fr = CLIP(c.frame, 0, clip->frames - 1);
 			float cs = cosf(c.yaw), sn = sinf(c.yaw);
 			for (uint s = 0; s < clip->sections.size(); s++) {
 				const MeshSection &src = clip->sections[s];

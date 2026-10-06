@@ -93,6 +93,9 @@ public:
 	bool handleSceneClick(const Common::Point &p);
 	/** Load the game's default cursor as the system cursor (E-0005). */
 	void setGameCursor();
+	/** Draw `c`'s worn attachments on frame `fr` of its clip mesh `body` (E-1700). */
+	void drawAttachments(Character &c, const Mesh &body, int fr, const Camera &cam,
+						 Common::Array<uint16> &depth);
 	/** Set the system cursor to the named cursor in UI/002_Cursor (cached). */
 	void setCursorImage(const Common::String &name);
 	/** Update the cursor for the point `p`: a hand over a clickable trigger, else the pointer. */

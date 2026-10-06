@@ -225,6 +225,10 @@ void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera
 				const Common::Array<SceneLight> &lights, Common::Array<uint16> &depth,
 				const Graphics::Surface *tex = nullptr, bool alpha = false, int frame = 0);
 
+/** Frame `frame` of `src` placed by Direct3D's yaw-pitch-roll `rot` (pitch, yaw, roll: roll
+ *  about Z, then pitch about X, then yaw about Y, row vectors) and moved to `pos` (items.cpp). */
+void placeMesh(const Mesh &src, int frame, const float rot[3], const float pos[3], Mesh &out);
+
 } // End of namespace Grumpa
 
 #endif // GRUMPA_MESH_H

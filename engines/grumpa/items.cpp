@@ -28,9 +28,7 @@ namespace Grumpa {
 // The items lying in the scene, drawn as 3D actors: engines/grumpa/docs/spec/inventory.md
 // (Items in the world, E-0900).
 
-// Frame `frame` of `src` placed by Direct3D's yaw-pitch-roll (roll about Z, then pitch about
-// X, then yaw about Y, row vectors) and moved to `pos`.
-static void placeMesh(const Mesh &src, int frame, const float rot[3], const float pos[3], Mesh &out) {
+void placeMesh(const Mesh &src, int frame, const float rot[3], const float pos[3], Mesh &out) {
 	const float cp = cosf(rot[0]), sp = sinf(rot[0]), cy = cosf(rot[1]), sy = sinf(rot[1]),
 				cr = cosf(rot[2]), sr = sinf(rot[2]);
 	auto turn = [&](const Vec3 &v) {

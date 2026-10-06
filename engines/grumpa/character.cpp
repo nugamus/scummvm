@@ -101,6 +101,7 @@ bool Characters::load() {
 	Reader r;
 	r.buf.resize(f.size());
 	f.read(r.buf.begin(), r.buf.size());
+	freeSurfaces();
 	_chars.clear();
 	while (r.left() >= 8 && r.ok) {
 		if (r.u32() != 0x03) {
@@ -150,7 +151,9 @@ bool Characters::load() {
 			Character::Attachment a;
 			a.anb = r.str();
 			a.tga = r.str();
-			r.skip(12);
+			a.face = (int)r.u32();       // [0x36c]
+			a.attack = (int32)r.u32();   // [0x37c]
+			a.defence = (int32)r.u32();  // [0x38c]
 			c.attachments.push_back(a);
 		}
 		c.kind = (int)r.u32();
@@ -171,6 +174,18 @@ bool Characters::load() {
 	setRoles();
 	debug(1, "Grumpa: %u characters loaded%s", (uint)_chars.size(), r.ok ? "" : " (read error)");
 	return r.ok;
+}
+
+Characters::~Characters() {
+	freeSurfaces();
+}
+
+void Characters::freeSurfaces() {
+	for (uint i = 0; i < _chars.size(); i++) {
+		_chars[i].skin.free();
+		for (uint j = 0; j < _chars[i].attachments.size(); j++)
+			_chars[i].attachments[j].skin.free();
+	}
 }
 
 Character *Characters::find(int id) {
@@ -284,6 +299,29 @@ void Characters::request(Character &c, int req, float turn) {
 		c.queue.push_back(*push);
 	if (cut)
 		c.frame = cutFrame;
+}
+
+void Characters::wear(int id, int k, bool on) {
+	Character *c = find(id);
+	if (!c)
+		return;
+	auto shield = [](int j) { return j == 0 || j == 5; };
+	auto bonus = [c, &shield](int j, int sign) {
+		const Character::Attachment &a = c->attachments[j];
+		const uint slot = shield(j) ? 3 : 2;
+		if (slot < c->state.size())
+			c->state[slot] += sign * (shield(j) ? a.defence : a.attack);
+	};
+	for (uint j = 0; j < c->attachments.size() && j < 32; j++) {
+		if (shield(j) == shield(k) && (c->worn & (1u << j))) {
+			c->worn &= ~(1u << j);
+			bonus(j, -1);
+		}
+	}
+	if (on && k >= 0 && k < (int)c->attachments.size() && k < 32) {
+		c->worn |= 1u << k;
+		bonus(k, 1);
+	}
 }
 
 void Characters::syncState(Common::Serializer &s) {

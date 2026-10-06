@@ -414,13 +414,14 @@ void Inventory::draw(Graphics::ManagedSurface &screen) {
 
 // An equipment slot (0 weapon, 1 shield; E-0901): take its item onto an empty cursor, or put
 // a fitting held item in (the old one back to the inventory); anything else goes back to the
-// inventory. ponytail: Grumpa wearing the attachment (0x421780) is not drawn yet.
+// inventory. Grumpa (actor 10) wears what the slots hold (0x421780, E-1700).
 void Inventory::equipClick(int k) {
 	if (_held == -1) {
 		if (_equip[k] == -1)
 			return;
 		Item *it = find(_equip[k]);
-		debug(1, "Grumpa: Grumpa takes off attachment %d", attachmentOf(k, _equip[k]));
+		if (_chars)
+			_chars->wear(10, attachmentOf(k, _equip[k]), false);
 		_equip[k] = -1;
 		if (it) {
 			hold(it->id);
@@ -438,7 +439,8 @@ void Inventory::equipClick(int k) {
 		add(_equip[k]);
 	_equip[k] = heldId;
 	setState(*find(heldId), kCarried);
-	debug(1, "Grumpa: Grumpa wears attachment %d", attachmentOf(k, heldId));
+	if (_chars)
+		_chars->wear(10, attachmentOf(k, heldId), true);
 }
 
 Common::Rect Inventory::clickRect(const Common::Rect &r) {
