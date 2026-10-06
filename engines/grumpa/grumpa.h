@@ -26,6 +26,8 @@
 #include "engines/advancedDetector.h"
 #include "engines/engine.h"
 #include "common/array.h"
+#include "common/hashmap.h"
+#include "common/hash-str.h"
 #include "common/str.h"
 #include "common/ustr.h"
 #include "common/rect.h"
@@ -105,11 +107,11 @@ public:
 	void drawAttachments(Character &c, const Mesh &body, int fr, const Camera &cam,
 						 Common::Array<uint16> &depth);
 	/** Set the system cursor to the named cursor in UI/002_Cursor (cached). */
-	void setCursorImage(const Common::String &name);
+	void setCursorImage(const Common::String &name, bool tick = false);
 	/** The language's cabinet folder name: "Swedish", "Danish", "Finnish" or "Norwegian". */
 	const char *languageFolder() const { return _langFolder; }
 	/** Update the cursor for the point `p` (E-1721): the held item, the hand, the pointer or the walk arrow. */
-	void updateHoverCursor(const Common::Point &p);
+	void updateHoverCursor(const Common::Point &p, bool tick = false);
 	/** Actor 2's State (slot 0, E-1800): -1 none yet, 0 an item held, 1 the pointer or a walk
 	 *  arrow, 2 the hand. */
 	int cursorState() const { return _cursorState; }
@@ -175,7 +177,11 @@ private:
 	friend class EventVM;
 	friend class Console;
 	bool _showHotspots = false;  // H toggles the trigger-polygon overlay
-	Common::String _cursorName;  // the current cursor image, to avoid redundant reloads
+	Common::String _cursorName;  // the current cursor image file, to avoid redundant reloads
+	struct CursorAnim {          // a cursor picture's animation (E-1773)
+		int frames = 0, frame = 0, dir = 1, tick = 0;
+	};
+	Common::HashMap<Common::String, CursorAnim> _cursorAnims;
 	int _arrowKind = 9;          // the walk arrow's cursor kind, 9..24 (E-1720)
 	int _cursorState = -1;       // actor 2's State: the cursor kind, the arrows as 1 (E-1800)
 	// Actor 3 (walk.cpp): the left button as it holds it, the last update's, its clock, the
