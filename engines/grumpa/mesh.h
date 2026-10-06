@@ -238,10 +238,13 @@ Camera lookAtCamera(const Vec3 &eye, const Vec3 &target, float fovY, float zn, f
  *  `lights` over the 0x1e1e1e ambient, `tex` (ARGB8888, may be null) modulated with
  *  bilinear filtering, alpha-blended when `alpha`. `depth` (16-bit, screen-sized) is the
  *  z-buffer: tested less-or-equal and written. Draws `frame` (nothing when it is not one of
- *  the mesh's frames); triangles are clipped to the near plane. */
+ *  the mesh's frames); triangles are clipped to the near plane. Not `lit`: lighting off,
+ *  every vertex white. `zWrite` off: tested, not written; `zBias` pulls the tested depth
+ *  that many 16-bit steps nearer. */
 void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera &cam,
 				const Common::Array<SceneLight> &lights, Common::Array<uint16> &depth,
-				const Graphics::Surface *tex = nullptr, bool alpha = false, int frame = 0);
+				const Graphics::Surface *tex = nullptr, bool alpha = false, int frame = 0,
+				bool lit = true, bool zWrite = true, int zBias = 0);
 
 /** Frame `frame` of `src` placed by Direct3D's yaw-pitch-roll `rot` (pitch, yaw, roll: roll
  *  about Z, then pitch about X, then yaw about Y, row vectors) and moved to `pos` (items.cpp). */

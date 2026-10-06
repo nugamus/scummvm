@@ -106,6 +106,8 @@ public:
 	/** Draw `c`'s worn attachments on frame `fr` of its clip mesh `body` (E-1700). */
 	void drawAttachments(Character &c, const Mesh &body, int fr, const Camera &cam,
 						 Common::Array<uint16> &depth);
+	/** Draw the water ripple or the shadow under `c` (E-1660, E-1612). */
+	void drawUnder(const Character &c, const Camera &cam, Common::Array<uint16> &depth);
 	/** Set the system cursor to the named cursor in UI/002_Cursor (cached). */
 	void setCursorImage(const Common::String &name, bool tick = false);
 	/** The language's cabinet folder name: "Swedish", "Danish", "Finnish" or "Norwegian". */
@@ -201,6 +203,11 @@ private:
 	Mesh _glowMesh;              // Meshes/effect_item.ANB, the glow of a placed item
 	Graphics::Surface _glowSkin;
 	bool _glowAlpha = false, _glowLoaded = false;
+	// The characters' water ripple and shadow, shared by all (E-1612).
+	Mesh _rippleMesh, _shadowMesh;
+	Graphics::Surface _rippleSkin, _shadowSkin;
+	bool _rippleAlpha = false, _shadowAlpha = false, _underLoaded = false;
+	int _rippleCount = 0, _rippleFrame = 0;
 };
 
 } // End of namespace Grumpa

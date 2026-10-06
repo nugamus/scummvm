@@ -130,7 +130,7 @@ static void sample(const Graphics::Surface &t, float u, float v, float &r, float
 // less-or-equal against and written to `depth`, pixels past the far plane (z/w > 1) dropped.
 static void drawTriangle(Graphics::ManagedSurface &screen, Common::Array<uint16> &depth,
 						 const ScreenVertex &a, const ScreenVertex &b, const ScreenVertex &c,
-						 const Graphics::Surface *tex, bool alpha) {
+						 const Graphics::Surface *tex, bool alpha, bool zWrite, int zBias) {
 	const int W = screen.w, H = screen.h;
 	float area = (b.sx - a.sx) * (c.sy - a.sy) - (b.sy - a.sy) * (c.sx - a.sx);
 	if (area <= 0)
@@ -151,7 +151,7 @@ static void drawTriangle(Graphics::ManagedSurface &screen, Common::Array<uint16>
 			float z = w0 * a.z + w1 * b.z + w2 * c.z;
 			if (z > 1.0f)
 				continue;
-			uint16 z16 = (uint16)CLIP(z * 65535.0f, 0.0f, 65535.0f);
+			uint16 z16 = (uint16)CLIP(z * 65535.0f - zBias, 0.0f, 65535.0f);
 			uint16 &zb = depth[y * W + x];
 			if (z16 > zb)
 				continue;
@@ -178,7 +178,8 @@ static void drawTriangle(Graphics::ManagedSurface &screen, Common::Array<uint16>
 				float k = ta / 255.0f;
 				r = r * k + dr * (1 - k); g = g * k + dg * (1 - k); bl = bl * k + db * (1 - k);
 			}
-			zb = z16;
+			if (zWrite)
+				zb = z16;
 			screen.setPixel(x, y, screen.format.RGBToColor((byte)r, (byte)g, (byte)bl));
 		}
 	}
@@ -198,7 +199,7 @@ static ClipVertex lerp(const ClipVertex &p, const ClipVertex &q, float t) {
 
 void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera &cam,
 				const Common::Array<SceneLight> &lights, Common::Array<uint16> &depth,
-				const Graphics::Surface *tex, bool alpha, int frame) {
+				const Graphics::Surface *tex, bool alpha, int frame, bool lit, bool zWrite, int zBias) {
 	const int W = screen.w, H = screen.h;
 	if (frame < 0 || frame >= MAX(mesh.frames, 1))
 		return;
@@ -222,7 +223,10 @@ void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera
 			float e[4];
 			xform(cam.view, v.x, v.y, v.z, 1, e);
 			xform(cam.proj, e[0], e[1], e[2], e[3], cv[i].c);
-			light(v, sec.normals[base + i], lights, cv[i].r, cv[i].g, cv[i].b);
+			if (lit)
+				light(v, sec.normals[base + i], lights, cv[i].r, cv[i].g, cv[i].b);
+			else
+				cv[i].r = cv[i].g = cv[i].b = 1.0f;
 		}
 		for (uint fi = 0; fi < sec.faces.size(); fi++) {
 			const Face &face = sec.faces[fi];
@@ -263,7 +267,7 @@ void renderMesh(Graphics::ManagedSurface &screen, const Mesh &mesh, const Camera
 			if (!ok)
 				continue;
 			for (int k = 1; k + 1 < n; k++)
-				drawTriangle(screen, depth, sv[0], sv[k], sv[k + 1], tex, alpha);
+				drawTriangle(screen, depth, sv[0], sv[k], sv[k + 1], tex, alpha, zWrite, zBias);
 		}
 	}
 }

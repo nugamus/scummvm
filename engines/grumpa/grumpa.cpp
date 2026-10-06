@@ -63,6 +63,9 @@ GrumpaEngine::~GrumpaEngine() {
 	delete _menuFont;
 	delete _voices;
 	delete _events;
+	_glowSkin.free();
+	_rippleSkin.free();
+	_shadowSkin.free();
 }
 
 // The CD keeps the game data in its InstallShield cabinet data1.hdr + data*.cab, by file
