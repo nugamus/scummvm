@@ -226,12 +226,11 @@ void GrumpaEngine::setCursorImage(const Common::String &name) {
 		return;
 	Image::JPEGDecoder jpeg;
 	Image::TGADecoder tga;
-	jpeg.setOutputPixelFormat(_screen.format);
-	Image::ImageDecoder &dec = arrow ? (Image::ImageDecoder &)tga : (Image::ImageDecoder &)jpeg;
-	if (!dec.loadStream(f) || !dec.getSurface())
+	Image::ImageDecoder *dec = arrow ? static_cast<Image::ImageDecoder *>(&tga) : &jpeg;
+	if (!dec->loadStream(f) || !dec->getSurface())
 		return;
-	Graphics::Surface *cur = dec.getSurface()->convertTo(_screen.format, dec.getPalette().data(),
-														 dec.getPalette().size());
+	Graphics::Surface *cur = dec->getSurface()->convertTo(_screen.format, dec->getPalette().data(),
+														  dec->getPalette().size());
 	CursorMan.replaceCursor(*cur, 0, 0, cur->getPixel(0, 0));
 	CursorMan.showMouse(true);
 	cur->free();
@@ -245,8 +244,10 @@ void GrumpaEngine::setGameCursor() {
 
 // The cursor's kind, refreshed every update and on mouse moves (E-1721): the held item's icon
 // (0); over a clickable trigger or an item in reach the hand (2); with the panel shown the
-// pointer (1); else the walk arrow actor 3 aims (9..24). ponytail: the hover's 8-update hold
-// and the filled slots' hand are not modelled; Ctrl's attack cursor (7) comes with combat.
+// pointer (1); else the walk arrow actor 3 aims (9..24). ponytail: the kind is not kept: the
+// original leaves the pointer after the panel closes until a drop or message 0x23 (E-1721),
+// here the arrow is back at once; no 8-update hover hold, no hand over filled slots; Ctrl's
+// attack cursor (7) comes with combat.
 void GrumpaEngine::updateHoverCursor(const Common::Point &p) {
 	const int held = _inventory.held();
 	if (held >= 0) {

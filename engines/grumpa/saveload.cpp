@@ -57,6 +57,8 @@ bool GrumpaEngine::syncGame(Common::Serializer &s) {
 	syncEvents(s);
 	if (s.getVersion() >= 4 && !_characters.syncState(s))
 		return false;
+	if (s.isLoading() && s.getVersion() < 6)
+		_inventory.wearEquipment();  // no worn flags yet: from the equipment slots (E-1700)
 	if (s.isLoading()) {
 		if (s.err() || scene < 0)
 			return false;
@@ -82,7 +84,7 @@ Common::Error GrumpaEngine::saveGameStream(Common::WriteStream *stream, bool isA
 }
 
 Common::Error GrumpaEngine::loadGameStream(Common::SeekableReadStream *stream) {
-	if (!_inventory.load())
+	if (!_inventory.load() || !_characters.load())  // the data's defaults first
 		return Common::kReadingFailed;
 	Common::Serializer s(stream, nullptr);
 	return syncGame(s) ? Common::kNoError : Common::kReadingFailed;

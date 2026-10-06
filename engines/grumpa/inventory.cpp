@@ -443,6 +443,12 @@ void Inventory::equipClick(int k) {
 		_chars->wear(10, attachmentOf(k, heldId), true);
 }
 
+void Inventory::wearEquipment() {
+	for (int k = 0; k < 2; k++)
+		if (_equip[k] != -1 && _chars)
+			_chars->wear(10, attachmentOf(k, _equip[k]), true);
+}
+
 Common::Rect Inventory::clickRect(const Common::Rect &r) {
 	Common::Rect w = r;
 	if (w.width() < 40) {
