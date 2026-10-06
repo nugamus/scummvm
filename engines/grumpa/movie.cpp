@@ -44,7 +44,7 @@ bool GrumpaEngine::playMovie(const Common::String &film, bool cutScene) {
 	// The CD holds the Swedish intro and the shared films in Movies/, the other languages'
 	// intros in the cabinet (E-1000, E-1770).
 	const Common::String dirs[] = { Common::String("Movies_") + _langFolder + "/", "Movies/", "" };
-	for (uint i = cutScene ? 1 : 0; i < (cutScene ? 2 : ARRAYSIZE(dirs)); i++) {  // cut scenes: Movies/ only
+	for (uint i = cutScene ? 1 : 0; i < (cutScene ? 2u : (uint)ARRAYSIZE(dirs)); i++) {  // cut scenes: Movies/ only
 		if (f->open(Common::Path(dirs[i] + name + ".mpg"))) {
 			opened = true;
 			break;
