@@ -41,6 +41,19 @@ const ADGameDescription gameDescriptions[] = {
 		GUIO1(GUIO_NOMIDI)
 	},
 
+	// The CD as shipped: the same data inside its InstallShield cabinet (E-1000). Items.abi
+	// is named alone in the cabinet; Characters.abi is not (Scenes has one too).
+	{
+		"grumpa",
+		nullptr,
+		AD_ENTRY2s("data1.hdr",              "0fb9940d7f99ecbc5ed5766b0a8d6115", 685933,
+				   "is:data1.hdr:Items.abi", "A:293eee0f0b4109eb1302c42b449efd9b", 10528),
+		Common::UNK_LANG,
+		Common::kPlatformWindows,
+		ADGF_CD | ADGF_UNSTABLE,
+		GUIO1(GUIO_NOMIDI)
+	},
+
 	AD_TABLE_END_MARKER
 };
 

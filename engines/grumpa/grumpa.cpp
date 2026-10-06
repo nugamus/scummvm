@@ -19,10 +19,14 @@
  *
  */
 
+#include "common/archive.h"
 #include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/events.h"
 #include "common/fs.h"
+#include "common/hashmap.h"
+#include "common/ptr.h"
+#include "common/compression/installshield_cab.h"
 #include "common/system.h"
 #include "graphics/font.h"
 #include "graphics/pixelformat.h"
@@ -49,6 +53,43 @@ GrumpaEngine::~GrumpaEngine() {
 	delete _voices;
 	delete _events;
 }
+
+// The CD keeps the game data in its InstallShield cabinet data1.hdr + data*.cab, by file
+// group; a language's groups are "Sounds Swedish" there and "Sounds_Swedish" unpacked.
+// This names the cabinet's members as unpacked, so every lookup reads both alike (E-1000).
+class CabinetArchive : public Common::Archive {
+public:
+	CabinetArchive(Common::Archive *cab) : _cab(cab) {
+		Common::ArchiveMemberList list;
+		cab->listMembers(list);
+		for (auto &m : list) {
+			Common::String s = m->getPathInArchive().toString('/');
+			for (uint i = 0; i < s.size() && s[i] != '/'; i++)
+				if (s[i] == ' ')
+					s.setChar('_', i);
+			_names[Common::Path(s)] = m->getPathInArchive();
+		}
+	}
+	bool hasFile(const Common::Path &path) const override { return _names.contains(path); }
+	int listMembers(Common::ArchiveMemberList &list) const override {
+		for (const auto &n : _names)
+			list.push_back(getMember(n._key));
+		return _names.size();
+	}
+	const Common::ArchiveMemberPtr getMember(const Common::Path &path) const override {
+		if (!hasFile(path))
+			return Common::ArchiveMemberPtr();
+		return Common::ArchiveMemberPtr(new Common::GenericArchiveMember(path, *this));
+	}
+	Common::SeekableReadStream *createReadStreamForMember(const Common::Path &path) const override {
+		Common::Path inCab;
+		return _names.tryGetVal(path, inCab) ? _cab->createReadStreamForMember(inCab) : nullptr;
+	}
+
+private:
+	Common::ScopedPtr<Common::Archive> _cab;
+	Common::HashMap<Common::Path, Common::Path, Common::Path::IgnoreCase_Hash, Common::Path::IgnoreCase_EqualTo> _names;
+};
 
 // Actor 185's fade scales every colour channel by level / 255 (a gamma ramp, E-0700).
 static void fadeScreen(Graphics::ManagedSurface &screen, int level) {
@@ -85,6 +126,8 @@ Common::Error GrumpaEngine::run() {
 
 	// The game data sits in subdirectories (Bitmaps, Actors, Scenes, ...) of the game dir.
 	SearchMan.addDirectory("gamedir", ConfMan.getPath("path"), 0, 2);
+	if (Common::Archive *cab = Common::makeInstallShieldArchive("data", true))  // run from the CD
+		SearchMan.add("cabinet", new CabinetArchive(cab));
 	_events->newGame();  // the global actors of Actors/global.atx (E-0205)
 	setGameCursor();
 

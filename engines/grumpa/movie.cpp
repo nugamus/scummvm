@@ -37,9 +37,11 @@ namespace Grumpa {
 bool GrumpaEngine::playMovie(const Common::String &name) {
 	Common::File *f = new Common::File();
 	bool opened = false;
-	const char *dirs[] = { "Movies_Swedish/", "Movies_Danish/", "Movies_Norwegian/",
-						   "Movies_Finnish/", "Movies/", "" };
-	for (int i = 0; dirs[i]; i++) {
+	// The CD holds the Swedish intro and the shared films in Movies/, the other languages'
+	// intros in the cabinet (E-1000).
+	const char *dirs[] = { "Movies_Swedish/", "Movies/", "Movies_Danish/", "Movies_Norwegian/",
+						   "Movies_Finnish/", "" };
+	for (uint i = 0; i < ARRAYSIZE(dirs); i++) {
 		if (f->open(Common::Path(Common::String(dirs[i]) + name + ".mpg"))) {
 			opened = true;
 			break;
