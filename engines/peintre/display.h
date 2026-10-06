@@ -72,8 +72,6 @@ public:
 	virtual void end3D() {}
 	/** Drops textures made from 3D textures (they are freed with the scene). */
 	virtual void forgetTextures() {}
-	/** The last frame shown, RGB565 or RGBA; false when the page is the frame. */
-	virtual bool snapshot(Graphics::Surface &out) { return false; }
 
 protected:
 	int _width = 640;

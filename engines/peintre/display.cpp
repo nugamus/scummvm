@@ -357,21 +357,6 @@ public:
 		_images.clear();
 	}
 
-	bool snapshot(Graphics::Surface &out) override {
-		Graphics::Surface frame;
-		frame.create(_viewport.width(), _viewport.height(), Graphics::PixelFormat::createFormatRGBA32());
-		glPixelStorei(GL_PACK_ALIGNMENT, 4);
-		glReadBuffer(GL_FRONT);
-		glReadPixels(_viewport.left, _windowHeight - _viewport.bottom, _viewport.width(), _viewport.height(),
-					 GL_RGBA, GL_UNSIGNED_BYTE, frame.getPixels());
-		glReadBuffer(GL_BACK);
-		out.create(frame.w, frame.h, frame.format);
-		for (int y = 0; y < frame.h; y++)
-			memcpy(out.getBasePtr(0, y), frame.getBasePtr(0, frame.h - 1 - y), frame.pitch);
-		frame.free();
-		return true;
-	}
-
 private:
 	struct ImageKey {
 		const void *pixels;

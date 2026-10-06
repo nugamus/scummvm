@@ -358,11 +358,6 @@ private:
 	Common::String _ambience;
 	Common::Array<Common::String> _sounds;
 	Common::HashMap<uint32, uint32> _locals;
-
-public:
-	// Scene API additions (scenes agent)
-	/** The node drawn at a screen point in the last frame, -1 (dev harness). */
-	int pickAt(int x, int y) { return _renderer.pickBuffered(x, y); }
 };
 
 /** The scene code for a scene number and bundle (scenes/). */
