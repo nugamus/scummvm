@@ -923,7 +923,7 @@ void GrumpaEngine::drawAttachments(Character &c, const Mesh &body, int fr, const
 		// Original: the shields' yaw tests n.y again where n.x looks meant (E-1700); kept.
 		const float yaw = (k == 0 || k == 5) ? (n.y < 0 ? -acosf(ny) : acosf(ny)) : 0.0f;
 		const float rot[3] = { pitch, yaw, 0.0f }, at[3] = { p.x, p.y, p.z };
-		const float turn[3] = { 0.0f, c.yaw, 0.0f }, pos[3] = { c.pos.x, c.pos.y, c.pos.z };
+		const float turn[3] = { 0.0f, c.yaw, 0.0f }, pos[3] = { c.pos.x, c.pos.y + c.lift, c.pos.z };
 		Mesh local, placed;
 		placeMesh(a.mesh, 0, rot, at, local);
 		placeMesh(local, 0, turn, pos, placed);
@@ -1037,7 +1037,7 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 				sec.v = src.v;
 				for (uint v = 0; v < src.nv; v++) {
 					const Vec3 p = src.verts[fr * src.nv + v], n = src.normals[fr * src.nv + v];
-					sec.verts.push_back(Vec3(p.x * cs + p.z * sn + c.pos.x, p.y + c.pos.y, -p.x * sn + p.z * cs + c.pos.z));
+					sec.verts.push_back(Vec3(p.x * cs + p.z * sn + c.pos.x, p.y + c.pos.y + c.lift, -p.x * sn + p.z * cs + c.pos.z));
 					sec.normals.push_back(Vec3(n.x * cs + n.z * sn, n.y, -n.x * sn + n.z * cs));
 				}
 				placed.sections.push_back(sec);

@@ -103,6 +103,7 @@ struct Character {
 	Common::Array<int> speech;       // +0x3d0: the queued slots, the front one speaking
 	// Combat (docs/spec/combat.md).
 	int starts = 0;                  // +0x43c: clips started
+	float lift = 0.0f;               // +0x178: drawn this far above pos, the clips' .amb y (E-1406)
 	int lastAttacker = -1;           // +0x488: who hit it last (a fighter's target)
 	int deathTimer = -1, hideTimer = -1;  // +0x47c, +0x480 (E-1403)
 	CommandList deathList;           // +0x630: posted when the death timer ends (E-1433)

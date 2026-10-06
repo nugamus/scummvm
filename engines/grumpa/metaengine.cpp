@@ -54,6 +54,11 @@ public:
 		act->setCustomEngineActionEvent(Grumpa::kActionJump);
 		act->addDefaultInputMapping("SPACE");
 		keymap->addAction(act);
+		act = new Action("RUN", _("Run"));
+		act->setCustomEngineActionEvent(Grumpa::kActionRun);
+		act->addDefaultInputMapping("LSHIFT");
+		act->addDefaultInputMapping("RSHIFT");
+		keymap->addAction(act);
 		return Keymap::arrayOf(keymap);
 	}
 };

@@ -184,12 +184,14 @@ Common::Error GrumpaEngine::run() {
 						_ctrlHeld = down;   // polled by actor 3 (E-1400)
 					else if (event.customType == kActionJump)
 						_spaceHeld = down;  // polled by actor 3 (E-0812)
+					else if (event.customType == kActionRun)
+						_shiftHeld = down;
 				}
 				if (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE) {
 					if (!_events->fadeIdle())  // not during a fade or on black (E-0700)
 						continue;
 					state = kMenu;
-					_leftHeld = _leftWas = _rightHeld = _ctrlHeld = _spaceHeld = false;  // key-ups go to the menu
+					_leftHeld = _leftWas = _rightHeld = _ctrlHeld = _spaceHeld = _shiftHeld = false;  // key-ups go to the menu
 					dirty = true;
 				} else if (event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START && event.customType == kActionDismount) {
 					_backspace = true;  // leave a mount, else let the companion go (no key repeats)
@@ -212,7 +214,7 @@ Common::Error GrumpaEngine::run() {
 					updateHoverCursor(event.mouse);
 					int request = _inventory.takeRequest();  // the panel's buttons (E-0901)
 					if (request == 60)
-						state = kMenu, _leftHeld = _leftWas = _rightHeld = _ctrlHeld = _spaceHeld = false;
+						state = kMenu, _leftHeld = _leftWas = _rightHeld = _ctrlHeld = _spaceHeld = _shiftHeld = false;
 					else if (request == 61)
 						saveGameDialog();
 					dirty = true;
