@@ -299,6 +299,13 @@ void GrumpaEngine::updatePlayer() {
 	const float dx = m.x - (o[0] / w + 1) * kScreenWidth / 2, dy = m.y - (1 - o[1] / w) * kScreenHeight / 2;
 	const float viewYaw = atan2f(cam.view[2], cam.view[10]);  // the camera's forward, in x/z
 	const float turn = viewYaw + atan2f(dx, -dy) - p->yaw;
+	// The walk arrow (E-0817, E-1720): kind 9 + trunc(angle * 2.6 - 0.3925), the angle pi
+	// +/- acos of the cursor's normalized screen y, negated when the cursor is to the right.
+	const float len = sqrtf(dx * dx + dy * dy);
+	if (len > 0.0f) {
+		const float a = acosf(CLIP(dy / len, -1.0f, 1.0f));
+		_arrowKind = CLIP(9 + (int)(((float)M_PI + (dx > 0 ? -a : a)) * 2.6f - 0.3925f), 9, 24);
+	}
 
 	// The buttons (DoCommand 0x12/0x14): a press over a hotspot, the panel or a held item does
 	// not walk (the cursor kind is not an arrow, 9..25); a release stops.

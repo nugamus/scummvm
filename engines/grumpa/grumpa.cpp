@@ -177,16 +177,14 @@ Common::Error GrumpaEngine::run() {
 					_showHotspots = !_showHotspots;  // overlay the clickable trigger polygons
 					dirty = true;
 				} else if (event.type == Common::EVENT_MOUSEMOVE) {
-					if (!_inventory.showHeldCursor())  // the held item is the cursor
-						updateHoverCursor(event.mouse);  // hand over a clickable exit/interaction
+					updateHoverCursor(event.mouse);
 				} else if (event.type == Common::EVENT_LBUTTONDOWN) {
 					_leftHeld = true;  // actor 3 walks while it is held (E-0811)
 				} else if (event.type == Common::EVENT_RBUTTONUP) {
 					_inventory.command(Inventory::kPanelId, 19, 0, 0);  // right click: the inventory
 					dirty = true;
 				} else if (event.type == Common::EVENT_LBUTTONUP && _inventory.click(event.mouse)) {
-					if (!_inventory.showHeldCursor())
-						_cursorName = "", updateHoverCursor(event.mouse);
+					updateHoverCursor(event.mouse);
 					int request = _inventory.takeRequest();  // the panel's buttons (E-0901)
 					if (request == 60)
 						state = kMenu, _leftHeld = _leftWas = false;
@@ -263,6 +261,8 @@ Common::Error GrumpaEngine::run() {
 				_events->update();
 				dirty = true;
 			}
+			if (dirty)  // the walk arrow follows the player; hovers come and go (E-1721)
+				updateHoverCursor(g_system->getEventManager()->getMousePos());
 			if (_nextScene >= 0) {  // 185 op 31 (E-0206)
 				enterScene(_nextScene);
 				_nextScene = -1;

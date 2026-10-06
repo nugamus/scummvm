@@ -98,7 +98,7 @@ public:
 						 Common::Array<uint16> &depth);
 	/** Set the system cursor to the named cursor in UI/002_Cursor (cached). */
 	void setCursorImage(const Common::String &name);
-	/** Update the cursor for the point `p`: a hand over a clickable trigger, else the pointer. */
+	/** Update the cursor for the point `p` (E-1721): the held item, the hand, the pointer or the walk arrow. */
 	void updateHoverCursor(const Common::Point &p);
 	/** Whether `p` is over a clickable trigger or an item (the hotspot cursor). */
 	bool overHotspot(const Common::Point &p);
@@ -159,6 +159,7 @@ private:
 	friend class Console;
 	bool _showHotspots = false;  // H toggles the trigger-polygon overlay
 	Common::String _cursorName;  // the current cursor image, to avoid redundant reloads
+	int _arrowKind = 9;          // the walk arrow's cursor kind, 9..24 (E-1720)
 	// Actor 3 (walk.cpp): the left button as it holds it, the last update's, its clock, the
 	// scene it last saw, the floor type its view follows; the exits' latch, first-update flag
 	// and remembered scene (CFXToScene +0x15c, +0x160, +0x168).
