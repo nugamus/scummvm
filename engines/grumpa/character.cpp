@@ -359,8 +359,8 @@ bool Characters::touches(const Character &c, const Vec3 &centre, float r) {
 // The character update (E-0603, E-0813, E-0814, E-0802/E-0803): on each animation tick (0.46
 // an update) the frame steps and, at the clip's end, the queue's next slot starts (else the
 // clip loops); the yaw takes one step of its turn; the clip's root motion for the frame, turned
-// by the yaw, goes through the walk mesh and the platforms. ponytail: no idle fidget (slots
-// 0x1f/0x20 after 11 idle loops), no swimming mode [0x48c].
+// by the yaw, goes through the walk mesh and the platforms; eleven idle loops in a row play
+// the fidget. ponytail: no swimming mode [0x48c].
 void Characters::update() {
 	// The platform list (E-1600): the scene's 0x1a meshes with +0x1d0 set, when active; the
 	// files list them by ascending id, the original's order.
@@ -394,6 +394,16 @@ void Characters::update() {
 					c.clip = next;
 					k = clip(c, next);
 					break;
+				}
+			}
+			// The idle fidget (E-1740): the 11th idle start in a row queues S01, then S02 looping.
+			c.idleStarts = c.clip == 0 ? c.idleStarts + 1 : 0;
+			if (c.idleStarts > 10) {
+				c.idleStarts = 0;
+				if (clip(c, 0x1f)) {
+					c.queue.clear();
+					c.queue.push_back(0x1f);
+					c.queue.push_back(0x20);
 				}
 			}
 		} else {
