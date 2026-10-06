@@ -120,7 +120,7 @@ public:
 
 class InstallShieldCabinet : public Archive {
 public:
-	InstallShieldCabinet();
+	InstallShieldCabinet(bool byFileGroup = false);
 
 	bool open(const Path *baseName, Common::Archive *archive, const FSNode *node);
 	void close();
@@ -163,6 +163,7 @@ private:
 	Path _baseName;
 	Common::Array<VolumeHeader> _volumeHeaders;
 	Common::Archive *_archive;
+	bool _byFileGroup;
 
 	static bool readVolumeHeader(SeekableReadStream *volumeStream, VolumeHeader &inVolumeHeader);
 
@@ -171,7 +172,7 @@ private:
 	SeekableReadStream *createReadStreamForMemberHelper(const Path &path) const;
 };
 
-InstallShieldCabinet::InstallShieldCabinet() : _version(0), _archive(nullptr) {
+InstallShieldCabinet::InstallShieldCabinet(bool byFileGroup) : _version(0), _archive(nullptr), _byFileGroup(byFileGroup) {
 }
 
 bool InstallShieldCabinet::open(const Path *baseName, Common::Archive *archive, const FSNode *node) {
@@ -258,8 +259,64 @@ bool InstallShieldCabinet::open(const Path *baseName, Common::Archive *archive, 
 	if (fileTableSize != fileTableSize2)
 		warning("file table sizes do not match");
 
-	// We're ignoring file groups and components since we
-	// should not need them. Moving on to the files...
+	// We're ignoring components since we should not need them. File groups
+	// and directories are only read to name the files by them.
+	struct FileGroup {
+		String name;
+		uint32 firstFile;
+		uint32 lastFile;
+	};
+	Array<FileGroup> fileGroups;
+	Array<String> directories;
+	if (_byFileGroup) {
+		int64 pos = file->pos();
+
+		// The directory names lead the file table
+		for (uint32 j = 0; j < directoryCount && !file->err(); j++) {
+			file->seek(headerHeader.cabDescriptorOffset + fileTableOffset + j * 4);
+			file->seek(headerHeader.cabDescriptorOffset + fileTableOffset + file->readUint32LE());
+			directories.push_back(file->readString());
+		}
+
+		// 71 hash chains of file group descriptors
+		for (uint32 j = 0; j < 71; j++) {
+			file->seek(headerHeader.cabDescriptorOffset + 0x3e + j * 4);
+			uint32 next = file->readUint32LE();
+			while (next && !file->err() && fileGroups.size() < 0x10000) {
+				file->seek(headerHeader.cabDescriptorOffset + next + 4);
+				uint32 descriptorOffset = file->readUint32LE();
+				next = file->readUint32LE();
+
+				FileGroup group;
+				file->seek(headerHeader.cabDescriptorOffset + descriptorOffset);
+				uint32 nameOffset = file->readUint32LE();
+				file->skip(_version >= 6 ? 0x12 : 0x48);
+				group.firstFile = file->readUint32LE();
+				group.lastFile = file->readUint32LE();
+				file->seek(headerHeader.cabDescriptorOffset + nameOffset);
+				group.name = file->readString();
+				fileGroups.push_back(group);
+			}
+		}
+
+		file->seek(pos);
+	}
+
+	// <file group>/<directory>/<name>, or the name alone
+	auto memberPath = [&](uint32 index, uint32 directoryIndex, const String &name) {
+		Path path;
+		for (const FileGroup &group : fileGroups) {
+			if (index >= group.firstFile && index <= group.lastFile) {
+				path = Path(group.name, '\\');
+				break;
+			}
+		}
+		if (directoryIndex < directories.size())
+			path = path.join(Path(directories[directoryIndex], '\\'));
+		return path.join(Path(name, '\\'));
+	};
+
+	// Moving on to the files...
 
 	if (_version >= 6) {
 		uint32 fileTableOffset2 = file->readUint32LE();
@@ -275,7 +332,7 @@ bool InstallShieldCabinet::open(const Path *baseName, Common::Archive *archive, 
 			entry.offset = file->readUint32LE();
 			file->skip(36);
 			uint32 nameOffset = file->readUint32LE();
-			/* uint32 directoryIndex = */ file->readUint16LE();
+			uint32 directoryIndex = file->readUint16LE();
 			file->skip(12);
 			/* entry.linkPrev = */ file->readUint32LE();
 			/* entry.linkNext = */ file->readUint32LE();
@@ -288,7 +345,7 @@ bool InstallShieldCabinet::open(const Path *baseName, Common::Archive *archive, 
 
 			// Then let's get the string
 			file->seek(headerHeader.cabDescriptorOffset + fileTableOffset + nameOffset);
-			Path fileName(file->readString(), '\\');
+			Path fileName = memberPath(j, directoryIndex, file->readString());
 
 			// Entries can appear in multiple volumes (sometimes erroneously).
 			// We keep the one with the lowest volume ID
@@ -306,7 +363,7 @@ bool InstallShieldCabinet::open(const Path *baseName, Common::Archive *archive, 
 		for (uint32 j = directoryCount; j < fileCount + directoryCount; j++) {
 			file->seek(headerHeader.cabDescriptorOffset + fileTableOffset + fileTableOffsets[j]);
 			uint32 nameOffset = file->readUint32LE();
-			/* uint32 directoryIndex = */ file->readUint32LE();
+			uint32 directoryIndex = file->readUint32LE();
 
 			// First read in data needed by us to get at the file data
 			FileEntry entry;
@@ -341,7 +398,7 @@ bool InstallShieldCabinet::open(const Path *baseName, Common::Archive *archive, 
 
 			// Then let's get the string
 			file->seek(headerHeader.cabDescriptorOffset + fileTableOffset + nameOffset);
-			Path fileName(file->readString(), '\\');
+			Path fileName = memberPath(j - directoryCount, directoryIndex, file->readString());
 
 			if (entry.volume == 0) {
 				warning("Couldn't find the volume for file %s", fileName.toString('\\').c_str());
@@ -550,12 +607,12 @@ Path InstallShieldCabinet::getVolumeName(uint volume) const {
 
 } // End of anonymous namespace
 
-Archive *makeInstallShieldArchive(const Path &baseName) {
-	return makeInstallShieldArchive(baseName, SearchMan);
+Archive *makeInstallShieldArchive(const Path &baseName, bool byFileGroup) {
+	return makeInstallShieldArchive(baseName, SearchMan, byFileGroup);
 }
 
-Archive *makeInstallShieldArchive(const Common::Path &baseName, Common::Archive &archive) {
-	InstallShieldCabinet *cab = new InstallShieldCabinet();
+Archive *makeInstallShieldArchive(const Common::Path &baseName, Common::Archive &archive, bool byFileGroup) {
+	InstallShieldCabinet *cab = new InstallShieldCabinet(byFileGroup);
 	if (!cab->open(&baseName, &archive, nullptr)) {
 		delete cab;
 		return nullptr;
@@ -564,8 +621,8 @@ Archive *makeInstallShieldArchive(const Common::Path &baseName, Common::Archive 
 	return cab;
 }
 
-Archive *makeInstallShieldArchive(const FSNode &baseName) {
-	InstallShieldCabinet *cab = new InstallShieldCabinet();
+Archive *makeInstallShieldArchive(const FSNode &baseName, bool byFileGroup) {
+	InstallShieldCabinet *cab = new InstallShieldCabinet(byFileGroup);
 	if (!cab->open(nullptr, nullptr, &baseName)) {
 		delete cab;
 		return nullptr;

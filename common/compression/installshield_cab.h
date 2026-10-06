@@ -48,8 +48,10 @@ class SeekableReadStream;
  * May return nullptr in case of a failure.
  * 
  * @param baseName The base filename, e.g. the "data" in "data1.cab"
+ * @param byFileGroup Name members <file group>/<directory>/<name>
+ *        ("Sounds/dir/a.wav") instead of by file name alone ("a.wav")
  */
-Archive *makeInstallShieldArchive(const Common::Path &baseName);
+Archive *makeInstallShieldArchive(const Common::Path &baseName, bool byFileGroup = false);
 
 /**
  * This factory method creates an Archive instance corresponding to the content
@@ -59,8 +61,10 @@ Archive *makeInstallShieldArchive(const Common::Path &baseName);
  * May return nullptr in case of a failure.
  *
  * @param baseName The base filename, e.g. the "data" in "data1.cab"
+ * @param byFileGroup Name members <file group>/<directory>/<name>
+ *        ("Sounds/dir/a.wav") instead of by file name alone ("a.wav")
  */
-Archive *makeInstallShieldArchive(const Common::Path &baseName, Common::Archive &archive);
+Archive *makeInstallShieldArchive(const Common::Path &baseName, Common::Archive &archive, bool byFileGroup = false);
 
 /**
  * This factory method creates an Archive instance corresponding to the content
@@ -69,8 +73,10 @@ Archive *makeInstallShieldArchive(const Common::Path &baseName, Common::Archive 
  * May return nullptr in case of a failure.
  * 
  * @param baseName The base filename, e.g. the "data" in "data1.cab"
+ * @param byFileGroup Name members <file group>/<directory>/<name>
+ *        ("Sounds/dir/a.wav") instead of by file name alone ("a.wav")
  */
-Archive *makeInstallShieldArchive(const Common::FSNode &baseName);
+Archive *makeInstallShieldArchive(const Common::FSNode &baseName, bool byFileGroup = false);
 
 /** @} */
 
