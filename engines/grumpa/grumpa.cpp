@@ -88,8 +88,7 @@ Common::Error GrumpaEngine::run() {
 	_screen.clear();
 	// Boot sequence: the intro film, then the main menu. Selecting "Nytt Spel" enters the
 	// first scene view; "Avsluta Spel" quits.
-	if (!(ConfMan.hasKey("dev_skip_intro") && ConfMan.getBool("dev_skip_intro")))
-		playMovie("grumpa_intro");
+	playMovie("grumpa_intro");
 	_events->startAmbience();  // the boot plays it under the main menu (E-0902)
 	Common::Array<Common::U32String> items;
 	loadMenuText(items);
