@@ -30,7 +30,8 @@ enum GrumpaDebugChannels {
 	kDebugLoad = 1,
 	kDebugGraphics,
 	kDebugScript,
-	kDebugSound
+	kDebugSound,
+	kDebugCoverage
 };
 
 extern const PlainGameDescriptor grumpaGames[];
