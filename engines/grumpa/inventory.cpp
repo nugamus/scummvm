@@ -234,7 +234,7 @@ void Inventory::hold(int id) {
 		setState(*it, kHeld);
 }
 
-// FUN_004387d0: counters, no duplicates, the first free slot, else "inventory full".
+// 0x4387d0: counters, no duplicates, the first free slot, else "inventory full".
 bool Inventory::add(int id) {
 	Item *it = find(id);
 	if (!it)
@@ -414,7 +414,7 @@ void Inventory::draw(Graphics::ManagedSurface &screen) {
 
 // An equipment slot (0 weapon, 1 shield; E-0901): take its item onto an empty cursor, or put
 // a fitting held item in (the old one back to the inventory); anything else goes back to the
-// inventory. ponytail: Grumpa wearing the attachment (FUN_00421780) is not drawn yet.
+// inventory. ponytail: Grumpa wearing the attachment (0x421780) is not drawn yet.
 void Inventory::equipClick(int k) {
 	if (_held == -1) {
 		if (_equip[k] == -1)
