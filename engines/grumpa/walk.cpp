@@ -342,27 +342,6 @@ void GrumpaEngine::updatePlayer() {
 	_leftWas = _leftHeld;
 	_rightWas = _rightHeld;
 
-	// The exits (CFXToScene's update, E-0804, E-0818): touching an exit's sphere changes the
-	// scene with the fade unless latched; the latch, set on entry, clears once the player is
-	// out of the exit last touched (or touches none on the first update).
-	const Floor &floor = _characters.floor();
-	bool hit = false;
-	for (uint i = 0; i < floor.exits.size(); i++) {
-		const Floor::Exit &ex = floor.exits[i];
-		if (Characters::touches(*p, ex.c, ex.r)) {
-			hit = true;
-			_exitScene = ex.scene;
-			if (!_exitLatch) {
-				debug(1, "Grumpa: exit to scene %d", ex.scene);
-				_events->deliver(185, 31, ex.scene, 0);
-			}
-			_exitLatch = true;
-		} else if (ex.scene == _exitScene) {
-			_exitLatch = false;
-		}
-	}
-	if (_exitFirst && !hit)
-		_exitFirst = _exitLatch = false;
 
 	// The rest on actor 3's own animation clock (0.46 an update).
 	_playerClock += 0.46f;
@@ -407,6 +386,35 @@ void GrumpaEngine::updatePlayer() {
 		_characters.request(*p, 1, turn);
 	if (dx * dx + dy * dy > 20.0f * 20.0f && (p->clip < 0xf || p->clip > 0x11))
 		_characters.request(*p, -1, turn);  // turn only, not while jumping
+}
+
+void GrumpaEngine::updateExits() {
+	Character *p = _characters.player();
+	if (_playerScene != _sceneNum || !p || !_characters.present(*p))
+		return;
+	// The exits (CFXToScene's update, E-0804, E-0818): touching an exit's sphere changes the
+	// scene with the fade unless latched; the latch, set on entry, clears once the player is
+	// out of the exit last touched (or touches none on the first update). Actor 601 updates
+	// after the characters (ascending ids, E-0202), so a player placed at an entry is settled
+	// on the floor before his first test.
+	const Floor &floor = _characters.floor();
+	bool hit = false;
+	for (uint i = 0; i < floor.exits.size(); i++) {
+		const Floor::Exit &ex = floor.exits[i];
+		if (Characters::touches(*p, ex.c, ex.r)) {
+			hit = true;
+			_exitScene = ex.scene;
+			if (!_exitLatch) {
+				debug(1, "Grumpa: exit to scene %d", ex.scene);
+				_events->deliver(185, 31, ex.scene, 0);
+			}
+			_exitLatch = true;
+		} else if (ex.scene == _exitScene) {
+			_exitLatch = false;
+		}
+	}
+	if (_exitFirst && !hit)
+		_exitFirst = _exitLatch = false;
 }
 
 } // End of namespace Grumpa

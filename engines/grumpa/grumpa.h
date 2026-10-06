@@ -122,6 +122,7 @@ public:
 	/** Actor 3, the player controller (walk.cpp, docs/spec/walking.md): steers the player's
 	 *  character by the mouse, the views by its floor type, the exits. One 20 ms update. */
 	void updatePlayer();
+	void updateExits();
 	/** A world point on the screen through the current view (walk.cpp); the view must exist. */
 	void screenPoint(const Vec3 &v, float &x, float &y) const;
 	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */
