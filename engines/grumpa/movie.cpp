@@ -42,11 +42,10 @@ bool GrumpaEngine::playMovie(const Common::String &film, bool cutScene) {
 	Common::File *f = new Common::File();
 	bool opened = false;
 	// The CD holds the Swedish intro and the shared films in Movies/, the other languages'
-	// intros in the cabinet (E-1000).
-	const char *dirs[] = { "Movies_Swedish/", "Movies/", "Movies_Danish/", "Movies_Norwegian/",
-						   "Movies_Finnish/", "" };
+	// intros in the cabinet (E-1000, E-1770).
+	const Common::String dirs[] = { Common::String("Movies_") + _langFolder + "/", "Movies/", "" };
 	for (uint i = cutScene ? 1 : 0; i < (cutScene ? 2 : ARRAYSIZE(dirs)); i++) {  // cut scenes: Movies/ only
-		if (f->open(Common::Path(Common::String(dirs[i]) + name + ".mpg"))) {
+		if (f->open(Common::Path(dirs[i] + name + ".mpg"))) {
 			opened = true;
 			break;
 		}

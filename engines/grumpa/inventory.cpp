@@ -556,12 +556,9 @@ bool Inventory::showHeldCursor() {
 }
 
 void Inventory::say(const Common::String &wav) {
-	Common::File *f = new Common::File();
-	if (!f->open(Common::Path("Sounds/" + wav)) && !f->open(Common::Path("Sounds_Swedish/" + wav))
-		&& !f->open(Common::Path("Sounds_/" + wav))) {
-		delete f;
+	Common::SeekableReadStream *f = openSound(wav);
+	if (!f)
 		return;
-	}
 	Audio::SeekableAudioStream *s = Audio::makeWAVStream(f, DisposeAfterUse::YES);
 	if (!s)
 		return;

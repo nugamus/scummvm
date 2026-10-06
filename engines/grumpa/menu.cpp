@@ -75,7 +75,11 @@ const Graphics::Font *GrumpaEngine::menuFont(int size) {
 
 bool GrumpaEngine::loadTextFile(const Common::String &rel, Common::Array<Common::U32String> &lines) {
 	Common::File f;
-	if (!f.open(Common::Path(rel)))
+	// The language's texts (Local_<language>/) before the menu folder's Swedish copies (E-1770).
+	const Common::String menuDir = "UI/001_Menu/";
+	if (rel.hasPrefix(menuDir))
+		f.open(Common::Path(Common::String("Local_") + _langFolder + "/" + rel.substr(menuDir.size())));
+	if (!f.isOpen() && !f.open(Common::Path(rel)))
 		return false;
 	while (!f.eos())
 		lines.push_back(fromCp1252(f.readLine()));
@@ -84,7 +88,7 @@ bool GrumpaEngine::loadTextFile(const Common::String &rel, Common::Array<Common:
 
 bool GrumpaEngine::loadMenuText(Common::Array<Common::U32String> &items) {
 	Common::Array<Common::U32String> lines;
-	if (!loadTextFile("UI/001_Menu/Text.txt", lines) && !loadTextFile("Local_Swedish/Text.txt", lines))
+	if (!loadTextFile("UI/001_Menu/Text.txt", lines))
 		return false;
 	for (int i = kMenuFirst; i < kMenuFirst + kMenuCount && i < (int)lines.size(); i++)
 		items.push_back(lines[i]);

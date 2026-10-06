@@ -104,6 +104,8 @@ public:
 						 Common::Array<uint16> &depth);
 	/** Set the system cursor to the named cursor in UI/002_Cursor (cached). */
 	void setCursorImage(const Common::String &name);
+	/** The language's cabinet folder name: "Swedish", "Danish", "Finnish" or "Norwegian". */
+	const char *languageFolder() const { return _langFolder; }
 	/** Update the cursor for the point `p` (E-1721): the held item, the hand, the pointer or the walk arrow. */
 	void updateHoverCursor(const Common::Point &p);
 	/** Actor 2's State (slot 0, E-1800): -1 none yet, 0 an item held, 1 the pointer or a walk
@@ -145,6 +147,7 @@ public:
 
 private:
 	const ADGameDescription *_gameDesc;
+	const char *_langFolder = "Swedish";  // the language's cabinet folders: Local_<x>, Sounds_<x>, Movies_<x>
 	Graphics::ManagedSurface _screen;
 	Graphics::Font *_menuFont = nullptr;
 	int _menuFontSize = 0;

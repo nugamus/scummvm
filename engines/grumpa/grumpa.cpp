@@ -41,6 +41,17 @@ namespace Grumpa {
 
 GrumpaEngine::GrumpaEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	: Engine(syst), _gameDesc(gameDesc) {
+	// The four languages of the Nordic disc; Swedish is the installer's default (E-0002). An
+	// installed folder is detected for any language: the game options' language decides.
+	Common::Language lang = gameDesc->language;
+	if (lang == Common::UNK_LANG && ConfMan.hasKey("language"))
+		lang = Common::parseLanguage(ConfMan.get("language"));
+	switch (lang) {
+	case Common::DA_DNK: _langFolder = "Danish"; break;
+	case Common::FI_FIN: _langFolder = "Finnish"; break;
+	case Common::NB_NOR: _langFolder = "Norwegian"; break;
+	default: _langFolder = "Swedish"; break;
+	}
 	_events = new EventVM(this);
 	setDebugger(new Console(this));
 	_voices = new Voices(_mixer, &_characters);
