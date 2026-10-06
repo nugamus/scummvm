@@ -37,8 +37,16 @@ class GrumpaEngine;
 
 // One CFXCharacter form from Actors/Characters.abi (docs/spec/characters.md).
 struct Character {
+	// A carried object (characters.md Attachments, E-1700): drawn on a face of the body while
+	// worn; its bonuses go to state slots 2 (attack) and 3 (defence).
 	struct Attachment {
 		Common::String anb, tga;
+		int face = 0;
+		int32 attack = 0, defence = 0;
+		bool loaded = false;     // mesh and skin, on first draw
+		Mesh mesh;
+		Graphics::Surface skin;
+		bool alpha = false;
 	};
 
 	uint32 id = 0;
@@ -49,6 +57,7 @@ struct Character {
 	Common::Array<Common::String> anims, sounds, textures;  // anims[0] is the idle
 	int texture = 0;
 	Common::Array<Attachment> attachments;
+	uint32 worn = 0;                 // +0x39c: bit k, attachment k is worn
 	int kind = 0;                    // 0 creature, 1 mount, 2 rider form of parts[0] + parts[1]
 	int parts[2] = { 0, 0 };
 	Common::Array<uint32> pairs;     // (other id, form id) pairs, flattened
@@ -93,6 +102,7 @@ struct Character {
 /** The character database, loaded once and kept for the whole game. */
 class Characters {
 public:
+	~Characters();
 	/** Read Actors/Characters.abi (the boot load, E-0402). */
 	bool load();
 	Character *find(int id);
@@ -108,6 +118,9 @@ public:
 	/** A movement request (E-0813): 0 walk, 1 run, 2 stop, 5 reset; any request (-1 only
 	 *  that) also aims the yaw `turn` radians round over the next 10 animation ticks. */
 	void request(Character &c, int req, float turn);
+	/** Wear (or take off) attachment `k` of character `id` (0x421780, E-1700): one shield
+	 *  (0, 5) and one weapon (1..4) at a time, with their bonuses. */
+	void wear(int id, int k, bool on);
 	/** The mesh of the clip `c` plays (loaded on first use); nullptr if it has none. */
 	const Mesh *mesh(Character &c);
 	/** The player's character (actor 3's, E-0811), present or not; nullptr if none. */
@@ -143,6 +156,7 @@ public:
 	void flushSpeech(int id);
 
 private:
+	void freeSurfaces();
 	void apply(Character &c, int op, int arg1);
 	Character::Clip *clip(Character &c, int slot);
 	void enter(int scene);
