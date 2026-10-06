@@ -29,6 +29,7 @@
 
 #include "engines/util.h"
 
+#include "grumpa/console.h"
 #include "grumpa/events.h"
 #include "grumpa/grumpa.h"
 
@@ -37,6 +38,7 @@ namespace Grumpa {
 GrumpaEngine::GrumpaEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	: Engine(syst), _gameDesc(gameDesc) {
 	_events = new EventVM(this);
+	setDebugger(new Console(this));
 	_voices = new Voices(_mixer, &_characters);
 	_inventory.attach(&_characters, _events);
 	_characters.attach(this);

@@ -134,6 +134,7 @@ private:
 	SceneTrigger *trigger(int id);
 	SceneMesh *mesh(int id);
 	bool loadGlobals();
+	friend class Console;
 
 	GrumpaEngine *_engine;
 	SceneData *_scene = nullptr;

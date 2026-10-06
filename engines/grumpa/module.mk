@@ -2,6 +2,7 @@ MODULE := engines/grumpa
 
 MODULE_OBJS = \
 	grumpa.o \
+	console.o \
 	metaengine.o \
 	scene.o \
 	render3d.o \
