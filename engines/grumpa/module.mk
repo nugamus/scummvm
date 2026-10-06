@@ -12,6 +12,7 @@ MODULE_OBJS = \
 	events.o \
 	movie.o \
 	character.o \
+	follower.o \
 	dialogue.o \
 	score.o \
 	items.o \
