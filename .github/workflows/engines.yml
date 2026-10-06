@@ -1,0 +1,66 @@
+# Fork-only CI (lives on master, which is never merged upstream): builds every engine of
+# this fork the way ScummVM's own Ubuntu jobs do, including the old g++ 4.8 that holds
+# engines to C++11, and fails on any warning from our engine folders.
+name: Engines
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gcc (latest)
+            platform: ubuntu-latest
+            cxx: ccache g++
+            sdlConfig: sdl2-config
+            aptPackages: 'liba52-dev libfaad-dev libflac-dev libfreetype6-dev libjpeg-turbo8-dev libmad0-dev libmpeg2-4-dev libogg-dev libpng-dev libsdl2-dev libtheora-dev libvorbis-dev libvpx-dev zlib1g-dev'
+          - name: clang (latest)
+            platform: ubuntu-latest
+            cxx: ccache clang++
+            sdlConfig: sdl2-config
+            aptPackages: 'clang liba52-dev libfaad-dev libflac-dev libfreetype6-dev libjpeg-turbo8-dev libmad0-dev libmpeg2-4-dev libogg-dev libpng-dev libsdl2-dev libtheora-dev libvorbis-dev libvpx-dev zlib1g-dev'
+          - name: g++ 4.8 (C++11)
+            platform: ubuntu-22.04
+            cxx: ccache g++-4.8
+            sdlConfig: sdl-config
+            xenial: true
+            aptPackages: 'g++-4.8 liba52-dev libfaad-dev libflac-dev libfreetype6-dev libjpeg-turbo8-dev libmad0-dev libmpeg2-4-dev libogg-dev libpng-dev libsdl1.2-dev libtheora-dev libvorbis-dev libvpx-dev zlib1g-dev'
+    env:
+      SDL_CONFIG: ${{ matrix.sdlConfig }}
+      ENGINES: x3d peintre ring gilbert grumpa
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add Ubuntu Xenial package sources
+        if: matrix.xenial
+        run: |
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-key 40976EAF437D05B5
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-key 3B4FE6ACC0B21F32
+          sudo apt-add-repository 'deb http://azure.archive.ubuntu.com/ubuntu/ xenial main'
+          sudo apt-add-repository 'deb http://azure.archive.ubuntu.com/ubuntu/ xenial universe'
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.aptPackages }}
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.name }}
+          max-size: 1G
+      - name: Configure
+        run: CXX='${{ matrix.cxx }}' ./configure --disable-all-engines --enable-engine=${ENGINES// /,}
+      - name: Build
+        run: make -j4 2>&1 | tee build.log
+      - name: No warnings in our engines
+        run: |
+          pattern="^engines/(${ENGINES// /|})/.*(warning|error):"
+          if grep -E "$pattern" build.log; then exit 1; fi
+          echo "no engine warnings"
