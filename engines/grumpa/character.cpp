@@ -324,7 +324,7 @@ void Characters::wear(int id, int k, bool on) {
 	}
 }
 
-void Characters::syncState(Common::Serializer &s) {
+bool Characters::syncState(Common::Serializer &s) {
 	for (uint i = 0; i < _chars.size(); i++) {
 		Character &c = _chars[i];
 		s.syncAsFloatLE(c.pos.x);
@@ -334,6 +334,21 @@ void Characters::syncState(Common::Serializer &s) {
 		s.syncAsSint32LE(c.home);
 		s.syncAsByte(c.active);
 		s.syncAsByte(c.visible);
+		// Version 6: the rest of the original's status (E-1300): the state slots, the
+		// texture, the worn attachments and the latch. The clip is not kept (E-1300): the
+		// entry after a load starts the idle (E-0830).
+		uint32 n = c.state.size();
+		s.syncAsUint32LE(n, 6);
+		if (s.isLoading() && s.getVersion() >= 6) {
+			if (n > 1000)
+				return false;  // a corrupt save
+			c.state.resize(n);
+		}
+		for (uint j = 0; j < n && s.getVersion() >= 6; j++)
+			s.syncAsSint32LE(c.state[j]);
+		s.syncAsSint32LE(c.texture, 6);
+		s.syncAsUint32LE(c.worn, 6);
+		s.syncAsByte(c.latched, 6);
 	}
 	// Actors 3 and 4 keep the character they hold (E-1530, E-1220).
 	s.syncAsSint32LE(_player, 5);
@@ -349,6 +364,7 @@ void Characters::syncState(Common::Serializer &s) {
 		_follow.state = -1;
 		setRoles();
 	}
+	return !s.err();
 }
 
 bool Characters::touches(const Character &c, const Vec3 &centre, float r) {
