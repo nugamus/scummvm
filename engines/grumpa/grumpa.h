@@ -100,6 +100,9 @@ public:
 	void setCursorImage(const Common::String &name);
 	/** Update the cursor for the point `p` (E-1721): the held item, the hand, the pointer or the walk arrow. */
 	void updateHoverCursor(const Common::Point &p);
+	/** Actor 2's State (slot 0, E-1800): -1 none yet, 0 an item held, 1 the pointer or a walk
+	 *  arrow, 2 the hand. */
+	int cursorState() const { return _cursorState; }
 	/** Whether `p` is over a clickable trigger or an item (the hotspot cursor). */
 	bool overHotspot(const Common::Point &p);
 	/** Actor 3, the player controller (walk.cpp, docs/spec/walking.md): steers the player's
@@ -160,6 +163,7 @@ private:
 	bool _showHotspots = false;  // H toggles the trigger-polygon overlay
 	Common::String _cursorName;  // the current cursor image, to avoid redundant reloads
 	int _arrowKind = 9;          // the walk arrow's cursor kind, 9..24 (E-1720)
+	int _cursorState = -1;       // actor 2's State: the cursor kind, the arrows as 1 (E-1800)
 	// Actor 3 (walk.cpp): the left button as it holds it, the last update's, its clock, the
 	// scene it last saw, the floor type its view follows; the exits' latch, first-update flag
 	// and remembered scene (CFXToScene +0x15c, +0x160, +0x168).

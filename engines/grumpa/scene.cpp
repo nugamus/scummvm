@@ -254,14 +254,17 @@ void GrumpaEngine::updateHoverCursor(const Common::Point &p) {
 		const Common::String name = Common::String::format("*%d", held);
 		if (name != _cursorName && _inventory.showHeldCursor())
 			_cursorName = name;
+		_cursorState = 0;
 		return;
 	}
-	if (overHotspot(p))
+	const bool hand = overHotspot(p);
+	if (hand)
 		setCursorImage("grabing");
 	else if (_inventory.shown())
 		setCursorImage("default");
 	else
 		setCursorImage(Common::String::format("arrow%d_", _arrowKind - 8));
+	_cursorState = hand ? 2 : 1;
 }
 
 bool GrumpaEngine::overHotspot(const Common::Point &p) {
