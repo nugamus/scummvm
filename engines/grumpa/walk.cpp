@@ -280,6 +280,7 @@ void GrumpaEngine::updatePlayer() {
 	Character *p = _characters.player();
 	if (!p || !_characters.present(*p) || _sceneData.views.empty()) {
 		_leftWas = _leftHeld;
+		_backspace = false;
 		return;
 	}
 	const Camera &cam = _sceneData.views[_sceneData.view].cam;
@@ -346,6 +347,14 @@ void GrumpaEngine::updatePlayer() {
 		else
 			_events->deliver(185, 30, type, 0);
 		_playerView = type;
+	}
+	// Original bug: Backspace is polled each tick with no latch, so one press both leaves a
+	// mount and, Grumpa being the player on the next tick, lets the companion go (E-1503).
+	// A press acts once.
+	if (_backspace) {
+		_backspace = false;
+		_characters.backspace();
+		return;                       // the player may have changed: steer from the next tick
 	}
 	if (_leftHeld && (g_system->getEventManager()->getModifierState() & Common::KBD_SHIFT))
 		_characters.request(*p, 1, turn);
