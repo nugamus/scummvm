@@ -1030,6 +1030,8 @@ void EventVM::enterScene(int num, SceneData *scene) {
 			}
 		}
 	}
+	// The new floor first, so the commands left for it reach it (E-1540).
+	_engine->_characters.loadFloor(num);
 	// The commands other scenes left for this one, in the order they were pushed.
 	CommandList waiting;
 	for (uint i = 0; i < _deferred.size(); ) {

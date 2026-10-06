@@ -123,8 +123,8 @@ bool Floor::load(int num) {
 	return true;
 }
 
-// ponytail: the flags start closed on every entry; whether a scene's status keeps them is not
-// read. Opcode 23 empties the platform list, which entry then refills with the scene's flagged
+// The flags start closed when a scene is first visited; after that its status keeps them
+// (Characters::loadFloor, E-1540). Opcode 23 empties the platform list, which entry then refills with the scene's flagged
 // meshes (E-1600): the engine takes those meshes directly (Characters::update).
 void Floor::command(int op, int arg) {
 	if (op != 5 && op != 6)
