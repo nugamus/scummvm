@@ -14,7 +14,8 @@ no game data lives here.
 
 ### Branches
 
-- `master` is ScummVM's master plus this README. Nothing else differs, so it never ends up in a pull request.
+- `master` is this README with every engine branch merged in, so it builds all the engines at once. Work
+  happens on the engine branches; `master` is never merged anywhere, so it never ends up in a pull request.
 - Each engine has its own branch, based on ScummVM's master and holding only that engine's commits, so any of
   them can be submitted to ScummVM on its own. Grumpa is still early work.
 - [`avi-fxtc`](../../tree/avi-fxtc) and [`engine-hotspot-markers`](../../tree/engine-hotspot-markers) are small fixes
