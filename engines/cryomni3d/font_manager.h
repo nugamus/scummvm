@@ -48,7 +48,7 @@ public:
 	uint getCurrentFont() { return _currentFontId; }
 	void setTransparentBackground(bool transparent) { _transparentBackground = transparent; }
 	void setSpaceWidth(uint additionalSpace);
-	void setForeColor(byte color) { _foreColor = color; }
+	void setForeColor(uint32 color) { _foreColor = color; }
 	void setLineHeight(int h) { _lineHeight = h; }
 	int lineHeight() { return _lineHeight; }
 	void setCharSpacing(uint w) { _charSpacing = w; }
@@ -98,7 +98,7 @@ private:
 	uint _spaceWidth;
 	uint _charSpacing;
 
-	byte _foreColor;
+	uint32 _foreColor;
 
 	Graphics::ManagedSurface *_currentSurface;
 

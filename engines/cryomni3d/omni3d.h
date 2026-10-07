@@ -29,11 +29,20 @@ namespace CryOmni3D {
 class Omni3DManager {
 public:
 	Omni3DManager() : _vfov(0), _alpha(0), _beta(0), _xSpeed(0), _ySpeed(0), _alphaMin(0), _alphaMax(0),
-		_betaMin(0), _betaMax(0), _helperValue(0), _dirty(true), _dirtyCoords(true),
-		_sourceSurface(nullptr) {}
+		_betaMin(0), _betaMax(0), _helperValue(0), _rowShiftX(10), _rowShiftY(15), _dirty(true),
+		_dirtyCoords(true), _sourceSurface(nullptr) {}
 	virtual ~Omni3DManager();
 
-	void init(double hfov);
+	/**
+	 * Builds the projection tables for a horizontal field of view (radians).
+	 * The vertical field of view is derived from it unless vfov is given.
+	 */
+	void init(double hfov, double vfov = 0.);
+	/**
+	 * Sets how much the per-pixel step changes from one row of a 16x16 block to the next
+	 * (a right shift of the block's row difference): Versailles uses 10 and 15.
+	 */
+	void setRowStepShifts(uint shiftX, uint shiftY) { _rowShiftX = shiftX; _rowShiftY = shiftY; _dirty = true; }
 
 	void setSourceSurface(const Graphics::Surface *surface) { _sourceSurface = surface; _dirty = true; }
 
@@ -57,6 +66,8 @@ public:
 
 private:
 	void updateImageCoords();
+	template<typename T>
+	void drawWarp();
 
 	double _vfov;
 
@@ -72,6 +83,7 @@ private:
 	double _anglesH[31];
 	double _oppositeV[21];
 	double _helperValue;
+	uint _rowShiftX, _rowShiftY;
 
 	bool _dirty;
 	bool _dirtyCoords;

@@ -155,7 +155,7 @@ void CryOmni3DEngine::playHNM(const Common::Path &filepath, Audio::Mixer::SoundT
 		g_system->updateScreen();
 		g_system->delayMillis(10);
 
-		if (pollEvents() && checkKeysPressed()) {
+		if (pollEvents() && shouldSkipVideo()) {
 			skipVideo = true;
 		}
 	}

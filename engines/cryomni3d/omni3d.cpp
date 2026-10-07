@@ -25,7 +25,7 @@
 
 namespace CryOmni3D {
 
-void Omni3DManager::init(double hfov) {
+void Omni3DManager::init(double hfov, double vfov) {
 	_alpha = 0.;
 	_beta = 0.;
 	_xSpeed = 0.;
@@ -33,7 +33,7 @@ void Omni3DManager::init(double hfov) {
 
 	double oppositeSide = tan(hfov / 2.) / (4. / 3.);
 	double vf = atan2(oppositeSide, 1.);
-	_vfov = (M_PI_2 - vf - (13. / 180.*M_PI)) * 10. / 9.;
+	_vfov = vfov > 0. ? vfov : (M_PI_2 - vf - (13. / 180.*M_PI)) * 10. / 9.;
 
 	double warpVfov = 155. / 180. * M_PI;
 	double hypV = 768. / 2. / sin(warpVfov / 2.);
@@ -61,7 +61,9 @@ void Omni3DManager::init(double hfov) {
 		}
 	}
 
-	_surface.create(640, 480, Graphics::PixelFormat::createFormatCLUT8());
+	if (!_surface.getPixels()) {
+		_surface.create(640, 480, Graphics::PixelFormat::createFormatCLUT8());
+	}
 	clearConstraints();
 }
 
@@ -176,6 +178,56 @@ void Omni3DManager::updateImageCoords() {
 	_dirty = true;
 }
 
+template<typename T>
+void Omni3DManager::drawWarp() {
+	uint off = 2;
+	T *dst = (T *)_surface.getBasePtr(0, 0);
+	const T *src = (const T *)_sourceSurface->getBasePtr(0, 0);
+
+	for (uint i = 0; i < 30; i++) {
+		for (uint j = 0; j < 40; j++) {
+			int x1  = (_imageCoords[off + 2] - _imageCoords[off + 0]) >> 4;
+			int y1  = (_imageCoords[off + 3] - _imageCoords[off + 1]) >> 4;
+			int x1_ = (_imageCoords[off + 82 + 2] - _imageCoords[off + 82 + 0]) >> 4;
+			int y1_ = (_imageCoords[off + 82 + 3] - _imageCoords[off + 82 + 1]) >> 4;
+
+			int dx1 = (x1_ - x1) >> _rowShiftX;
+			int dy1 = (y1_ - y1) >> _rowShiftY;
+
+			y1 >>= 5;
+
+			int dx2  = (_imageCoords[off + 82 + 0] - _imageCoords[off + 0]) >> 4;
+			int dy2  = (_imageCoords[off + 82 + 1] - _imageCoords[off + 1]) >> 9;
+			int x2 = (((_imageCoords[off + 0] >> 0) * 2) + dx2) >> 1;
+			int y2 = (((_imageCoords[off + 1] >> 5) * 2) + dy2) >> 1;
+
+			for (uint y = 0; y < 16; y++) {
+				uint px = (x2 * 2 + x1) * 16;
+				uint py = (y2 * 2 + y1) / 2;
+				uint deltaX = x1 * 32;
+				uint deltaY = y1;
+
+				for (uint x = 0; x < 16; x++) {
+					uint srcOff = (py & 0x1ff800) | (px >> 21);
+					dst[x] = src[srcOff];
+					px += deltaX;
+					py += deltaY;
+				}
+				dst += 640;
+
+				x1 += dx1;
+				y1 += dy1;
+				x2 += dx2;
+				y2 += dy2;
+			}
+			dst -= 16 * 640 - 16;
+			off += 2;
+		}
+		dst += 15 * 640;
+		off += 2;
+	}
+}
+
 const Graphics::Surface *Omni3DManager::getSurface() {
 	if (!_sourceSurface) {
 		return nullptr;
@@ -186,53 +238,15 @@ const Graphics::Surface *Omni3DManager::getSurface() {
 	}
 
 	if (_dirty) {
-		uint off = 2;
-		byte *dst = (byte *)_surface.getBasePtr(0, 0);
-		const byte *src = (const byte *)_sourceSurface->getBasePtr(0, 0);
-
-		for (uint i = 0; i < 30; i++) {
-			for (uint j = 0; j < 40; j++) {
-				int x1  = (_imageCoords[off + 2] - _imageCoords[off + 0]) >> 4;
-				int y1  = (_imageCoords[off + 3] - _imageCoords[off + 1]) >> 4;
-				int x1_ = (_imageCoords[off + 82 + 2] - _imageCoords[off + 82 + 0]) >> 4;
-				int y1_ = (_imageCoords[off + 82 + 3] - _imageCoords[off + 82 + 1]) >> 4;
-
-				int dx1 = (x1_ - x1) >> 10;
-				int dy1 = (y1_ - y1) >> 15;
-
-				y1 >>= 5;
-
-				int dx2  = (_imageCoords[off + 82 + 0] - _imageCoords[off + 0]) >> 4;
-				int dy2  = (_imageCoords[off + 82 + 1] - _imageCoords[off + 1]) >> 9;
-				int x2 = (((_imageCoords[off + 0] >> 0) * 2) + dx2) >> 1;
-				int y2 = (((_imageCoords[off + 1] >> 5) * 2) + dy2) >> 1;
-
-				for (uint y = 0; y < 16; y++) {
-					uint px = (x2 * 2 + x1) * 16;
-					uint py = (y2 * 2 + y1) / 2;
-					uint deltaX = x1 * 32;
-					uint deltaY = y1;
-
-					for (uint x = 0; x < 16; x++) {
-						uint srcOff = (py & 0x1ff800) | (px >> 21);
-						dst[x] = src[srcOff];
-						px += deltaX;
-						py += deltaY;
-					}
-					dst += 640;
-
-					x1 += dx1;
-					y1 += dy1;
-					x2 += dx2;
-					y2 += dy2;
-				}
-				dst -= 16 * 640 - 16;
-				off += 2;
-			}
-			dst += 15 * 640;
-			off += 2;
+		if (_surface.format != _sourceSurface->format) {
+			_surface.free();
+			_surface.create(640, 480, _sourceSurface->format);
 		}
-
+		if (_surface.format.bytesPerPixel == 2) {
+			drawWarp<uint16>();
+		} else {
+			drawWarp<byte>();
+		}
 		_dirty = false;
 	}
 
