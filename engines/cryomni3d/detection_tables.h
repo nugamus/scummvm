@@ -22,6 +22,7 @@
 namespace CryOmni3D {
 
 #define GUI_OPTIONS_VERSAILLES                   GUIO3(GUIO_NOMIDI, GUIO_NOSFX, GUIO_NOASPECT)
+#define GUI_OPTIONS_CHINA                        GUIO3(GUIO_NOMIDI, GUIO_NOASPECT, GUIO_NOLAUNCHLOAD)
 #define GUI_OPTIONS_HNM_PLAYER                   GUIO4(GUIO_NOMIDI, GUIO_NOSFX, GUIO_NOSPEECH, GUIO_NOASPECT)
 
 // To correctly detect root we need files from various places: CD1, CD2, HDD, on-CD install files
@@ -602,6 +603,161 @@ static const CryOmni3DGameDescription gameDescriptions[] = {
 		0,
 	},
 
+	// China: The Forbidden City
+	// English Windows CD
+	{
+		{
+			"china",
+			"",
+			AD_ENTRY2s("CHINE.EXE", "643c47678387b5174ec8e80fc8976753", 571904,
+			           "LOAD.HNM", "758aed06c6469f3cdeae802513868931", 90348),
+			Common::EN_ANY,
+			Common::kPlatformWindows,
+			ADGF_UNSTABLE,
+			GUI_OPTIONS_CHINA
+		},
+		GType_CHINA,
+		0,
+	},
+
+	// China: The Forbidden City
+	// French Windows CD
+	{
+		{
+			"china",
+			"",
+			AD_ENTRY2s("CHINE.EXE", "8850a946310e8e10208576af34b919f2", 573952,
+			           "LOAD.HNM", "15d0fd14cd4912f06fb1ae4bbe103c26", 44056),
+			Common::FR_FRA,
+			Common::kPlatformWindows,
+			ADGF_UNSTABLE,
+			GUI_OPTIONS_CHINA
+		},
+		GType_CHINA,
+		0,
+	},
+
+	// China: The Forbidden City
+	// The DVD holds one full game folder per language, DVD/<DE FR IT NL SP SW US>:
+	// that language folder is the one to add.
+	// English Windows DVD (US folder)
+	{
+		{
+			"china",
+			"DVD",
+			AD_ENTRY2s("CHINE.EXE", "562e3a4861ada82b3466f66a9a12e680", 578560,
+			           "LOAD.HNM", "758aed06c6469f3cdeae802513868931", 90348),
+			Common::EN_ANY,
+			Common::kPlatformWindows,
+			ADGF_UNSTABLE,
+			GUI_OPTIONS_CHINA
+		},
+		GType_CHINA,
+		0,
+	},
+
+	// China: The Forbidden City
+	// French Windows DVD (FR folder)
+	{
+		{
+			"china",
+			"DVD",
+			AD_ENTRY2s("CHINE.EXE", "d87721f88668be2551c6adece2bb087a", 578560,
+			           "LOAD.HNM", "15d0fd14cd4912f06fb1ae4bbe103c26", 44056),
+			Common::FR_FRA,
+			Common::kPlatformWindows,
+			ADGF_UNSTABLE,
+			GUI_OPTIONS_CHINA
+		},
+		GType_CHINA,
+		0,
+	},
+
+	// China: The Forbidden City
+	// German Windows DVD (DE folder)
+	{
+		{
+			"china",
+			"DVD",
+			AD_ENTRY2s("CHINE.EXE", "b40e83ef58dd01ee922039b0dd878b7d", 578560,
+			           "LOAD.HNM", "656154b872fb64b11d369c32908fdd9e", 44228),
+			Common::DE_DEU,
+			Common::kPlatformWindows,
+			ADGF_UNSTABLE,
+			GUI_OPTIONS_CHINA
+		},
+		GType_CHINA,
+		0,
+	},
+
+	// China: The Forbidden City
+	// Italian Windows DVD (IT folder)
+	{
+		{
+			"china",
+			"DVD",
+			AD_ENTRY2s("CHINE.EXE", "cd13cf9a9cbf5f95a30630dbc68891d6", 578560,
+			           "LOAD.HNM", "e6066d5d1d06b32853e25479651c1c4f", 43232),
+			Common::IT_ITA,
+			Common::kPlatformWindows,
+			ADGF_UNSTABLE,
+			GUI_OPTIONS_CHINA
+		},
+		GType_CHINA,
+		0,
+	},
+
+	// China: The Forbidden City
+	// Dutch Windows DVD (NL folder)
+	{
+		{
+			"china",
+			"DVD",
+			AD_ENTRY2s("CHINE.EXE", "c381b2630fcee21f4a7aa9880d6c20c6", 578560,
+			           "LOAD.HNM", "648b1db0d74ac927b6223590995fb34d", 43856),
+			Common::NL_NLD,
+			Common::kPlatformWindows,
+			ADGF_UNSTABLE,
+			GUI_OPTIONS_CHINA
+		},
+		GType_CHINA,
+		0,
+	},
+
+	// China: The Forbidden City
+	// Spanish Windows DVD (SP folder)
+	{
+		{
+			"china",
+			"DVD",
+			AD_ENTRY2s("CHINE.EXE", "06255643cd3578477186d86f5f75c9ae", 578560,
+			           "LOAD.HNM", "d83f8f1e999426ddd139af0cbf4a92fb", 43672),
+			Common::ES_ESP,
+			Common::kPlatformWindows,
+			ADGF_UNSTABLE,
+			GUI_OPTIONS_CHINA
+		},
+		GType_CHINA,
+		0,
+	},
+
+	// China: The Forbidden City
+	// Swedish Windows DVD (SW folder)
+	{
+		{
+			"china",
+			"DVD",
+			AD_ENTRY2s("CHINE.EXE", "47024d1831b94bbc10a48cf2f5b59ac8", 578560,
+			           "LOAD.HNM", "39b38214a9b4dcd811ff1478ce85e878", 44364),
+			Common::SV_SWE,
+			Common::kPlatformWindows,
+			ADGF_UNSTABLE,
+			GUI_OPTIONS_CHINA
+		},
+		GType_CHINA,
+		0,
+	},
+
 	// Atlantis: The Lost Tales
 	// English DOS Non-interactive Demo
 	{
@@ -649,6 +805,11 @@ static const char *const directoryGlobs[] = {
 	"DATAV_HD",
 	/* lien_doc.* */
 	"TEXTES",
+	/** China **/
+	/* CHINE/CHINE.EXE
+	 * CHINE/DATA/LOC/LOAD.HNM */
+	"CHINE",
+	"LOC",
 
 	/** End of list **/
 	nullptr
