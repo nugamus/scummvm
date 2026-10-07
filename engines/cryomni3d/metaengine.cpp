@@ -35,6 +35,10 @@
 #include "cryomni3d/versailles/engine.h"
 #endif
 
+#ifdef ENABLE_CHINA
+#include "cryomni3d/china/engine.h"
+#endif
+
 #include "cryomni3d/detection.h"
 
 namespace CryOmni3D {
@@ -141,6 +145,13 @@ Common::Error CryOmni3DMetaEngine::createInstance(OSystem *syst, Engine **engine
 		return Common::kNoError;
 #else
 		return Common::Error(Common::kUnsupportedGameidError, _s("Versailles 1685 support is not compiled in"));
+#endif
+	case GType_CHINA:
+#ifdef ENABLE_CHINA
+		*engine = new China::CryOmni3DEngine_China(syst, gd);
+		return Common::kNoError;
+#else
+		return Common::Error(Common::kUnsupportedGameidError, _s("China support is not compiled in"));
 #endif
 	case GType_HNM_PLAYER:
 		*engine = new CryOmni3DEngine_HNMPlayer(syst, gd);
