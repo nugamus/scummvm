@@ -82,19 +82,20 @@ bool GrumpaEngine::playMovie(const Common::String &film, bool cutScene) {
 			if (frame) {
 				frames++;
 				Graphics::Surface *conv = frame->convertTo(_screen.format);
-				int x = (kScreenWidth - conv->w) / 2, y = (kScreenHeight - conv->h) / 2;
 				if (conv->w == kScreenWidth && conv->h == kScreenHeight)
 					_screen.blitFrom(*conv);
-				else {
+				else if (conv->w > 0 && conv->h > 0) {
 					_screen.clear();
 					// Nearest-neighbour scale to fill the page keeping aspect.
-					float s = MIN((float)kScreenWidth / conv->w, (float)kScreenHeight / conv->h);
-					int dw = (int)(conv->w * s), dh = (int)(conv->h * s);
+					int dw = kScreenWidth, dh = MAX(1, conv->h * kScreenWidth / conv->w);
+					if (dh > kScreenHeight) {
+						dh = kScreenHeight;
+						dw = MAX(1, conv->w * kScreenHeight / conv->h);
+					}
 					Graphics::Surface *scaled = conv->scale(dw, dh, false);
 					_screen.blitFrom(*scaled, Common::Point((kScreenWidth - dw) / 2, (kScreenHeight - dh) / 2));
 					scaled->free();
 					delete scaled;
-					(void)x; (void)y;
 				}
 				conv->free();
 				delete conv;
