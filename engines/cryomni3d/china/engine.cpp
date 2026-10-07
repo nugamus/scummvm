@@ -46,8 +46,12 @@ static const char *const kMenuLabels[kMenuButtons] = {
 };
 
 CryOmni3DEngine_China::CryOmni3DEngine_China(OSystem *syst, const CryOmni3DGameDescription *gamedesc) :
-	CryOmni3DEngine(syst, gamedesc), _format(2, 5, 6, 5, 0, 11, 5, 0, 0), _hasWarp(false),
-	_alphaSpeed(0.), _betaSpeed(0.), _panoramaSpeed(2), _gameRunning(false), _nextFrame(0) {
+	CryOmni3DEngine(syst, gamedesc), _format(2, 5, 6, 5, 0, 11, 5, 0, 0), _display(kDisplayNone),
+	_fadePending(false), _alphaSpeed(0.), _betaSpeed(0.), _panoramaSpeed(2), _cursorId(-1), _hoveredZone(-1),
+	_clickedZone(-1), _pressLatch(false), _pressed(false), _place(nullptr), _entryPending(false),
+	_heldObject(kNoObject), _gameRunning(false), _nextFrame(0) {
+	memset(_vars, 0, sizeof(_vars));
+	memset(_objects, 0, sizeof(_objects));
 }
 
 CryOmni3DEngine_China::~CryOmni3DEngine_China() {
@@ -195,11 +199,15 @@ Common::Error CryOmni3DEngine_China::run() {
 	// China's renderer changes the per-pixel step down a block by >> 4 and >> 9 (E-0603, Q-0600)
 	_omni3D.setRowStepShifts(4, 9);
 
-	// Q-0010: the warp cursor is not specced yet; the red pointer stands in.
-	if (loadSprite("SPRITES/CURSEURS/PTROUG.SPR", _cursor)) {
-		CursorMan.replaceCursor(_cursor.surface.rawSurface(), _cursor.surface.w / 2, _cursor.surface.h / 2,
-		                        _cursor.keyColor);
+	// Cursor sprites (E-0901)
+	static const char *const cursors[kCursorCount] = {
+		"tri270", "tri90", "tri0", "tri180", "tri315", "tri45", "tri135", "tri225", "doigt", "voir",
+		"prendre", "ptroug", "doigt", "inter", "util", "interrog", "bouche", "pointact"
+	};
+	for (uint i = 0; i < kCursorCount; i++) {
+		loadSprite(Common::Path(Common::String::format("SPRITES/CURSEURS/%s.SPR", cursors[i])), _cursors[i]);
 	}
+	setCursorSprite(11);
 	CursorMan.showMouse(true);
 
 	playIntroduction();
@@ -309,88 +317,6 @@ MenuChoice CryOmni3DEngine_China::mainMenu() {
 		g_system->delayMillis(10);
 	}
 	return kMenuNone;
-}
-
-// New game (E-0506, E-0507): Script_Start sets the view to alpha 4.7, beta 0 and enters pne140.
-void CryOmni3DEngine_China::newGame() {
-	_gameRunning = true;
-	loadWarp("pne140");
-	_omni3D.setAlpha(4.7);
-	_omni3D.setBeta(0.);
-}
-
-bool CryOmni3DEngine_China::loadWarp(const Common::String &name) {
-	if (!loadStill(Common::Path("WARP/" + name + ".HNM"), _warpImage)) {
-		return false;
-	}
-	_omni3D.setSourceSurface(_warpImage.surfacePtr());
-	_alphaSpeed = _betaSpeed = 0.;
-	_hasWarp = true;
-	debug(1, "China: warp %s", name.c_str());
-	return true;
-}
-
-// Edge scrolling (E-0509, E-0605): the cursor near an edge pushes the view; velocities decay.
-void CryOmni3DEngine_China::scrollByCursor() {
-	const Common::Point c = getMousePos();
-	double pushX = 0., pushY = 0.;
-	if (c.x < 100) {
-		pushX = 100 - c.x;
-	} else if (c.x > 540) {
-		pushX = 540 - c.x;
-	}
-	if (c.y < 100) {
-		pushY = c.y - 100;
-	} else if (c.y > 380) {
-		pushY = c.y - 380;
-	}
-	const double k = 5. - _panoramaSpeed;
-	_alphaSpeed += pushX / (1250. * k);
-	_betaSpeed += pushY / (1500. * k);
-	if (_alphaSpeed != 0. || _betaSpeed != 0.) {
-		_omni3D.setAlpha(_omni3D.getAlpha() + _alphaSpeed);
-		_omni3D.setBeta(_omni3D.getBeta() + _betaSpeed);
-		_alphaSpeed *= 0.8;
-		_betaSpeed *= 0.8;
-	}
-}
-
-void CryOmni3DEngine_China::drawFrame() {
-	if (_hasWarp) {
-		const Graphics::Surface *view = _omni3D.getSurface();
-		if (view) {
-			g_system->copyRectToScreen(view->getPixels(), view->pitch, 0, 0, view->w, view->h);
-		}
-	}
-	g_system->updateScreen();
-}
-
-// The original never paces its frames (E-0804) and turns the view per frame; we run 25 frames/s (Q-0800).
-void CryOmni3DEngine_China::waitFrame() {
-	const uint32 now = g_system->getMillis();
-	if (_nextFrame > now) {
-		g_system->delayMillis(_nextFrame - now);
-	}
-	_nextFrame = MAX(_nextFrame, now) + 40;
-}
-
-void CryOmni3DEngine_China::playLoop() {
-	clearKeys();
-	while (!shouldAbort()) {
-		pollEvents();
-		bool toMenu = false;
-		while (!_keysPressed.empty()) {
-			if (_keysPressed.pop().keycode == Common::KEYCODE_ESCAPE) {
-				toMenu = true;
-			}
-		}
-		if (toMenu) {
-			return;
-		}
-		scrollByCursor();
-		drawFrame();
-		waitFrame();
-	}
 }
 
 } // End of namespace China

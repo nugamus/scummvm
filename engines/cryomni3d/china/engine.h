@@ -23,6 +23,7 @@
 #define CRYOMNI3D_CHINA_ENGINE_H
 
 #include "common/hashmap.h"
+#include "common/array.h"
 #include "common/hash-str.h"
 #include "common/path.h"
 #include "common/str.h"
@@ -90,13 +91,110 @@ private:
 	Common::Rect menuButtonRect(uint button);
 	bool menuButtonEnabled(uint button) const;
 
-	// Play
+	// Play (logic.cpp; spec/china-zones.md, games/china/docs/places.md)
 	void newGame();
 	void playLoop();
-	bool loadWarp(const Common::String &name);
-	void scrollByCursor();
+	void tick();
 	void drawFrame();
 	void waitFrame();
+	void scrollByCursor();
+	void turnToPoint(const Common::Point &topLeft);
+	void crossFade();
+	void updateCursor();
+	void setCursorSprite(int id);
+	Common::Point cursorTopLeft();
+	int zoneAt(const Common::Point &hot);
+	void drawLabel();
+
+public:
+	// The place API (spec/china-zones.md "Place API"), called by the place procedures
+	void zonesReset() { _zones.clear(); }
+	void zoneGo(int top, int left, int bottom, int right, bool disabled, const char *target, int arg = 0,
+	            double alpha = -1., double beta = -1.);
+	void zoneLook(int top, int left, int bottom, int right, bool disabled, const char *target, int arg = 0);
+	void zoneTake(int top, int left, int bottom, int right, bool disabled, const char *target);
+	void zoneUse(int top, int left, int bottom, int right, bool disabled);
+	void zoneLabel(int top, int left, int bottom, int right, bool disabled, const char *key);
+	void zoneDoc(int top, int left, int bottom, int right, bool disabled, const char *key);
+	void zoneTalk(int top, int left, int bottom, int right, bool disabled);
+	void zoneEnable(uint i);
+	void zoneDisable(uint i);
+	bool zoneHandler();
+	int clickedZone() const { return _clickedZone; }
+
+	void warp(const char *name);
+	void image(const char *name);
+	void video(const char *name);
+	void setAngles(double alpha, double beta);
+	void gotoPlace(const char *name);
+
+	uint32 var(uint id) const { return id < kVarCount ? _vars[id] : 0; }
+	void setVar(uint id, uint32 value) { if (id < kVarCount) _vars[id] = value; }
+	bool visitMode() const { return _vars[0] != 0; }
+
+	uint objectState(uint id) const { return id < kObjectCount ? _objects[id].state : 0; }
+	void objectToInventory(uint id);
+	void objectToCursor(uint id);
+	void objectDestroy(uint id);
+
+	uint heldObject() const { return _heldObject; }
+
+	void minutesAdd(const char *key);
+	void dialogue(const char *line, const char *stemOther, const char *stemPlayer);
+	void voice(const char *line);
+	void soundQueue(const char *name);
+	void soundPlayWait(const char *name);
+	void soundStop();
+	void screenEffect();
+	void interfaceScreen();
+	int32 puzzle(int32 number, int32 arg);
+	uint32 timeMs() const;
+	/** Globals of the original that the place logic touches directly (Q-0950). */
+	int32 mem(uint32 address) const { return _mem.getValOrDefault(address, 0); }
+	void setMem(uint32 address, int32 value) { _mem[address] = value; }
+	int32 unknownCall(uint32 address, int32 a = 0, int32 b = 0);
+
+	static const uint kVarCount = 227;
+	static const uint kObjectCount = 36;
+	static const uint kNoObject = 36;
+
+private:
+	struct Zone {
+		Common::Rect rect; // inclusive bounds, stored half-open
+		bool disabled;
+		byte type;
+		Common::String target;
+		Common::String key;
+		double alpha, beta;
+	};
+	enum ZoneType {
+		kZoneGo = 0,
+		kZoneLook = 2,
+		kZoneTake = 4,
+		kZoneUse = 6,
+		kZoneLabel = 7,
+		kZoneDoc = 8,
+		kZoneTalk = 9
+	};
+	void addZone(byte type, int top, int left, int bottom, int right, bool disabled, const char *target,
+	             const char *key, double alpha, double beta);
+
+	struct Object {
+		uint state;
+		int slot;
+	};
+
+public:
+	// Place procedures (places.cpp), in the game's list order
+	typedef void (*PlaceProc)(CryOmni3DEngine_China &g, bool entry);
+	struct PlaceDef {
+		const char *name;
+		PlaceProc proc;
+	};
+	static const PlaceDef kPlaces[];
+
+private:
+	const PlaceDef *findPlace(const Common::String &name) const;
 
 	Graphics::PixelFormat _format;
 	Graphics::ManagedSurface _screen;
@@ -109,11 +207,35 @@ private:
 
 	Omni3DManager _omni3D;
 	Graphics::ManagedSurface _warpImage;
-	bool _hasWarp;
+	Graphics::ManagedSurface _still;
+	enum Display { kDisplayNone, kDisplayWarp, kDisplayStill } _display;
+	bool _fadePending;
 	double _alphaSpeed, _betaSpeed;
 	uint _panoramaSpeed;
 
-	Sprite _cursor;
+	static const uint kCursorCount = 18;
+	Sprite _cursors[kCursorCount];
+	int _cursorId;
+	static const int kCursorHeld = 100; // the held object's r_ sprite
+	Sprite _heldCursor;
+	Common::Point _cursorHot;
+	Common::Array<Common::String> _minutes;
+	Common::String _labelText;
+	Common::Point _labelPos;
+
+	Common::Array<Zone> _zones;
+	int _hoveredZone;
+	int _clickedZone;
+	bool _pressLatch;
+	bool _pressed;
+
+	const PlaceDef *_place;
+	bool _entryPending;
+
+	Common::HashMap<uint32, int32> _mem;
+	uint32 _vars[kVarCount];
+	Object _objects[kObjectCount];
+	uint _heldObject;
 
 	bool _gameRunning;
 	uint32 _nextFrame;
