@@ -298,17 +298,21 @@ void GrumpaEngine::updatePlayer() {
 		_backspace = false;
 		return;
 	}
-	const Camera &cam = _sceneData.views[_sceneData.view].cam;
-	// The character's screen point and the turn to the cursor (E-0812, E-0817): the screen
-	// angle of the cursor (pi +/- acos of its normalized y) less the yaw off the view's.
-	// ponytail: the screen point is the position projected (Q-0805: where the original's is
-	// written is not read).
+	// The character's screen point and the turn to the cursor (E-0812, E-0817, E-1850): the
+	// centre of the body's screen rectangle (integer halves, (0, 0) after its reset); the mouse
+	// angle pi - atan2(dx, dy) less the view's yaw. The original reads the rectangle its last
+	// draw wrote; this places the body afresh, so it runs a frame ahead and needs no draw (the
+	// dev harness updates without drawing).
 	const Common::Point m = g_system->getEventManager()->getMousePos();
-	float sx, sy;
-	screenPoint(p->pos, sx, sy);
+	Common::Rect body;
+	if (const Mesh *clip = _characters.mesh(*p)) {
+		Mesh placed;
+		placeCharacter(*p, *clip, CLIP(p->frame, 0, clip->frames - 1), placed);
+		body = characterRect(*p, placed);
+	}
+	const float sx = (body.left + body.right) / 2, sy = (body.top + body.bottom) / 2;
 	const float dx = m.x - sx, dy = m.y - sy;
-	const float viewYaw = atan2f(cam.view[2], cam.view[10]);  // the camera's forward, in x/z
-	const float turn = viewYaw + atan2f(dx, -dy) - p->yaw;
+	const float turn = viewYaw() - atan2f(dx, dy) - p->yaw;
 	// The walk arrow (E-0817, E-1720): kind 9 + trunc(angle * 2.6 - 0.3925), the angle pi
 	// +/- acos of the cursor's normalized screen y, negated when the cursor is to the right.
 	const float len = sqrtf(dx * dx + dy * dy);

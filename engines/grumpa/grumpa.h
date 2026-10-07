@@ -126,6 +126,12 @@ public:
 	void updateExits();
 	/** A world point on the screen through the current view (walk.cpp); the view must exist. */
 	void screenPoint(const Vec3 &v, float &x, float &y) const;
+	/** A character's clip at frame `fr`, turned by its yaw and moved to its position. */
+	static void placeCharacter(const Character &c, const Mesh &clip, int fr, Mesh &placed);
+	/** Where a placed character is on the screen (+0x148, E-1850). */
+	Common::Rect characterRect(const Character &c, const Mesh &placed) const;
+	/** The view's yaw (+0xdf4, E-1850). */
+	float viewYaw() const;
 	/** The main menu (UI/001_Menu): parchment background + item labels in Grumpa.TTF. */
 	bool drawMenu(int selected);
 	/** Play Movies/<name>(.mpg) full screen. The boot intro skips on Escape or a click; a
