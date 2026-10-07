@@ -712,6 +712,44 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 	return c.ok;
 }
 
+void GrumpaEngine::placeCharacter(const Character &c, const Mesh &clip, int fr, Mesh &placed) {
+	placed.frames = 1;
+	const float cs = cosf(c.yaw), sn = sinf(c.yaw);
+	for (uint s = 0; s < clip.sections.size(); s++) {
+		const MeshSection &src = clip.sections[s];
+		MeshSection sec;
+		sec.nv = src.nv;
+		sec.faces = src.faces;
+		sec.u = src.u;
+		sec.v = src.v;
+		for (uint v = 0; v < src.nv; v++) {
+			const Vec3 p = src.verts[fr * src.nv + v], n = src.normals[fr * src.nv + v];
+			sec.verts.push_back(Vec3(p.x * cs + p.z * sn + c.pos.x, p.y + c.pos.y + c.lift, -p.x * sn + p.z * cs + c.pos.z));
+			sec.normals.push_back(Vec3(n.x * cs + n.z * sn, n.y, -n.x * sn + n.z * cs));
+		}
+		placed.sections.push_back(sec);
+	}
+}
+
+// The body's screen rectangle (CFXCharacter::Draw, E-1850): its box's 8 corners projected,
+// reset to (-1, -1, 0, 0) when it spans the whole width or the camera (the view matrix's
+// negated translation) is within 100 of the character.
+Common::Rect GrumpaEngine::characterRect(const Character &c, const Mesh &placed) const {
+	const Camera &cam = _sceneData.views[_sceneData.view].cam;
+	Common::Rect r = screenRect(placed, cam);
+	const Vec3 d = Vec3(-cam.view[12], -cam.view[13], -cam.view[14]) - c.pos;
+	if ((r.left < 1 && r.right > kScreenWidth - 1) || d.dot(d) < 100.0f * 100.0f)
+		r = Common::Rect(-1, -1, 0, 0);
+	return r;
+}
+
+// The view's yaw (E-1850): the angle of the view matrix's third row in x/z, acos(-_33 / L)
+// negated when _31 < 0.
+float GrumpaEngine::viewYaw() const {
+	const Camera &cam = _sceneData.views[_sceneData.view].cam;
+	return atan2f(cam.view[8], -cam.view[10]);
+}
+
 // A sprite's frame files (CFXSprite load, E-0302): a name ending in "0000.<ext>" animates,
 // frame i being the name with i in those four digits; its depth frames, when present, are
 // "<stem>_Z<i>.fxi" (stem = the name without "0000.<ext>"). Any other name is one static frame,
@@ -1045,26 +1083,11 @@ void GrumpaEngine::renderSceneFrame(uint32 now) {
 			drawUnder(c, cam, depth);
 			// The current frame of the clip (its clock: Characters::update, E-0603), placed.
 			Mesh placed;
-			placed.frames = 1;
-			float cs = cosf(c.yaw), sn = sinf(c.yaw);
-			for (uint s = 0; s < clip->sections.size(); s++) {
-				const MeshSection &src = clip->sections[s];
-				MeshSection sec;
-				sec.nv = src.nv;
-				sec.faces = src.faces;
-				sec.u = src.u;
-				sec.v = src.v;
-				for (uint v = 0; v < src.nv; v++) {
-					const Vec3 p = src.verts[fr * src.nv + v], n = src.normals[fr * src.nv + v];
-					sec.verts.push_back(Vec3(p.x * cs + p.z * sn + c.pos.x, p.y + c.pos.y + c.lift, -p.x * sn + p.z * cs + c.pos.z));
-					sec.normals.push_back(Vec3(n.x * cs + n.z * sn, n.y, -n.x * sn + n.z * cs));
-				}
-				placed.sections.push_back(sec);
-			}
+			placeCharacter(c, *clip, fr, placed);
 			renderMesh(_screen, placed, cam, _sceneData.lights, depth,
 					   c.skin.getPixels() ? &c.skin : nullptr, c.alpha);
-			// Where it is drawn, for its click rules (+0x148; assumed the drawn bounds, E-1610).
-			c.screen = screenRect(placed, cam);
+			// Where it is drawn, for its click rules and the steering (+0x148, E-1610, E-1850).
+			c.screen = characterRect(c, placed);
 		}
 	}
 	// Hotspot overlay (H): outline each unspent trigger's clickable polygon (E-0108), so the
