@@ -179,6 +179,12 @@ struct SceneLogic {
 	Common::Array<SceneCond> conds;  // script guard
 	CommandList cmds;
 	Common::String film;          // 0x07 cut scene: the .mpg under Movies/ (E-1806)
+	// 0x1d spawner (characters.md Spawners, E-0408): f0 min, f1 max, the spawn points.
+	struct SpawnPoint {
+		Vec3 pos, rot;
+		Common::Array<int32> ids;
+	};
+	Common::Array<SpawnPoint> spawns;
 };
 
 // A 3D animated-mesh actor (type 0x1a CFXStaticCharacter, E-0114): an .anb mesh (+ .tga

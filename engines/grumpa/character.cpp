@@ -134,6 +134,7 @@ bool Characters::load() {
 		c.visible = r.u32() != 0;
 		for (uint32 k = r.count(); k > 0 && r.ok; k--)   // the state slots (E-0407)
 			c.state.push_back((int32)r.u32());
+		c.startLife = c.slot(1);
 		c.home = (int32)r.u32();
 		c.pos.x = r.f32(); c.pos.y = r.f32(); c.pos.z = r.f32();
 		r.skip(4);
@@ -822,6 +823,34 @@ void Characters::apply(Character &c, int op, int arg1) {
 		debug(2, "Grumpa: character %u opcode %#x not modelled", c.id, op);
 		break;
 	}
+}
+
+// Spawning (characters.md Spawners, E-0408): no Life or alive check, so a character killed
+// on an earlier visit comes back whole.
+// The two updates the original runs after placing it are left to the next tick, which settles
+// idle characters on the floor too; clearing the floor face and the death timers stands in
+// for them. +0x478 = 1 is not kept (Q-0408).
+bool Characters::spawn(int id, const Vec3 &pos, const Vec3 &rot, int scene) {
+	Character *c = find(id);
+	if (!c) {
+		warning("Grumpa: spawn of unknown character %d", id);
+		return false;
+	}
+	c->pos = pos;
+	c->yaw = rot.y;
+	c->active = c->visible = true;
+	apply(*c, 2, 0);
+	c->home = scene;
+	if (c->state.size() > 1)
+		c->state[1] = c->startLife;
+	c->deathTimer = c->hideTimer = -1;
+	c->face = c->floorType = c->platform = -1;
+	request(*c, 5, 0.0f);
+	c->setRole(0);
+	c->idleStarts = 9;
+	c->lift = 0.0f;
+	debug(1, "Grumpa: spawned character %d at (%.0f, %.0f, %.0f)", id, pos.x, pos.y, pos.z);
+	return true;
 }
 
 // A load: besides the entry handling, the speech of the session left is silenced (the queue
