@@ -732,14 +732,16 @@ void EventVM::meshContacts(SceneMesh &m) {
 		return;
 	const uint32 frame = (uint32)MAX(spriteFrame(m.id), 0);
 	for (uint i = 0; i < m.contacts.size(); i++) {
-		// The vertex counts across the sections in order; every contact mesh has one (E-1681).
+		// The index is a GPU vertex, one per uv index, counted across the sections in order
+		// (E-1681, E-1683): its position is the vertex that uv index carries.
 		uint32 v = m.contacts[i].vertex;
 		const Vec3 *centre = nullptr;
-		for (uint s = 0; s < m.mesh.sections.size(); v -= m.mesh.sections[s++].nv) {
+		for (uint s = 0; s < m.mesh.sections.size(); v -= m.mesh.sections[s++].vertOfUv.size()) {
 			const MeshSection &sec = m.mesh.sections[s];
-			if (v < sec.nv) {
-				if (frame * sec.nv + v < sec.verts.size())
-					centre = &sec.verts[frame * sec.nv + v];
+			if (v < sec.vertOfUv.size()) {
+				const uint32 at = frame * sec.nv + sec.vertOfUv[v];
+				if (at < sec.verts.size())
+					centre = &sec.verts[at];
 				break;
 			}
 		}
