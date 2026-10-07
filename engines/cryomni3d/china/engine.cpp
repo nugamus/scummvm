@@ -23,8 +23,10 @@
 #include "common/debug.h"
 #include "common/file.h"
 #include "common/fs.h"
+#include "common/savefile.h"
 #include "common/system.h"
 
+#include "engines/metaengine.h"
 #include "engines/util.h"
 #include "graphics/cursorman.h"
 
@@ -49,12 +51,21 @@ CryOmni3DEngine_China::CryOmni3DEngine_China(OSystem *syst, const CryOmni3DGameD
 	CryOmni3DEngine(syst, gamedesc), _format(2, 5, 6, 5, 0, 11, 5, 0, 0), _display(kDisplayNone),
 	_fadePending(false), _alphaSpeed(0.), _betaSpeed(0.), _panoramaSpeed(2), _cursorId(-1), _hoveredZone(-1),
 	_clickedZone(-1), _pressLatch(false), _pressed(false), _place(nullptr), _entryPending(false),
-	_heldObject(kNoObject), _gameRunning(false), _nextFrame(0) {
+	_heldObject(kNoObject), _gameRunning(false), _nextFrame(0), _loadedGame(false), _inPlay(false),
+	_endOfPlay(false), _spacePressed(false), _inPlaceCall(false), _pendingLoad(-1), _puzzleMode(false), _rightLatch(false),
+	_fightStart(0), _voiceRate(22050), _rnd("china") {
 	memset(_vars, 0, sizeof(_vars));
 	memset(_objects, 0, sizeof(_objects));
+	// The original's options default to subtitles on (E-0501)
+	ConfMan.registerDefault("subtitles", true);
 }
 
 CryOmni3DEngine_China::~CryOmni3DEngine_China() {
+}
+
+bool CryOmni3DEngine_China::hasFeature(EngineFeature f) const {
+	return CryOmni3DEngine::hasFeature(f) || f == kSupportsSavingDuringRuntime ||
+	       f == kSupportsLoadingDuringRuntime;
 }
 
 // Each video before the menu is skipped by Escape or a left click (E-0504)
@@ -194,6 +205,7 @@ Common::Error CryOmni3DEngine_China::run() {
 	// Each glyph advances by its width plus one pixel (E-0800)
 	_fontManager.setCharSpacing(1);
 	loadLabels();
+	loadDialogues();
 
 	_omni3D.init(kWarpHFov, kWarpVFov);
 	// China's renderer changes the per-pixel step down a block by >> 4 and >> 9 (E-0603, Q-0600)
@@ -210,7 +222,12 @@ Common::Error CryOmni3DEngine_China::run() {
 	setCursorSprite(11);
 	CursorMan.showMouse(true);
 
-	playIntroduction();
+	const int saveSlot = ConfMan.getInt("save_slot");
+	if (saveSlot >= 0 && loadGameState(saveSlot).getCode() == Common::kNoError) {
+		playLoop();
+	} else {
+		playIntroduction();
+	}
 
 	while (!shouldAbort()) {
 		const MenuChoice choice = mainMenu();
@@ -219,6 +236,16 @@ Common::Error CryOmni3DEngine_China::run() {
 		}
 		if (choice == kMenuNewGame) {
 			newGame();
+		} else if (choice == kMenuVisit) {
+			// Visit (E-0506): a new game with MODE_VISITE set, not counted as a game
+			newGame();
+			setVar(0, 1);
+			_gameRunning = false;
+		} else if (choice == kMenuLoad) {
+			_loadedGame = false;
+			if (!loadGameDialog() || !_loadedGame) {
+				continue;
+			}
 		} else if (choice != kMenuResume) {
 			warning("China: menu choice %d is not implemented", choice);
 			continue;
@@ -228,16 +255,22 @@ Common::Error CryOmni3DEngine_China::run() {
 	return Common::kNoError;
 }
 
-// Before the menu (E-0504): each video is skipped on its own by Escape or a click.
-// Q-0011: the ANJGEN41 dialogue between INTRO and ITB and the ALLEE music are not played yet.
+// Before the menu (E-0504): each video is skipped on its own by Escape or a click; between
+// INTRO and ITB the emperor's servant speaks (ANJGEN41), without subtitles.
 void CryOmni3DEngine_China::playIntroduction() {
-	static const char *const videos[] = { "HNM/LOGO.HNS", "HNM/INTRO.HNS", "HNM/ITB.HNS" };
+	static const char *const videos[] = { "HNM/LOGO.HNS", "HNM/INTRO.HNS", nullptr, "HNM/ITB.HNS" };
 	for (uint i = 0; i < ARRAYSIZE(videos) && !shouldAbort(); i++) {
+		if (!videos[i]) {
+			dialogue("ANJGEN41", "P000ANJ", "P000EMP", true);
+			continue;
+		}
 		CursorMan.showMouse(false);
 		playHNM(videos[i], Audio::Mixer::kMusicSoundType);
 		CursorMan.showMouse(true);
 		clearKeys();
 	}
+	// The menu's music (E-0504)
+	playMusic("Allee");
 }
 
 Common::Rect CryOmni3DEngine_China::menuButtonRect(uint button) {
@@ -253,14 +286,15 @@ Common::Rect CryOmni3DEngine_China::menuButtonRect(uint button) {
 	                    pos.y + bullet.surface.h + _fontManager.getFontMaxHeight());
 }
 
-bool CryOmni3DEngine_China::menuButtonEnabled(uint button) const {
+bool CryOmni3DEngine_China::menuButtonEnabled(uint button) {
 	switch (button) {
 	case 0:
 		return true;
 	case 1:
-		return false; // Q-0012: saves are not implemented yet
+		// Any save (E-0505); ScummVM saves stand in for the original's 12 emblem slots
+		return !getSaveFileManager()->listSavefiles(getMetaEngine()->getSavegameFilePattern(_targetName.c_str())).empty();
 	case 2:
-		return _gameRunning;
+		return _gameRunning || visitMode();
 	case 3:
 		return false; // save mode only (E-0505)
 	default:
@@ -290,6 +324,7 @@ MenuChoice CryOmni3DEngine_China::mainMenu() {
 		}
 	}
 
+	setCursorSprite(11);
 	int lastHovered = -2;
 	while (!shouldAbort()) {
 		pollEvents();

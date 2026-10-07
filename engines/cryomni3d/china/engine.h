@@ -25,8 +25,12 @@
 #include "common/hashmap.h"
 #include "common/array.h"
 #include "common/hash-str.h"
+#include "common/random.h"
 #include "common/path.h"
+#include "common/serializer.h"
 #include "common/str.h"
+
+#include "audio/mixer.h"
 
 #include "graphics/managed_surface.h"
 #include "graphics/pixelformat.h"
@@ -66,6 +70,13 @@ public:
 	void makeTranslucent(Graphics::Surface &dst, const Graphics::Surface &src) const override {}
 	void setupPalette(const byte *colors, uint start, uint num) override {}
 	bool shouldSkipVideo() override;
+	/** Blocking screens also end when a load from the menu is waiting (applied by the play loop). */
+	bool shouldAbort() override { return shouldQuit() || _pendingLoad >= 0; }
+	bool hasFeature(EngineFeature f) const override;
+	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
+	Common::Error loadGameState(int slot) override;
+	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
+	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
 	void initializePath(const Common::FSNode &gamePath) override;
 
 protected:
@@ -89,7 +100,7 @@ private:
 	MenuChoice mainMenu();
 	void drawMenu(int hovered);
 	Common::Rect menuButtonRect(uint button);
-	bool menuButtonEnabled(uint button) const;
+	bool menuButtonEnabled(uint button);
 
 	// Play (logic.cpp; spec/china-zones.md, games/china/docs/places.md)
 	void newGame();
@@ -100,6 +111,7 @@ private:
 	void scrollByCursor();
 	void turnToPoint(const Common::Point &topLeft);
 	void crossFade();
+	void fadeTo(const Graphics::Surface *target);
 	void updateCursor();
 	void setCursorSprite(int id);
 	Common::Point cursorTopLeft();
@@ -108,7 +120,10 @@ private:
 
 public:
 	// The place API (spec/china-zones.md "Place API"), called by the place procedures
-	void zonesReset() { _zones.clear(); }
+	void zonesReset() {
+		_zones.clear();
+		_hoveredZone = -1;
+	}
 	void zoneGo(int top, int left, int bottom, int right, bool disabled, const char *target, int arg = 0,
 	            double alpha = -1., double beta = -1.);
 	void zoneLook(int top, int left, int bottom, int right, bool disabled, const char *target, int arg = 0);
@@ -140,19 +155,32 @@ public:
 	uint heldObject() const { return _heldObject; }
 
 	void minutesAdd(const char *key);
-	void dialogue(const char *line, const char *stemOther, const char *stemPlayer);
 	void voice(const char *line);
 	void soundQueue(const char *name);
 	void soundPlayWait(const char *name);
 	void soundStop();
+	void playMusic(const char *name);
+	void musicForPlace(const char *place);
 	void screenEffect();
 	void interfaceScreen();
 	int32 puzzle(int32 number, int32 arg);
 	uint32 timeMs() const;
-	/** Globals of the original that the place logic touches directly (Q-0950). */
-	int32 mem(uint32 address) const { return _mem.getValOrDefault(address, 0); }
-	void setMem(uint32 address, int32 value) { _mem[address] = value; }
-	int32 unknownCall(uint32 address, int32 a = 0, int32 b = 0);
+	void dialogue(const char *line, const char *stemA, const char *stemB, bool noSubtitles = false);
+	// What a few places read or set directly (E-0954)
+	void clearDisplay() { _display = kDisplayNone; }
+	void endPlay() { _endOfPlay = true; }
+	void clearClickedZone() { _clickedZone = -1; }
+	void skipNextAutosave() {}
+	void setPuzzleMode(int32 on) { _puzzleMode = on != 0; }
+	void setFightStart(uint32 ms) { _fightStart = ms; }
+	uint32 fightStart() const { return _fightStart; }
+	bool rightButtonDown() { return getCurrentMouseButton() == 2; }
+	bool rightButtonLatched() const { return _rightLatch; }
+	int32 unknownCall(const char *name);
+	bool keyDown(int32 scanCode);
+	void epilogue();
+	void objectSetLabel(uint id, const char *key);
+	void objectSetExamine(uint id, const char *place);
 
 	static const uint kVarCount = 227;
 	static const uint kObjectCount = 36;
@@ -195,6 +223,13 @@ public:
 
 private:
 	const PlaceDef *findPlace(const Common::String &name) const;
+	bool syncGame(Common::Serializer &s);
+	void resetPlayState();
+	static const char *objectStem(uint id);
+	void applyLoad();
+
+	bool _loadedGame;
+	bool _inPlay;
 
 	Graphics::PixelFormat _format;
 	Graphics::ManagedSurface _screen;
@@ -232,12 +267,41 @@ private:
 	const PlaceDef *_place;
 	bool _entryPending;
 
-	Common::HashMap<uint32, int32> _mem;
+	bool _inPlaceCall;
+	int _pendingLoad;
+	bool _puzzleMode;
+	bool _rightLatch;
+	uint32 _fightStart;
+
+	// Dialogues and sounds (dialogue.cpp)
+	struct DialogueBlock {
+		Common::String text;
+		Common::String next;
+	};
+	Common::HashMap<Common::String, DialogueBlock> _dialogues;
+	struct Face {
+		Common::Array<Graphics::ManagedSurface> loops[4];
+	};
+	void loadDialogues();
+	void drawSubtitle(const Common::String &text);
+	bool playVoice(const Common::String &id, Common::Array<int16> &samples);
+	bool loadFaces(const char *stem, Face &face);
+	void waitSoundChannel();
+	void playSound(const Common::String &name);
+	void drawView();
+	Audio::SoundHandle _voiceHandle;
+	Audio::SoundHandle _soundHandle;
+	uint _voiceRate;
+	Common::RandomSource _rnd;
+	Common::String _musicName;
+	Audio::SoundHandle _musicHandle;
 	uint32 _vars[kVarCount];
 	Object _objects[kObjectCount];
 	uint _heldObject;
 
 	bool _gameRunning;
+	bool _endOfPlay;
+	bool _spacePressed;
 	uint32 _nextFrame;
 };
 
