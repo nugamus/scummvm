@@ -499,6 +499,46 @@ void EventVM::triggerFire(SceneTrigger &tr) {
 	runList(tr.cmds, tr.id);
 }
 
+// A spawner's round on scene entry (characters.md Spawners, E-0408): every character it lists
+// is put away, then min..max different random points each place a random character of their
+// list that the round has not placed yet. The spawner is rebuilt with the scene, so what it
+// placed is forgotten on the next visit, which spawns afresh.
+void EventVM::spawnRound(const SceneLogic &a, int scene) {
+	if (a.f1 == 0 || a.spawns.empty())
+		return;
+	Characters &chars = _engine->_characters;
+	for (uint i = 0; i < a.spawns.size(); i++)
+		for (uint j = 0; j < a.spawns[i].ids.size(); j++)
+			chars.command(a.spawns[i].ids[j], 501, 0, 0);
+	const uint n = a.spawns.size();
+	const int32 want = a.f0 + (int32)_rnd.getRandomNumber(MAX<int32>(a.f1 - a.f0, 0));
+	const uint count = want > 0 ? MIN<uint>((uint)want, n) : 0;
+	Common::Array<bool> used(n);
+	Common::Array<int32> placed;
+	for (uint k = 0; k < count; k++) {
+		// A point not used this round, re-drawn on a repeat. The original counts comparisons
+		// with the used list (more than 10 ends the round); this counts re-draws.
+		int p = -1;
+		for (int tries = 0; tries <= 10 && p < 0; tries++) {
+			const uint q = _rnd.getRandomNumber(n - 1);
+			if (!used[q])
+				p = q;
+		}
+		if (p < 0)
+			break;
+		used[p] = true;
+		const SceneLogic::SpawnPoint &sp = a.spawns[p];
+		for (int tries = 0; tries <= 60 && !sp.ids.empty(); tries++) {
+			const int32 id = sp.ids[_rnd.getRandomNumber(sp.ids.size() - 1)];
+			if (Common::find(placed.begin(), placed.end(), id) == placed.end()) {
+				if (chars.spawn(id, sp.pos, sp.rot, scene))
+					placed.push_back(id);
+				break;
+			}
+		}
+	}
+}
+
 // Scripts, counters, timers and flags (E-0204).
 void EventVM::logicCommand(SceneLogic &a, int op, int arg1) {
 	if (op == kOpUnlatch) {
@@ -517,6 +557,10 @@ void EventVM::logicCommand(SceneLogic &a, int op, int arg1) {
 	case 0x07:  // cut scene: 0 play, 23 play if autoplay; 1 stop (the film is over by then)
 		if (op == kOpPlay || (op == kOpEnter && a.f0 == 1))
 			playFilm(a);
+		break;
+	case 0x1d:  // spawner: a round on entry (E-0408)
+		if (op == kOpEnter)
+			spawnRound(a, arg1);
 		break;
 	case 0x21:  // script
 		if (op == kOpPlay)
@@ -975,8 +1019,9 @@ void EventVM::keep() {
 	}
 	for (uint i = 0; i < _scene->logic.size(); i++) {
 		const SceneLogic &a = _scene->logic[i];
-		// a script keeps its latch, the others their state; a flag's latch is not kept (E-0203)
-		Status s = { a.active, a.visible, (a.type == 0x21 || a.type == 0x07) && a.latch, a.count, a.state, 0, 0, false, false };
+		// a script, film or spawner keeps its latch, the others their state; a flag's latch is
+		// not kept (E-0203, E-0408)
+		Status s = { a.active, a.visible, (a.type == 0x21 || a.type == 0x07 || a.type == 0x1d) && a.latch, a.count, a.state, 0, 0, false, false };
 		kept[a.id] = s;
 	}
 }

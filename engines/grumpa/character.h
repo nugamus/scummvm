@@ -90,6 +90,7 @@ struct Character {
 	float clock = 0.0f;              // +0x4a4: the animation clock (E-0603)
 	int frame = 0;                   // +0x494: the frame of the clip shown
 	Common::Array<int32> state;      // the state slots (E-0201, E-0407): 6 per character
+	int32 startLife = 0;             // +0x484: Life (slot 1) as loaded; a spawn restores it
 	/** State slot 4 (+0x564) is the role: 0 none, 1 the player's, 2 the follower's, 3..7 a
 	 *  fighter's (E-1530, combat.md). */
 	int role() const { return state.size() > 4 ? state[4] : 0; }
@@ -192,6 +193,8 @@ public:
 	/** A load: the next scene entry is a first one (no entry placement), or, with
 	 *  `firstEntry`, puts the player at the scene's first entry, at home there. */
 	void forgetScene(bool firstEntry);
+	/** A spawn point places character `id` in `scene` (characters.md Spawners, E-0408). */
+	bool spawn(int id, const Vec3 &pos, const Vec3 &rot, int scene);
 	/** Saves: each character's position, yaw, home, active and visible (version 4), the
 	 *  characters actors 3 and 4 hold (5); state slots, texture, worn attachments and latch
 	 *  (6). */

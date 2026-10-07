@@ -401,12 +401,6 @@ static bool skipBody(AbiCur &c, uint32 t) {
 		pstr(c); pstr(c);
 		return true;
 	}
-	case 0x1d: {
-		c.skip(12); ecVec(c); c.skip(8);
-		int32 k = acount(c);
-		for (int32 i = 0; i < k && c.ok; i++) { sub24(c); c.skip(4 * (uint32)acount(c)); }
-		return true;
-	}
 	case 0x1e: c.skip(12); ecVec(c); c.skip(24); return true;
 	case 0x20: c.skip(12); ecVec(c); c.skip(80); return true;
 	case 0x21: c.skip(12); ecVec(c); c.skip(4); ecVec(c); ccVec(c); return true;
@@ -657,6 +651,29 @@ bool GrumpaEngine::loadScene(int num, SceneData &scene) {
 			a.f0 = c.i32();              // +0x13c autoplay
 			c.skip(76);                  // 19 u32, read and discarded
 			readCmds(c, a.cmds);
+			if (c.ok)
+				scene.logic.push_back(a);
+		} else if (t == 0x1d) {
+			// Spawner (E-0408): min, max, then the points (position, orientation, ids).
+			SceneLogic a;
+			a.id = id;
+			a.type = t;
+			readHead(c, a.active, a.visible, &a.state);
+			a.f0 = c.i32();              // +0x154 min
+			a.f1 = c.i32();              // +0x158 max
+			for (int32 k = acount(c); k > 0 && c.ok; k--) {
+				SceneLogic::SpawnPoint p;
+				float v[6];
+				for (int i = 0; i < 6; i++) {
+					uint32 u = c.u32();
+					memcpy(&v[i], &u, 4);
+				}
+				p.pos = Vec3(v[0], v[1], v[2]);
+				p.rot = Vec3(v[3], v[4], v[5]);
+				for (int32 n = acount(c); n > 0 && c.ok; n--)
+					p.ids.push_back(c.i32());
+				a.spawns.push_back(p);
+			}
 			if (c.ok)
 				scene.logic.push_back(a);
 		} else if (t >= 0x21 && t <= 0x27) {

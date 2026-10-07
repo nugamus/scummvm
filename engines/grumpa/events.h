@@ -137,6 +137,7 @@ private:
 	bool gateSource(const SceneTrigger &tr, const Character *c, int32 who, bool &inside);
 	void triggerUpdate();
 	void logicCommand(SceneLogic &a, int op, int arg1);
+	void spawnRound(const SceneLogic &a, int scene);
 	void playFilm(SceneLogic &a);
 	void logicUpdate(SceneLogic &a);
 	SceneLogic *logicActor(int id);
