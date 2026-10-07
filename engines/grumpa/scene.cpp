@@ -183,7 +183,7 @@ bool GrumpaEngine::loadMesh(const Common::String &name, Mesh &mesh) {
 		for (uint i = 0; i < c; i++, off += 6)
 			for (int k = 0; k < 3; k++)
 				faces[i].uv[k] = READ_LE_UINT16(d + off + k * 2);
-		Common::Array<uint16> vertOfUv;
+		Common::Array<uint16> &vertOfUv = sec.vertOfUv;
 		vertOfUv.resize(b);
 		for (uint i = 0; i < c; i++)
 			for (int k = 0; k < 3; k++) {

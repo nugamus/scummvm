@@ -53,6 +53,7 @@ struct MeshSection {
 	Common::Array<Vec3> normals;
 	Common::Array<Face> faces;
 	Common::Array<float> u, v;  // per-uv-index texture coordinates
+	Common::Array<uint16> vertOfUv;  // the position vertex each uv index (GPU vertex) carries
 };
 
 struct Mesh {
