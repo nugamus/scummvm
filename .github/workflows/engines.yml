@@ -34,7 +34,7 @@ jobs:
             aptPackages: 'g++-4.8 liba52-dev libfaad-dev libflac-dev libfreetype6-dev libjpeg-turbo8-dev libmad0-dev libmpeg2-4-dev libogg-dev libpng-dev libsdl1.2-dev libtheora-dev libvorbis-dev libvpx-dev zlib1g-dev'
     env:
       SDL_CONFIG: ${{ matrix.sdlConfig }}
-      ENGINES: x3d peintre ring gilbert grumpa
+      ENGINES: x3d peintre ring gilbert grumpa cryomni3d versailles
     defaults:
       run:
         shell: bash
