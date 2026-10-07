@@ -35,7 +35,9 @@ ifdef ENABLE_CHINA
 MODULE_OBJS += \
 	china/engine.o \
 	china/logic.o \
-	china/places.o
+	china/dialogue.o \
+	china/places.o \
+	china/saveload.o
 endif
 
 # This module can be built as a plugin

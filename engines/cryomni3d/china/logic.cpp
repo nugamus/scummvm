@@ -23,6 +23,9 @@
 #include "common/file.h"
 #include "common/system.h"
 
+#include "audio/audiostream.h"
+#include "audio/decoders/raw.h"
+
 #include "graphics/cursorman.h"
 #include "image/tga.h"
 
@@ -38,6 +41,10 @@ static const char *const kObjectStems[CryOmni3DEngine_China::kObjectCount] = {
 	"tourne", "cire", "ruyi", "posepi", "burin", "martea", "clef", "cured", "pincea", "monn",
 	"mandat", "mandat", "mandat", "mandat", "clef", ""
 };
+
+const char *CryOmni3DEngine_China::objectStem(uint id) {
+	return id < kObjectCount ? kObjectStems[id] : "";
+}
 
 // Cursor sprite ids (E-0901)
 enum {
@@ -62,9 +69,27 @@ void CryOmni3DEngine_China::newGame() {
 	_objects[30].state = 2;
 	_heldObject = kNoObject;
 	_minutes.clear();
-	_zones.clear();
+	resetPlayState();
 	_gameRunning = true;
 	gotoPlace("Script_Start");
+}
+
+// What a new game and a loaded game both start without: the frame's input and display state.
+void CryOmni3DEngine_China::resetPlayState() {
+	zonesReset();
+	_labelText.clear();
+	_fadePending = false;
+	_pressLatch = false;
+	_clickedZone = -1;
+	_alphaSpeed = _betaSpeed = 0.;
+	_endOfPlay = false;
+	_puzzleMode = false;
+	_rightLatch = false;
+	_fightStart = 0;
+	_display = kDisplayNone;
+	_cursorId = -1;
+	_mixer->stopHandle(_voiceHandle);
+	_mixer->stopHandle(_soundHandle);
 }
 
 const CryOmni3DEngine_China::PlaceDef *CryOmni3DEngine_China::findPlace(const Common::String &name) const {
@@ -85,8 +110,11 @@ void CryOmni3DEngine_China::gotoPlace(const char *name) {
 		return;
 	}
 	debug(1, "China: goto %s", place->name);
+	// Q-0012: in automatic save mode the original also saves here, unless a place asked to
+	// skip it once (E-0954); ScummVM's own saves replace that.
 	_place = place;
 	_entryPending = true;
+	musicForPlace(place->name);
 	_display = kDisplayNone;
 	_clickedZone = -1;
 }
@@ -97,7 +125,9 @@ void CryOmni3DEngine_China::tick() {
 	}
 	const bool entry = _entryPending;
 	_entryPending = false;
+	_inPlaceCall = true;
 	_place->proc(*this, entry);
+	_inPlaceCall = false;
 }
 
 // Zones (spec/china-zones.md Zones, E-0904)
@@ -205,22 +235,24 @@ bool CryOmni3DEngine_China::zoneHandler() {
 			setCursorSprite(kCursorLook);
 			break;
 		case kZoneTake:
-			if (!holding) {
-				setCursorSprite(kCursorTake);
-			}
+			setCursorSprite(holding ? kCursorHeld : kCursorTake);
 			break;
 		case kZoneUse:
-			if (!holding) {
-				setCursorSprite(kCursorUse);
-			}
+			setCursorSprite(holding ? kCursorHeld : kCursorUse);
 			break;
 		case kZoneLabel:
 			_labelText = label(zone.key.c_str());
+			if (_labelText.empty()) {
+				_labelText = "ACCES LEGENDE INCONNU"; // the original's text for a missing key (E-0902)
+			}
 			break;
 		case kZoneDoc:
 			if (!holding) {
 				setCursorSprite(kCursorDoc);
 				_labelText = label(zone.key.c_str());
+				if (_labelText.empty()) {
+					_labelText = "ACCES BASE DOCUMENTAIRE INCONNU";
+				}
 			}
 			break;
 		case kZoneTalk:
@@ -262,6 +294,7 @@ bool CryOmni3DEngine_China::zoneHandler() {
 	case kZoneDoc:
 		if (!holding) {
 			// Q-0903: the documentation screen is not implemented yet; the place is re-entered
+			_pressLatch = true;
 			warning("China: documentation entry %s", zone.key.c_str());
 			gotoPlace(_place->name);
 			return true;
@@ -313,11 +346,14 @@ void CryOmni3DEngine_China::image(const char *name) {
 	_fadePending = false;
 }
 
+// Videos pause the music (spec/china-zones.md Place API)
 void CryOmni3DEngine_China::video(const char *name) {
+	_mixer->pauseHandle(_musicHandle, true);
 	CursorMan.showMouse(false);
 	playHNM(Common::Path(Common::String::format("HNM/%s.HNS", name)), Audio::Mixer::kMusicSoundType);
 	CursorMan.showMouse(true);
 	clearKeys();
+	_mixer->pauseHandle(_musicHandle, false);
 }
 
 void CryOmni3DEngine_China::setAngles(double alpha, double beta) {
@@ -341,7 +377,8 @@ void CryOmni3DEngine_China::objectToCursor(uint id) {
 	}
 	_objects[id].state = 1;
 	_heldObject = id;
-	loadSprite(Common::Path(Common::String::format("SPRITES/OBJETS/R_%s.SPR", kObjectStems[id])), _heldCursor);
+	loadSprite(Common::Path(Common::String::format("SPRITES/OBJETS/R_%s.SPR", objectStem(id))), _heldCursor);
+	_cursorId = -1; // the held sprite changed: set it again even if the id is the same
 }
 
 void CryOmni3DEngine_China::objectDestroy(uint id) {
@@ -363,31 +400,71 @@ void CryOmni3DEngine_China::minutesAdd(const char *key) {
 	_minutes.push_back(key);
 }
 
-// Q-0011: the synced dialogue player is not implemented yet.
-void CryOmni3DEngine_China::dialogue(const char *line, const char *stemOther, const char *stemPlayer) {
-	warning("China: dialogue %s (%s, %s) not played", line, stemOther, stemPlayer);
+// Music (E-0206): the place's first three letters choose a track; other places keep the
+// current one. ZIK files are headerless 22050 Hz 16-bit stereo PCM, looped whole.
+// Q-1000: the original fades the volume by 10 per tick between tracks; we switch at once.
+void CryOmni3DEngine_China::musicForPlace(const char *place) {
+	static const struct {
+		const char *prefix;
+		const char *track;
+	} tracks[] = {
+		{ "pne", "Allee" }, { "aie", "Allee" }, { "aio", "Allee" }, { "ctp", "Allee" }, { "cgc", "Allee" },
+		{ "cpc", "Bureaux1" }, { "lge", "Bureaux1" }, { "spf", "Bureaux1" },
+		{ "lga", "Bureaux2" }, { "bpi", "Bureaux2" }, { "esp", "Bureaux2" }, { "nwf", "Bureaux2" },
+		{ "ban", "Bureaux2" }, { "bda", "Bureaux2" },
+		{ "pdc", "Concub" }, { "jix", "Jardins" },
+		{ "cth", "SalleHS" }, { "chs", "SalleHS" }, { "shs", "SalleHS" }
+	};
+	for (uint i = 0; i < ARRAYSIZE(tracks); i++) {
+		if (!scumm_strnicmp(place, tracks[i].prefix, 3)) {
+			playMusic(tracks[i].track);
+			return;
+		}
+	}
 }
 
-// Q-0950: these calls are not specced yet; they log and do nothing.
-void CryOmni3DEngine_China::voice(const char *line) {
-	warning("China: voice %s not played", line);
+void CryOmni3DEngine_China::playMusic(const char *name) {
+	if (_musicName.equalsIgnoreCase(name)) {
+		return;
+	}
+	_mixer->stopHandle(_musicHandle);
+	_musicName = name;
+	Common::File *file = new Common::File();
+	if (!file->open(Common::Path(Common::String::format("MUSIC/%s.ZIK", name)))) {
+		warning("China: no music %s", name);
+		delete file;
+		return;
+	}
+	Audio::SeekableAudioStream *raw = Audio::makeRawStream(file, 22050,
+	        Audio::FLAG_16BITS | Audio::FLAG_STEREO | Audio::FLAG_LITTLE_ENDIAN, DisposeAfterUse::YES);
+	_mixer->playStream(Audio::Mixer::kMusicSoundType, &_musicHandle, Audio::makeLoopingAudioStream(raw, 0));
 }
 
-void CryOmni3DEngine_China::soundQueue(const char *name) {
-	warning("China: sound %s not played", name);
+// DirectInput scan code 57 is Space (E-0954), the only key a place tests.
+bool CryOmni3DEngine_China::keyDown(int32 scanCode) {
+	return scanCode == 57 && _spacePressed;
 }
 
-void CryOmni3DEngine_China::soundPlayWait(const char *name) {
-	warning("China: sound %s not played", name);
+// Not implemented yet (spec/china-zones.md): the epilogue and the object label/examine settings.
+void CryOmni3DEngine_China::epilogue() {
+	warning("China: epilogue not implemented");
 }
 
-void CryOmni3DEngine_China::soundStop() {
+void CryOmni3DEngine_China::objectSetLabel(uint id, const char *key) {
+	debug(1, "China: object %u label %s", id, key);
 }
 
+void CryOmni3DEngine_China::objectSetExamine(uint id, const char *place) {
+	debug(1, "China: object %u examined in %s", id, place);
+}
+
+// Screen fade (spec/china-zones.md Place API): the cross-fade's 19 steps towards black.
 void CryOmni3DEngine_China::screenEffect() {
+	fadeTo(nullptr);
 }
 
 void CryOmni3DEngine_China::interfaceScreen() {
+	_rightLatch = true;
 	warning("China: interface screen not implemented");
 }
 
@@ -400,8 +477,8 @@ uint32 CryOmni3DEngine_China::timeMs() const {
 	return g_system->getMillis();
 }
 
-int32 CryOmni3DEngine_China::unknownCall(uint32 address, int32 a, int32 b) {
-	warning("China: call 0x%x(%d, %d) not implemented", address, a, b);
+int32 CryOmni3DEngine_China::unknownCall(const char *name) {
+	warning("China: call %s not implemented", name);
 	return 0;
 }
 
@@ -496,21 +573,27 @@ void CryOmni3DEngine_China::turnToPoint(const Common::Point &topLeft) {
 // the way from the old screen to the new warp.
 void CryOmni3DEngine_China::crossFade() {
 	const Graphics::Surface *view = _omni3D.getSurface();
-	if (!view) {
-		return;
+	if (view) {
+		fadeTo(view);
 	}
+}
+
+// The cross-fade step towards a picture, or towards black without one.
+void CryOmni3DEngine_China::fadeTo(const Graphics::Surface *target) {
 	Graphics::ManagedSurface old;
 	old.copyFrom(_screen);
 	for (uint k = 1; k <= 19 && !shouldAbort(); k++) {
 		const int f = MIN<int>(16 * k, 256);
 		for (int y = 0; y < 480; y++) {
 			const uint16 *o = (const uint16 *)old.getBasePtr(0, y);
-			const uint16 *n = (const uint16 *)view->getBasePtr(0, y);
+			const uint16 *n = target ? (const uint16 *)target->getBasePtr(0, y) : nullptr;
 			uint16 *d = (uint16 *)_screen.getBasePtr(0, y);
 			for (int x = k & 1; x < 640; x += 2) {
-				byte orr, og, ob, nr, ng, nb;
+				byte orr, og, ob, nr = 0, ng = 0, nb = 0;
 				_format.colorToRGB(o[x], orr, og, ob);
-				_format.colorToRGB(n[x], nr, ng, nb);
+				if (n) {
+					_format.colorToRGB(n[x], nr, ng, nb);
+				}
 				d[x] = _format.RGBToColor(orr - (orr - nr) * f / 256, og - (og - ng) * f / 256,
 				                          ob - (ob - nb) * f / 256);
 			}
@@ -553,7 +636,7 @@ void CryOmni3DEngine_China::drawLabel() {
 	_fontManager.displayStr(x, y, _labelText);
 }
 
-void CryOmni3DEngine_China::drawFrame() {
+void CryOmni3DEngine_China::drawView() {
 	if (_display == kDisplayWarp) {
 		const Graphics::Surface *view = _omni3D.getSurface();
 		if (view) {
@@ -562,6 +645,10 @@ void CryOmni3DEngine_China::drawFrame() {
 	} else if (_display == kDisplayStill) {
 		_screen.blitFrom(_still);
 	}
+}
+
+void CryOmni3DEngine_China::drawFrame() {
+	drawView();
 	drawLabel();
 	g_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, 640, 480);
 	g_system->updateScreen();
@@ -579,18 +666,34 @@ void CryOmni3DEngine_China::waitFrame() {
 // One frame (E-0508): keys, cursor, zone under the hot point, the place, then the draw.
 void CryOmni3DEngine_China::playLoop() {
 	clearKeys();
-	while (!shouldAbort()) {
+	_inPlay = true;
+	while (!shouldQuit()) {
 		pollEvents();
 		bool toMenu = false;
+		_spacePressed = false;
 		while (!_keysPressed.empty()) {
-			if (_keysPressed.pop().keycode == Common::KEYCODE_ESCAPE) {
+			const Common::KeyCode key = _keysPressed.pop().keycode;
+			if (key == Common::KEYCODE_ESCAPE) {
 				toMenu = true;
+			} else if (key == Common::KEYCODE_SPACE) {
+				_spacePressed = true;
 			}
 		}
-		if (toMenu) {
+		if (toMenu || _endOfPlay) {
+			_inPlay = false;
+			if (_endOfPlay) {
+				_gameRunning = false;
+				_endOfPlay = false;
+			}
 			return;
 		}
+		if (_pendingLoad >= 0) {
+			applyLoad();
+		}
 		_pressed = getCurrentMouseButton() == 1;
+		if (getCurrentMouseButton() != 2) {
+			_rightLatch = false;
+		}
 		updateCursor();
 		const int hovered = zoneAt(getMousePos());
 		if (hovered != _hoveredZone) {

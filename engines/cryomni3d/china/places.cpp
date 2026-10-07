@@ -923,9 +923,9 @@ static void place_shs240(CryOmni3DEngine_China &g, bool entry) {
 		g.screenEffect();
 		g.video("fin");
 		g.screenEffect();
-		g.unknownCall(0x405aa0);
-		g.setMem(0x48f200, 0);
-		g.setMem(0x48f1fc, 1);
+		g.epilogue();
+		g.clearDisplay();
+		g.endPlay();
 	}
 }
 
@@ -3162,8 +3162,8 @@ static void place_pdcw512(CryOmni3DEngine_China &g, bool entry) {
 	}
 	if ((g.clickedZone() == 2) && ((g.heldObject() == kO_LETTRE_VIERGE ? 1 : 0) != 0)) {
 		g.setVar(kV_VAR_LETTRE_REVELEE, 1);
-		g.unknownCall(0x403540, 14, 4595792);
-		g.unknownCall(0x403560, 14, 4578956);
+		g.objectSetLabel(kO_LETTRE_VIERGE, "LETTRE_REVELEE");
+		g.objectSetExamine(kO_LETTRE_VIERGE, "rebus");
 		g.gotoPlace("lvierge");
 		return;
 	}
@@ -3767,7 +3767,7 @@ static void place_bpiw202(CryOmni3DEngine_China &g, bool entry) {
 		if (((int32)g.var(kV_CHAPITRE) == 12) && ((int32)g.var(kV_3GIMD01) == 0)) {
 			g.dialogue("MPID3991", "I202MPI", nullptr);
 			g.setVar(kV_3GIMD01, 1);
-			g.setMem(0x48f27c, -1);
+			g.clearClickedZone();
 		}
 		if (((int32)g.var(kV_CHAPITRE) == 13) && ((int32)g.var(kV_ANMI4111) == 0)) {
 			g.dialogue("MPID4091", "I202MPI", nullptr);
@@ -4646,7 +4646,7 @@ static void place_espw201(CryOmni3DEngine_China &g, bool entry) {
 	if (((int32)g.var(kV_CHAPITRE) == 6) && ((int32)g.var(kV_ANXI2211) != 0) && ((int32)g.var(kV_MWED2131) == 0)) {
 		g.zoneEnable(3);
 	}
-	if ((g.clickedZone() == 7) && (g.unknownCall(0x403520, 27) == 0)) {
+	if ((g.clickedZone() == 7) && ((g.objectState(kO_CURE_DENTS) == 2 ? 1 : 0) == 0)) {
 		g.objectToInventory(kO_CURE_DENTS);
 	}
 	if (g.clickedZone() == 3) {
@@ -5507,13 +5507,13 @@ static void place_fight(CryOmni3DEngine_China &g, bool entry) {
 		g.zonesReset();
 		g.image("fight");
 		g.zoneUse(187, 238, 475, 395, 0);
-		g.setMem(0x530bf8, (int32)g.timeMs());
+		g.setFightStart(g.timeMs());
 	}
 	if ((g.zoneHandler() ? 1 : 0) != 0) {
 		return;
 	}
-	g.setMem(0, (int32)g.timeMs()); // esi
-	if (((g.mem(0x48f2a0) == 0) && (g.mem(0x48f298) != 0)) || (g.unknownCall(0x414c70, 57) != 0)) {
+	const uint32 local_esi = g.timeMs();
+	if ((((g.rightButtonLatched() ? 1 : 0) == 0) && ((g.rightButtonDown() ? 1 : 0) != 0)) || ((g.keyDown(57) ? 1 : 0) != 0)) {
 		g.interfaceScreen();
 	}
 	if (g.clickedZone() == 0) {
@@ -5544,7 +5544,7 @@ static void place_fight(CryOmni3DEngine_China &g, bool entry) {
 			return;
 		}
 	}
-	if ((g.mem(0) - g.mem(0x530bf8)) > 3000) {
+	if ((local_esi - g.fightStart()) > 3000) {
 		g.video("DAMH505");
 		g.setVar(kV_FIGHTED, 0);
 		g.setAngles(1.6, 0.0);
@@ -5600,7 +5600,7 @@ static void place_nwfw100(CryOmni3DEngine_China &g, bool entry) {
 		}
 		if ((int32)g.var(kV_DAMH501) == 0) {
 			g.video("DAMH501");
-			g.setMem(0x48f2a4, 1);
+			g.skipNextAutosave();
 			g.gotoPlace("fight2");
 			return;
 		}
@@ -6201,7 +6201,7 @@ static void place_jixw121(CryOmni3DEngine_China &g, bool entry) {
 			g.objectToInventory(kO_CLE_WANG);
 			g.objectToInventory(kO_POSTHUME);
 			g.minutesAdd("MINJI109");
-			g.setMem(0x48f27c, -1);
+			g.clearClickedZone();
 		}
 	}
 	if (((g.clickedZone() == 1) || (g.clickedZone() == 2)) && ((int32)g.var(kV_VAR_ANID1121) == 1) && ((int32)g.var(kV_VAR_ANID1131) == 0)) {
@@ -6443,7 +6443,7 @@ static void place_jixw210(CryOmni3DEngine_China &g, bool entry) {
 			g.zoneEnable(0);
 		}
 		if ((int32)g.var(kV_CHAPITRE) == 13) {
-			g.setMem(0x48f2a8, ((int32)g.var(kV_VAR_Venant_de_PUZZLE4) == 0 ? 1 : 0));
+			g.setPuzzleMode(((int32)g.var(kV_VAR_Venant_de_PUZZLE4) == 0 ? 1 : 0));
 		}
 	}
 	if ((g.zoneHandler() ? 1 : 0) != 0) {
@@ -6548,7 +6548,7 @@ static void place_soupir2(CryOmni3DEngine_China &g, bool entry) {
 			g.gotoPlace("puzzle42");
 			return;
 		}
-		g.setMem(0x48f2a8, 1);
+		g.setPuzzleMode(1);
 	}
 }
 
