@@ -767,38 +767,98 @@ void EventVM::meshUpdate(SceneMesh &m, Run &r) {
 	meshContacts(m);
 }
 
-// The contact spheres (E-1681): each rides its vertex in the current frame; with bit 1 of the
-// flags, the player's sphere touching one runs the third list, once per touch with `once`.
-// ponytail: the +0x220 character filter is -1 in every file and not read.
-void EventVM::meshContacts(SceneMesh &m) {
-	Character *p = walker();
-	if (m.contacts.empty() || !m.contactOn || !(m.contactFlags & 1) || !p)
-		return;
+// A contact sphere's centre (E-1681, E-1683): its vertex counts the renderer's buffer, one
+// vertex per uv index across the sections in order, at the position that uv index's corner
+// names, in the mesh's current frame.
+bool EventVM::contactCentre(const SceneMesh &m, uint i, Vec3 &out) const {
 	const uint32 frame = (uint32)MAX(spriteFrame(m.id), 0);
-	for (uint i = 0; i < m.contacts.size(); i++) {
-		// The index is a GPU vertex, one per uv index, counted across the sections in order
-		// (E-1681, E-1683): its position is the vertex that uv index carries.
-		uint32 v = m.contacts[i].vertex;
-		const Vec3 *centre = nullptr;
-		for (uint s = 0; s < m.mesh.sections.size(); v -= m.mesh.sections[s++].vertOfUv.size()) {
-			const MeshSection &sec = m.mesh.sections[s];
-			if (v < sec.vertOfUv.size()) {
-				const uint32 at = frame * sec.nv + sec.vertOfUv[v];
-				if (at < sec.verts.size())
-					centre = &sec.verts[at];
-				break;
-			}
+	uint32 v = m.contacts[i].vertex;
+	for (uint s = 0; s < m.mesh.sections.size(); v -= m.mesh.sections[s++].vertOfUv.size()) {
+		const MeshSection &sec = m.mesh.sections[s];
+		if (v < sec.vertOfUv.size()) {
+			const uint32 at = frame * sec.nv + sec.vertOfUv[v];
+			if (at >= sec.verts.size())
+				return false;
+			out = sec.verts[at];
+			return true;
 		}
-		if (!centre || !Characters::touches(*p, *centre, m.contacts[i].radius))
-			continue;
-		if (!(m.contactOnce && m.contactLatch)) {
-			if (const SpriteHooks *h = hooks(m.id))
-				runList(h->onContact, m.id);
-		}
-		m.contactLatch = true;
-		return;
 	}
-	m.contactLatch = false;
+	return false;
+}
+
+// The contact test (E-1681, E-1684), while the tests are on: for each sphere, the kinds its
+// flags name, in the order player (3rd list), follower (4th), the mesh `contactMesh`'s spheres
+// (6th), the fighters 91..94's characters (8th). The first kind that runs its list ends the
+// update. With `once`, a kind's latch makes a touch pass on to the next kind and a miss
+// clears it; the latches are per mesh, so another sphere's miss re-arms them (as the
+// original does: a touch on one sphere of several runs the list every other update).
+// Not modelled: the character filters (+0x220, +0x224, -1 in every file); bit 8's latch
+// clears when no sphere of the other mesh touches, where the original clears it when the one
+// that hit (+0x254) misses and keeps scanning on a latched hit (the same for the corpus's
+// three bit-8 meshes); a sphere whose vertex or frame is out of range is skipped, where the
+// original tests its last centre (no file has one).
+void EventVM::meshContacts(SceneMesh &m) {
+	if (m.contacts.empty() || !m.contactOn || !(m.contactFlags & 0x1b))
+		return;
+	const SpriteHooks *h = hooks(m.id);
+	Characters &chars = _engine->_characters;
+	// A kind's test for one sphere: true when it ran its list.
+	auto kind = [&](bool touching, bool &latch, const CommandList *list) -> bool {
+		if (!touching) {
+			latch = false;
+			return false;
+		}
+		if (m.contactOnce && latch)
+			return false;
+		latch = true;
+		if (h && list)
+			runList(*list, m.id);
+		return true;
+	};
+	const Character *pl = (m.contactFlags & 1) ? walker() : nullptr;
+	const Character *fo = nullptr;
+	if (m.contactFlags & 2) {
+		fo = chars.follower();
+		if (!fo)
+			fo = chars.fighterCharacter(Characters::kCompanion);
+		if (fo && !chars.present(*fo))
+			fo = nullptr;
+	}
+	SceneMesh *other = nullptr;
+	if (m.contactFlags & 8) {
+		other = mesh(m.contactMesh);
+		if (other && (!other->active || !other->contactOn))
+			other = nullptr;
+	}
+	for (uint i = 0; i < m.contacts.size(); i++) {
+		Vec3 c;
+		if (!contactCentre(m, i, c))
+			continue;
+		const float r = m.contacts[i].radius;
+		if ((m.contactFlags & 1) && kind(pl && Characters::touches(*pl, c, r), m.contactLatch, h ? &h->onContact : nullptr))
+			return;
+		if ((m.contactFlags & 2) && kind(fo && Characters::touches(*fo, c, r), m.followerLatch, h ? &h->onFollower : nullptr))
+			return;
+		if (m.contactFlags & 8) {
+			bool touching = false;
+			for (uint k = 0; other && k < other->contacts.size() && !touching; k++) {
+				Vec3 oc;
+				if (contactCentre(*other, k, oc)) {
+					const Vec3 d = c - oc;
+					const float rr = r + other->contacts[k].radius;
+					touching = d.dot(d) < rr * rr;
+				}
+			}
+			if (kind(touching, m.meshLatch, h ? &h->onMesh : nullptr))
+				return;
+		}
+		if (m.contactFlags & 0x10)
+			for (int f = 0; f < 4; f++) {
+				const Character *e = chars.fighterCharacter(Characters::kFirstFighter + f);
+				if (kind(e && chars.present(*e) && Characters::touches(*e, c, r), m.fighterLatch[f], h ? &h->onFighter : nullptr))
+					return;
+			}
+	}
 }
 
 void EventVM::meshAnimate(SceneMesh &m, Run &r) {
