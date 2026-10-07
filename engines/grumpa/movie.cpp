@@ -27,6 +27,7 @@
 #include "common/events.h"
 #include "common/file.h"
 #include "common/system.h"
+#include "graphics/cursorman.h"
 #include "graphics/managed_surface.h"
 #include "graphics/surface.h"
 #include "video/mpegps_decoder.h"
@@ -61,6 +62,9 @@ bool GrumpaEngine::playMovie(const Common::String &film, bool cutScene) {
 		return false;
 	}
 	dec.start();
+	// The game draws its own cursor in its frame (the system one is hidden at boot) and a film
+	// stops all drawing (E-1806), so no cursor shows over a film.
+	const bool cursorShown = CursorMan.showMouse(false);
 	bool skipped = false;
 	int frames = 0;
 	while (!dec.endOfVideo() && !skipped && !shouldQuit()) {
@@ -100,6 +104,7 @@ bool GrumpaEngine::playMovie(const Common::String &film, bool cutScene) {
 		g_system->updateScreen();
 		g_system->delayMillis(10);
 	}
+	CursorMan.showMouse(cursorShown);
 	debug(1, "Grumpa: film %s: %d frames%s", name.c_str(), frames, skipped ? ", skipped" : "");
 	if (cutScene) {  // the back surface is filled black (E-1806)
 		_screen.clear();
