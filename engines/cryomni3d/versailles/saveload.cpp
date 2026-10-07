@@ -202,8 +202,8 @@ void CryOmni3DEngine_Versailles::saveGame(bool visit, uint saveNum,
 
 	// Places states
 	assert(_placeStates.size() <= 100);
-	Common::Array<PlaceState>::const_iterator placeIt = _placeStates.begin();
-	for (uint i = 0; placeIt != _placeStates.end(); placeIt++, i++) {
+	for (Common::Array<PlaceState>::const_iterator placeIt = _placeStates.begin();
+	        placeIt != _placeStates.end(); placeIt++) {
 		out->writeUint32BE(placeIt->state);
 	}
 	for (uint i = _placeStates.size(); i < 100; i++) {
