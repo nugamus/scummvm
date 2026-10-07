@@ -131,6 +131,7 @@ private:
 	const SpriteHooks *hooks(uint32 id) const;
 	void meshAnimate(SceneMesh &m, Run &r);
 	void meshContacts(SceneMesh &m);
+	bool contactCentre(const SceneMesh &m, uint i, Vec3 &out) const;
 	void triggerFire(SceneTrigger &tr);
 	Character *walker() const;
 	bool triggerGate(SceneTrigger &tr);
