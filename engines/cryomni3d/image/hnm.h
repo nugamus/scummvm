@@ -47,11 +47,13 @@ public:
 	void destroy() override;
 	bool loadStream(Common::SeekableReadStream &stream) override;
 	const Graphics::Surface *getSurface() const override { return _surface; }
+	const Graphics::Palette &getPalette() const override { return _palette; }
 
 private:
 	Graphics::PixelFormat _format;
 	HNM6Decoder *_codec;
 	const Graphics::Surface *_surface;
+	Graphics::Palette _palette;
 };
 
 } // End of namespace Image

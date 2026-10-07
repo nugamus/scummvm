@@ -134,6 +134,8 @@ public:
 	virtual bool displayPlaceDocumentation() = 0;
 	virtual uint displayOptions() = 0;
 	virtual bool shouldAbort() { return g_engine->shouldQuit(); }
+	/** Called by playHNM after polling events: true skips the video (default: any key). */
+	virtual bool shouldSkipVideo() { return checkKeysPressed(); }
 
 	virtual void makeTranslucent(Graphics::Surface &dst, const Graphics::Surface &src) const = 0;
 	virtual void setupPalette(const byte *colors, uint start, uint num) = 0;
