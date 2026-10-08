@@ -304,6 +304,9 @@ bool CryOmni3DEngine_China::zoneHandler() {
 			gotoPlace(_place->name);
 			return true;
 		}
+		// Holding an object, the place's code reacts: showing an item to someone (Q-1302)
+		_pressLatch = true;
+		_clickedZone = z;
 		return false;
 	default:
 		_clickedZone = z;

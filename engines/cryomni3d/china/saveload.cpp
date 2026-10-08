@@ -33,7 +33,7 @@ namespace China {
 // A ScummVM save holds what the original's .sav holds (E-0208): the game variables, each
 // object's state and slot, the place, the two view angles and the notes, plus the held
 // object. It starts with the 20-byte description the metaengine lists.
-static const uint32 kSaveVersion = 1;
+static const uint32 kSaveVersion = 2;
 
 bool CryOmni3DEngine_China::syncGame(Common::Serializer &s) {
 	if (!s.syncVersion(kSaveVersion)) {
@@ -76,6 +76,11 @@ bool CryOmni3DEngine_China::syncGame(Common::Serializer &s) {
 	}
 	for (uint i = 0; i < count; i++) {
 		s.syncString(_minutes[i]);
+	}
+	// Version 2: the label and document keys places changed (E-1107)
+	for (uint i = 0; i < kObjectCount; i++) {
+		s.syncString(_objLabelKey[i], 2);
+		s.syncString(_objDocKey[i], 2);
 	}
 	return !s.err();
 }
