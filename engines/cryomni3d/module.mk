@@ -33,6 +33,7 @@ endif
 
 ifdef ENABLE_CHINA
 MODULE_OBJS += \
+	china/documentation.o \
 	china/engine.o \
 	china/logic.o \
 	china/dialogue.o \

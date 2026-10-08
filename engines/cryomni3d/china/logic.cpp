@@ -298,10 +298,13 @@ bool CryOmni3DEngine_China::zoneHandler() {
 		return false;
 	case kZoneDoc:
 		if (!holding) {
-			// Q-0903: the documentation screen is not implemented yet; the place is re-entered
+			// The fiche viewer with the zone's key, then the place is re-entered (E-0903, E-1300)
 			_pressLatch = true;
-			warning("China: documentation entry %s", zone.key.c_str());
-			gotoPlace(_place->name);
+			const Common::String key = zone.key;
+			documentFiche(key.c_str());
+			if (_pendingLoad < 0 && !shouldQuit()) {
+				gotoPlace(_place->name);
+			}
 			return true;
 		}
 		// Holding an object, the place's code reacts: showing an item to someone (Q-1302)

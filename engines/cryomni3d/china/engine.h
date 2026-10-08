@@ -29,6 +29,7 @@
 #include "common/path.h"
 #include "common/serializer.h"
 #include "common/str.h"
+#include "common/str-array.h"
 
 #include "audio/mixer.h"
 
@@ -55,7 +56,8 @@ enum MenuChoice {
 	kMenuResume = 3,
 	kMenuSave = 4,
 	kMenuVisit = 5,
-	kMenuQuit = 6
+	kMenuQuit = 6,
+	kMenuDocumentation = 7
 };
 
 class CryOmni3DEngine_China : public CryOmni3DEngine {
@@ -341,6 +343,57 @@ private:
 	int32 puzzleBombe();
 	Common::String _puzzleDir;
 	int32 _puzzleResult = 0;
+
+	// The documentation base (documentation.cpp; spec/china-documentation.md)
+	struct DocTableRow {
+		Common::String a, b;
+		Common::StringArray links;
+	};
+	struct DocFiche {
+		Common::String label, title, picture, caption, text;
+		Common::StringArray links;
+		Common::Array<DocTableRow> rows;
+	};
+	struct DocTheme {
+		Common::String title;
+		Common::Array<DocFiche> fiches;
+	};
+	struct DocIndexRow {
+		Common::String text, label; // shown text, fiche label (empty for a header)
+	};
+	struct DocLink {
+		Common::Rect rect;
+		uint number;
+	};
+	struct DocWord {
+		Common::String text;
+		int link;
+		int width;
+	};
+	static const uint kDocHistorySize = 50;
+	static const uint kDocSpriteCount = 29;
+	void documentation();
+	int32 documentFiche(const char *key);
+	void docLoad();
+	void docLoadSprites();
+	bool docFind(const Common::String &label, int &theme, int &fiche) const;
+	void docHistoryPush(const Common::String &label);
+	void docDarken(const Common::Rect &area, int shift);
+	int docIndexPanel(int shift, int &scroll, const Common::Point &mouse);
+	void docBlit(int sprite);
+	Common::Rect docRect(int sprite) const;
+	bool docLoadPicture(const Common::String &name, Graphics::ManagedSurface &dst);
+	void docDrawText(const Common::String &text, int x, int y, int width, int bottom, bool justify, bool hardBreaks,
+	                 Common::Array<DocLink> *links);
+	void docDrawFiche(const DocFiche &fiche, const Graphics::ManagedSurface *pic, int tableSel, Common::Array<DocLink> &links);
+	Common::Array<DocTheme> _docThemes;
+	Common::Array<DocIndexRow> _docIndex;
+	int _docIndexWidth;
+	bool _docLoaded;
+	Sprite _docSprites[kDocSpriteCount];
+	Common::String _docHistory[kDocHistorySize]; // E-1302
+	int _docCur, _docEnd;
+	bool _docWrapped;
 
 	// Dialogues and sounds (dialogue.cpp)
 	struct DialogueBlock {

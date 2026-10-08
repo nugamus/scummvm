@@ -53,7 +53,7 @@ CryOmni3DEngine_China::CryOmni3DEngine_China(OSystem *syst, const CryOmni3DGameD
 	_clickedZone(-1), _pressLatch(false), _pressed(false), _place(nullptr), _entryPending(false),
 	_heldObject(kNoObject), _gameRunning(false), _nextFrame(0), _loadedGame(false), _inPlay(false),
 	_endOfPlay(false), _spacePressed(false), _spaceUp(false), _spaceArmed(false), _inPlaceCall(false), _pendingLoad(-1), _puzzleMode(false), _rightLatch(false),
-	_fightStart(0), _barLoaded(false), _barWarp(false), _skipFade(false), _voiceRate(22050), _rnd("china") {
+	_fightStart(0), _docIndexWidth(0), _docLoaded(false), _docCur(0), _docEnd(0), _docWrapped(false), _barLoaded(false), _barWarp(false), _skipFade(false), _voiceRate(22050), _rnd("china") {
 	memset(_vars, 0, sizeof(_vars));
 	memset(_objects, 0, sizeof(_objects));
 	for (uint i = 0; i < kSlotCount; i++) {
@@ -210,6 +210,7 @@ Common::Error CryOmni3DEngine_China::run() {
 	loadTextFile("LOC/LABELS.TXT", _labels);
 	loadTextFile("LOC/MINUTES.TXT", _minuteTexts);
 	loadDialogues();
+	docLoad();
 
 	_omni3D.init(kWarpHFov, kWarpVFov);
 	// China's renderer changes the per-pixel step down a block by >> 4 and >> 9 (E-0603, Q-0600)
@@ -254,6 +255,9 @@ Common::Error CryOmni3DEngine_China::run() {
 			if (!loadGameDialog() || !_loadedGame) {
 				continue;
 			}
+		} else if (choice == kMenuDocumentation) {
+			documentation();
+			continue;
 		} else if (choice != kMenuResume) {
 			warning("China: menu choice %d is not implemented", choice);
 			continue;
@@ -349,7 +353,7 @@ MenuChoice CryOmni3DEngine_China::mainMenu() {
 		}
 		if (getDragStatus() == kDragStatus_Finished && hovered >= 0 && menuButtonEnabled(hovered)) {
 			static const MenuChoice choices[kMenuButtons] = {
-				kMenuNewGame, kMenuLoad, kMenuResume, kMenuSave, kMenuVisit, kMenuNone, kMenuNone, kMenuQuit
+				kMenuNewGame, kMenuLoad, kMenuResume, kMenuSave, kMenuVisit, kMenuDocumentation, kMenuNone, kMenuQuit
 			};
 			if (choices[hovered] != kMenuNone) {
 				return choices[hovered];
