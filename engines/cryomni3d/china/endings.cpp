@@ -48,6 +48,7 @@ bool CryOmni3DEngine_China::waitOrEscape(uint32 ms) {
 void CryOmni3DEngine_China::epilogue() {
 	static const char *const stills[4] = { "ANJFR000", "GEN_DAFR", "CONCUFR0", "JONGFR00" };
 	static const char *const texts[4] = { "FIN_ANJING", "FIN_DAMING", "FIN_SHOUXIU", "FIN_PRINCE" };
+	clearKeys();
 	CursorMan.showMouse(false);
 	for (uint i = 0; i < 4 && !shouldAbort(); i++) {
 		image(stills[i]);
@@ -70,6 +71,7 @@ void CryOmni3DEngine_China::credits() {
 		return;
 	}
 	Common::Array<Common::String> page;
+	clearKeys(); // a key pressed before (in the menu) does not skip the first page
 	CursorMan.showMouse(false);
 	_fontManager.setCurrentFont(1);
 	while (!shouldAbort()) {
