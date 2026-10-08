@@ -86,7 +86,8 @@ private:
 	// Files: every name is relative to the game's DATA folder (`WARP/PNE140.HNM`).
 	bool loadStill(const Common::Path &path, Graphics::ManagedSurface &dst);
 	bool loadSprite(const Common::Path &path, Sprite &sprite);
-	void loadLabels();
+	typedef Common::HashMap<Common::String, Common::String, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> TextMap;
+	void loadTextFile(const char *path, TextMap &dst);
 	Common::String label(const char *key) const;
 	/** Converts one of the game's X1R5G5B5 colours to the screen format. */
 	uint32 gameColor(uint16 color) const;
@@ -162,7 +163,8 @@ public:
 	void playMusic(const char *name);
 	void musicForPlace(const char *place);
 	void screenEffect();
-	void interfaceScreen();
+	/** Opens the interface bar (spec/china-interface.md); 0 when the exit spiral was clicked, else 1. */
+	int32 interfaceScreen();
 	int32 puzzle(int32 number, int32 arg);
 	uint32 timeMs() const;
 	void dialogue(const char *line, const char *stemA, const char *stemB, bool noSubtitles = false);
@@ -236,7 +238,8 @@ private:
 	Graphics::PixelFormat _format;
 	Graphics::ManagedSurface _screen;
 
-	Common::HashMap<Common::String, Common::String, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _labels;
+	TextMap _labels;
+	TextMap _minuteTexts;
 
 	Graphics::ManagedSurface _menuBackground;
 	Sprite _menuNormal[6];
@@ -274,6 +277,40 @@ private:
 	bool _puzzleMode;
 	bool _rightLatch;
 	uint32 _fightStart;
+
+	// The interface bar (interface.cpp; spec/china-interface.md)
+	enum { kBarSpiral, kBarEye, kBarFrames, kBarNote, kBarCompass, kBarSpriteCount };
+	static const uint kSlotCount = 10;
+	static const int kCursorEye = 101; // the held document's i_ sprite over the eye
+	void barLoad();
+	void barObjectSprites(uint id);
+	void barPresent();
+	void barRebuildSlots();
+	int barFirstFreeSlot() const;
+	void barHold(uint id);
+	void barDraw(int visibleRows, int lower, int hoveredSlot);
+	void barSlide(bool in);
+	int barSlotAt(const Common::Point &p) const;
+	bool barVisible(int sprite) const;
+	Common::Rect barRect(int sprite) const;
+	void barDocument();
+	void barNotebook();
+	void wrapText(const Common::String &text, int width, Common::Array<Common::String> &lines);
+	Common::String objectLabelKey(uint id) const;
+	Common::String objectDocKey(uint id) const;
+	const Sprite &cursorSprite(int id) const;
+
+	Graphics::ManagedSurface _barSaved;
+	Graphics::ManagedSurface _barBand;
+	Sprite _barSprites[kBarSpriteCount];
+	Sprite _objSlot[kObjectCount];
+	Sprite _objEye[kObjectCount];
+	uint _slots[kSlotCount];
+	bool _barLoaded;
+	bool _barWarp; // the display was a warp when the bar opened (the compass shows)
+	bool _skipFade;
+	Common::String _objLabelKey[kObjectCount];
+	Common::String _objDocKey[kObjectCount];
 
 	// Dialogues and sounds (dialogue.cpp)
 	struct DialogueBlock {

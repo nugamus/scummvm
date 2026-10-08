@@ -69,6 +69,10 @@ void CryOmni3DEngine_China::newGame() {
 	_objects[30].state = 2;
 	_heldObject = kNoObject;
 	_minutes.clear();
+	for (uint i = 0; i < kObjectCount; i++) {
+		_objLabelKey[i].clear();
+		_objDocKey[i].clear();
+	}
 	resetPlayState();
 	_gameRunning = true;
 	gotoPlace("Script_Start");
@@ -85,6 +89,7 @@ void CryOmni3DEngine_China::resetPlayState() {
 	_endOfPlay = false;
 	_puzzleMode = false;
 	_rightLatch = false;
+	_skipFade = false;
 	_fightStart = 0;
 	_display = kDisplayNone;
 	_cursorId = -1;
@@ -445,23 +450,22 @@ bool CryOmni3DEngine_China::keyDown(int32 scanCode) {
 	return scanCode == 57 && _spacePressed;
 }
 
-// Not implemented yet (spec/china-zones.md): the object label/examine settings.
+// The object label and examine settings (E-0954); not stored in saves (E-0208).
 void CryOmni3DEngine_China::objectSetLabel(uint id, const char *key) {
-	debug(1, "China: object %u label %s", id, key);
+	if (id < kObjectCount) {
+		_objLabelKey[id] = key; // the object's +0x2c string (E-0954)
+	}
 }
 
 void CryOmni3DEngine_China::objectSetExamine(uint id, const char *place) {
-	debug(1, "China: object %u examined in %s", id, place);
+	if (id < kObjectCount) {
+		_objDocKey[id] = place; // the object's +0x20 string (E-0954)
+	}
 }
 
 // Screen fade (spec/china-zones.md Place API): the cross-fade's 19 steps towards black.
 void CryOmni3DEngine_China::screenEffect() {
 	fadeTo(nullptr);
-}
-
-void CryOmni3DEngine_China::interfaceScreen() {
-	_rightLatch = true;
-	warning("China: interface screen not implemented");
 }
 
 int32 CryOmni3DEngine_China::puzzle(int32 number, int32 arg) {
@@ -479,11 +483,21 @@ int32 CryOmni3DEngine_China::unknownCall(const char *name) {
 }
 
 // Cursors (E-0901): the hot point is the sprite's centre, except `inter` (1, 45).
+const Sprite &CryOmni3DEngine_China::cursorSprite(int id) const {
+	if (id == kCursorHeld) {
+		return _heldCursor;
+	}
+	if (id == kCursorEye) {
+		return _objEye[MIN<uint>(_heldObject, kObjectCount - 1)];
+	}
+	return _cursors[id];
+}
+
 void CryOmni3DEngine_China::setCursorSprite(int id) {
 	if (id == _cursorId) {
 		return;
 	}
-	const Sprite &s = id == kCursorHeld ? _heldCursor : _cursors[id];
+	const Sprite &s = cursorSprite(id);
 	if (s.surface.empty()) {
 		return;
 	}
@@ -689,8 +703,17 @@ void CryOmni3DEngine_China::playLoop() {
 			applyLoad();
 		}
 		_pressed = getCurrentMouseButton() == 1;
-		if (getCurrentMouseButton() != 2) {
+		// The bar opens on Space or a right-button press edge (E-1100)
+		const bool right = getCurrentMouseButton() == 2;
+		if (!right) {
 			_rightLatch = false;
+		}
+		if (_spacePressed || (right && !_rightLatch)) {
+			interfaceScreen();
+			_spacePressed = false;
+			if (_pendingLoad >= 0 || shouldQuit()) {
+				continue;
+			}
 		}
 		updateCursor();
 		const int hovered = zoneAt(getMousePos());
@@ -699,10 +722,16 @@ void CryOmni3DEngine_China::playLoop() {
 		}
 		_hoveredZone = hovered;
 		tick();
-		if (_display == kDisplayWarp && _fadePending) {
+		const bool fade = _display == kDisplayWarp && _fadePending;
+		if (fade) {
 			_fadePending = false;
+		}
+		if (fade && !_skipFade) {
 			crossFade();
 		} else {
+			if (fade) {
+				_skipFade = false; // the next warp draw after the bar is a plain draw (E-0903)
+			}
 			if (_display == kDisplayWarp) {
 				scrollByCursor();
 			}

@@ -53,7 +53,7 @@ CryOmni3DEngine_China::CryOmni3DEngine_China(OSystem *syst, const CryOmni3DGameD
 	_clickedZone(-1), _pressLatch(false), _pressed(false), _place(nullptr), _entryPending(false),
 	_heldObject(kNoObject), _gameRunning(false), _nextFrame(0), _loadedGame(false), _inPlay(false),
 	_endOfPlay(false), _spacePressed(false), _inPlaceCall(false), _pendingLoad(-1), _puzzleMode(false), _rightLatch(false),
-	_fightStart(0), _voiceRate(22050), _rnd("china") {
+	_fightStart(0), _barLoaded(false), _barWarp(false), _skipFade(false), _voiceRate(22050), _rnd("china") {
 	memset(_vars, 0, sizeof(_vars));
 	memset(_objects, 0, sizeof(_objects));
 	// The original's options default to subtitles on (E-0501)
@@ -154,11 +154,11 @@ bool CryOmni3DEngine_China::loadSprite(const Common::Path &path, Sprite &sprite)
 	return !file.err();
 }
 
-// LABELS.TXT (spec/china-boot.md Main menu): `#key#` lines, each followed by `<text>`.
-void CryOmni3DEngine_China::loadLabels() {
+// LABELS.TXT and MINUTES.TXT (spec/china-boot.md Main menu): `#key#` lines, each followed by `<text>`.
+void CryOmni3DEngine_China::loadTextFile(const char *path, TextMap &dst) {
 	Common::File file;
-	if (!file.open("LOC/LABELS.TXT")) {
-		warning("China: no LOC/LABELS.TXT");
+	if (!file.open(path)) {
+		warning("China: no %s", path);
 		return;
 	}
 	Common::String key;
@@ -175,7 +175,7 @@ void CryOmni3DEngine_China::loadLabels() {
 			}
 			const size_t end = text.findLastOf('>');
 			if (end != Common::String::npos) {
-				_labels[key] = Common::String(text.c_str(), end);
+				dst[key] = Common::String(text.c_str(), end);
 			}
 			key.clear();
 		}
@@ -204,7 +204,8 @@ Common::Error CryOmni3DEngine_China::run() {
 	_fontManager.setTransparentBackground(true);
 	// Each glyph advances by its width plus one pixel (E-0800)
 	_fontManager.setCharSpacing(1);
-	loadLabels();
+	loadTextFile("LOC/LABELS.TXT", _labels);
+	loadTextFile("LOC/MINUTES.TXT", _minuteTexts);
 	loadDialogues();
 
 	_omni3D.init(kWarpHFov, kWarpVFov);
