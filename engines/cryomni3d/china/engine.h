@@ -119,6 +119,7 @@ private:
 	Common::Point cursorTopLeft();
 	int zoneAt(const Common::Point &hot);
 	void drawLabel();
+	void drawLabelBox(const Common::String &text, const Common::Point &pos);
 
 public:
 	// The place API (spec/china-zones.md "Place API"), called by the place procedures
@@ -312,6 +313,34 @@ private:
 	bool _skipFade;
 	Common::String _objLabelKey[kObjectCount];
 	Common::String _objDocKey[kObjectCount];
+
+	// Puzzles (puzzles.cpp; games/china/docs/puzzles.md)
+	struct PuzzleInput {
+		bool latch = false, rightLatch = false; // the press latches (E-1200)
+		bool held = false, press = false;       // left button down / went down this frame
+		bool rightPress = false;                // right button went down this frame
+		bool escape = false, space = false;
+	};
+	void puzzleStart(PuzzleInput &in);
+	void puzzlePoll(PuzzleInput &in);
+	void puzzleFlip(const Common::String &label = Common::String());
+	void puzzleReturnHeld();
+	Common::Path puzzlePath(const Common::String &file) const;
+	bool puzzleBackground(const Common::String &name);
+	bool puzzleSprite(const Common::String &name, Sprite &sprite);
+	bool puzzleMask(const Common::String &name, Common::Array<byte> &mask);
+	void puzzleSound(const char *file, uint channel);
+	Audio::SoundHandle _puzzleChannels[9]; // the original's sound channels 0..8
+	int32 puzzlePenjing();
+	int32 puzzleBouddha();
+	int32 puzzleSceaux(int32 variant);
+	int32 puzzleGo();
+	int32 puzzleRings();
+	int32 puzzleHorloge();
+	int32 puzzleBoutons();
+	int32 puzzleBombe();
+	Common::String _puzzleDir;
+	int32 _puzzleResult = 0;
 
 	// Dialogues and sounds (dialogue.cpp)
 	struct DialogueBlock {

@@ -39,6 +39,7 @@ MODULE_OBJS += \
 	china/endings.o \
 	china/interface.o \
 	china/places.o \
+	china/puzzles.o \
 	china/saveload.o
 endif
 

@@ -483,11 +483,6 @@ void CryOmni3DEngine_China::screenEffect() {
 	fadeTo(nullptr);
 }
 
-int32 CryOmni3DEngine_China::puzzle(int32 number, int32 arg) {
-	warning("China: puzzle %d (%d) not implemented", number, arg);
-	return 0;
-}
-
 uint32 CryOmni3DEngine_China::timeMs() const {
 	return g_system->getMillis();
 }
@@ -635,10 +630,14 @@ void CryOmni3DEngine_China::drawLabel() {
 	if (_labelText.empty() || _display != kDisplayWarp) {
 		return;
 	}
+	drawLabelBox(_labelText, _labelPos);
+}
+
+void CryOmni3DEngine_China::drawLabelBox(const Common::String &text, const Common::Point &pos) {
 	_fontManager.setCurrentFont(0);
-	const int width = _fontManager.getStrWidth(_labelText);
-	int x = _labelPos.x;
-	const int y = _labelPos.y;
+	const int width = _fontManager.getStrWidth(text);
+	int x = pos.x;
+	const int y = pos.y;
 	if (x + width + 2 >= 640) {
 		x = 638 - width;
 	}
@@ -656,9 +655,9 @@ void CryOmni3DEngine_China::drawLabel() {
 		}
 	}
 	_fontManager.setForeColor(_format.RGBToColor(0, 0, 0));
-	_fontManager.displayStr(x + 1, y + 1, _labelText);
+	_fontManager.displayStr(x + 1, y + 1, text);
 	_fontManager.setForeColor(textColor(0xffff));
-	_fontManager.displayStr(x, y, _labelText);
+	_fontManager.displayStr(x, y, text);
 }
 
 void CryOmni3DEngine_China::drawView() {
