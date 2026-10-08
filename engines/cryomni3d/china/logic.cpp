@@ -326,7 +326,7 @@ void CryOmni3DEngine_China::warp(const char *name) {
 }
 
 // Still lookup (E-0510): Images\<stem>.hnm, then Images\<stem>.tga, then Loc\<stem>.
-void CryOmni3DEngine_China::image(const char *name) {
+bool CryOmni3DEngine_China::image(const char *name) {
 	const Common::String stem(name);
 	bool ok = false;
 	if (Common::File::exists(Common::Path("IMAGES/" + stem + ".HNM"))) {
@@ -348,10 +348,11 @@ void CryOmni3DEngine_China::image(const char *name) {
 	}
 	if (!ok) {
 		warning("China: no image %s", name);
-		return;
+		return false;
 	}
 	_display = kDisplayStill;
 	_fadePending = false;
+	return true;
 }
 
 // Videos pause the music (spec/china-zones.md Place API)
@@ -448,12 +449,23 @@ void CryOmni3DEngine_China::playMusic(const char *name) {
 	_mixer->playStream(Audio::Mixer::kMusicSoundType, &_musicHandle, Audio::makeLoopingAudioStream(raw, 0));
 }
 
+// Key repeats are dropped, so a held key acts once.
+bool CryOmni3DEngine_China::keyEvent(const Common::Event &event) {
+	if (event.type == Common::EVENT_KEYDOWN && event.kbdRepeat) {
+		return true;
+	}
+	if (event.type == Common::EVENT_KEYUP && event.kbd.keycode == Common::KEYCODE_SPACE) {
+		_spaceUp = true;
+	}
+	return false;
+}
+
 // DirectInput scan code 57 is Space (E-0954), the only key a place tests.
 bool CryOmni3DEngine_China::keyDown(int32 scanCode) {
 	return scanCode == 57 && _spacePressed;
 }
 
-// The object label and examine settings (E-0954); not stored in saves (E-0208).
+// The object label and examine settings (E-0954); stored in saves since version 2 (E-1107).
 void CryOmni3DEngine_China::objectSetLabel(uint id, const char *key) {
 	if (id < kObjectCount) {
 		_objLabelKey[id] = key; // the object's +0x2c string (E-0954)
@@ -679,6 +691,7 @@ void CryOmni3DEngine_China::waitFrame() {
 // One frame (E-0508): keys, cursor, zone under the hot point, the place, then the draw.
 void CryOmni3DEngine_China::playLoop() {
 	clearKeys();
+	_spaceUp = _spaceArmed = false;
 	_inPlay = true;
 	while (!shouldQuit()) {
 		pollEvents();
@@ -711,7 +724,17 @@ void CryOmni3DEngine_China::playLoop() {
 		if (!right) {
 			_rightLatch = false;
 		}
-		if (_spacePressed || (right && !_rightLatch)) {
+		// Space opens it on its release (E-1100)
+		if (_spacePressed) {
+			_spaceArmed = true;
+		}
+		bool spaceOpen = false;
+		if (_spaceUp) {
+			_spaceUp = false;
+			spaceOpen = _spaceArmed;
+			_spaceArmed = false;
+		}
+		if (spaceOpen || (right && !_rightLatch)) {
 			interfaceScreen();
 			_spacePressed = false;
 			if (_pendingLoad >= 0 || shouldQuit()) {
@@ -732,13 +755,13 @@ void CryOmni3DEngine_China::playLoop() {
 		if (fade && !_skipFade) {
 			crossFade();
 		} else {
-			if (fade) {
-				_skipFade = false; // the next warp draw after the bar is a plain draw (E-0903)
-			}
 			if (_display == kDisplayWarp) {
 				scrollByCursor();
 			}
 			drawFrame();
+		}
+		if (_display == kDisplayWarp) {
+			_skipFade = false; // only the next warp draw after the bar is a plain draw (E-0903)
 		}
 		waitFrame();
 	}
