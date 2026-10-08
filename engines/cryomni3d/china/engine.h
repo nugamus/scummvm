@@ -179,6 +179,8 @@ public:
 	int32 unknownCall(const char *name);
 	bool keyDown(int32 scanCode);
 	void epilogue();
+	void credits();
+	bool waitOrEscape(uint32 ms);
 	void objectSetLabel(uint id, const char *key);
 	void objectSetExamine(uint id, const char *place);
 

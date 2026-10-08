@@ -232,6 +232,10 @@ Common::Error CryOmni3DEngine_China::run() {
 	while (!shouldAbort()) {
 		const MenuChoice choice = mainMenu();
 		if (choice == kMenuQuit || choice == kMenuNone) {
+			// Quit shows the credits first (E-0506)
+			if (choice == kMenuQuit) {
+				credits();
+			}
 			break;
 		}
 		if (choice == kMenuNewGame) {
