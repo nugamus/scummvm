@@ -25,6 +25,7 @@
 #include "audio/mixer.h"
 
 #include "common/array.h"
+#include "common/events.h"
 #include "common/keyboard.h"
 #include "common/queue.h"
 #include "common/rect.h"
