@@ -37,6 +37,7 @@ MODULE_OBJS += \
 	china/logic.o \
 	china/dialogue.o \
 	china/endings.o \
+	china/interface.o \
 	china/places.o \
 	china/saveload.o
 endif
