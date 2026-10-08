@@ -186,8 +186,9 @@ void CryOmni3DEngine_China::voice(const char *line) {
 		}
 		id = block.next;
 	}
+	// An id missing from DIAL.TXT plays nothing (E-0956), e.g. place victime's voice("victime")
 	if (!_dialogues.contains(id) && id != "fin") {
-		warning("China: no dialogue block %s", id.c_str());
+		debug(1, "China: no dialogue block %s", id.c_str());
 	}
 }
 
@@ -222,14 +223,24 @@ bool CryOmni3DEngine_China::loadFaces(const char *stem, Face &face) {
 // the voice's amplitude a quarter of a second ahead.
 void CryOmni3DEngine_China::dialogue(const char *line, const char *stemA, const char *stemB, bool noSubtitles) {
 	waitSoundChannel();
+	Common::String id(line);
+	id.toLowercase();
+	// Original bug: jixw120 (generated places.cpp) asks for ANJIX41, a block DIAL.TXT and VOICES name ANJJIX41, so
+	// the original never plays that line (E-0956)
+	if (id == "anjix41") {
+		id = "anjjix41";
+	}
+	// A block DIAL.TXT lacks plays nothing (E-0956)
+	if (!_dialogues.contains(id)) {
+		debug(1, "China: no dialogue block %s", id.c_str());
+		return;
+	}
 	Face faces[2];
 	const bool loaded[2] = { loadFaces(stemA, faces[0]), loadFaces(stemB, faces[1]) };
 	uint frameOf[2] = { 0, 0 };
 	const bool subtitles = !noSubtitles && ConfMan.getBool("subtitles");
 	_mixer->setChannelVolume(_musicHandle, 20 * Audio::Mixer::kMaxChannelVolume / 127);
 
-	Common::String id(line);
-	id.toLowercase();
 	const Common::String first(id.c_str(), MIN<uint>(3, id.size()));
 	Common::Array<int16> samples;
 	bool stop = false;
