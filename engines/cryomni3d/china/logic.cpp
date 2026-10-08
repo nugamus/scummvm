@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/file.h"
 #include "common/system.h"
@@ -370,7 +371,7 @@ void CryOmni3DEngine_China::video(const char *name) {
 	playHNM(Common::Path(Common::String::format("HNM/%s.HNS", name)), Audio::Mixer::kMusicSoundType);
 	CursorMan.showMouse(true);
 	clearKeys();
-	_mixer->pauseHandle(_musicHandle, false);
+	_mixer->pauseHandle(_musicHandle, ConfMan.getBool("music_mute"));
 }
 
 void CryOmni3DEngine_China::setAngles(double alpha, double beta) {
@@ -446,6 +447,10 @@ void CryOmni3DEngine_China::playMusic(const char *name) {
 	}
 	_mixer->stopHandle(_musicHandle);
 	_musicName = name;
+	// With the music off the track is only remembered (E-1153)
+	if (ConfMan.getBool("music_mute")) {
+		return;
+	}
 	Common::File *file = new Common::File();
 	if (!file->open(Common::Path(Common::String::format("MUSIC/%s.ZIK", name)))) {
 		warning("China: no music %s", name);

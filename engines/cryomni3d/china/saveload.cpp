@@ -150,7 +150,7 @@ void CryOmni3DEngine_China::applyLoad() {
 }
 
 bool CryOmni3DEngine_China::canSaveGameStateCurrently(Common::U32String *msg) {
-	return (_gameRunning || visitMode()) && _inPlay && !_inPlaceCall;
+	return (_gameRunning || visitMode()) && (_inPlay || _inMenu) && !_inPlaceCall;
 }
 
 bool CryOmni3DEngine_China::canLoadGameStateCurrently(Common::U32String *msg) {
