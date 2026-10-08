@@ -445,11 +445,7 @@ bool CryOmni3DEngine_China::keyDown(int32 scanCode) {
 	return scanCode == 57 && _spacePressed;
 }
 
-// Not implemented yet (spec/china-zones.md): the epilogue and the object label/examine settings.
-void CryOmni3DEngine_China::epilogue() {
-	warning("China: epilogue not implemented");
-}
-
+// Not implemented yet (spec/china-zones.md): the object label/examine settings.
 void CryOmni3DEngine_China::objectSetLabel(uint id, const char *key) {
 	debug(1, "China: object %u label %s", id, key);
 }
@@ -682,8 +678,10 @@ void CryOmni3DEngine_China::playLoop() {
 		if (toMenu || _endOfPlay) {
 			_inPlay = false;
 			if (_endOfPlay) {
+				// The end of the story: the credits, then the menu (Q-1001)
 				_gameRunning = false;
 				_endOfPlay = false;
+				credits();
 			}
 			return;
 		}
