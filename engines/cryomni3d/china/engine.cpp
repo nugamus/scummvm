@@ -51,7 +51,7 @@ CryOmni3DEngine_China::CryOmni3DEngine_China(OSystem *syst, const CryOmni3DGameD
 	CryOmni3DEngine(syst, gamedesc), _format(2, 5, 6, 5, 0, 11, 5, 0, 0), _display(kDisplayNone),
 	_fadePending(false), _alphaSpeed(0.), _betaSpeed(0.), _panoramaSpeed(2), _cursorId(-1), _hoveredZone(-1),
 	_clickedZone(-1), _pressLatch(false), _pressed(false), _place(nullptr), _entryPending(false),
-	_heldObject(kNoObject), _gameRunning(false), _nextFrame(0), _loadedGame(false), _inPlay(false),
+	_heldObject(kNoObject), _gameRunning(false), _nextFrame(0), _loadedGame(false), _inPlay(false), _inMenu(false),
 	_endOfPlay(false), _spacePressed(false), _spaceUp(false), _spaceArmed(false), _inPlaceCall(false), _pendingLoad(-1), _puzzleMode(false), _rightLatch(false),
 	_fightStart(0), _docIndexWidth(0), _docLoaded(false), _docCur(0), _docEnd(0), _docWrapped(false), _barLoaded(false), _barWarp(false), _skipFade(false), _voiceRate(22050), _rnd("china") {
 	memset(_vars, 0, sizeof(_vars));
@@ -59,8 +59,11 @@ CryOmni3DEngine_China::CryOmni3DEngine_China(OSystem *syst, const CryOmni3DGameD
 	for (uint i = 0; i < kSlotCount; i++) {
 		_slots[i] = kNoObject;
 	}
-	// The original's options default to subtitles on (E-0501)
+	// The original's options and their defaults (E-0501): panorama speed, subtitles, music,
+	// (ScummVM's music_mute, inverted) and the save mode (manual saves from the menu)
+	ConfMan.registerDefault("panorama_speed", 2);
 	ConfMan.registerDefault("subtitles", true);
+	ConfMan.registerDefault("manual_save", true);
 }
 
 CryOmni3DEngine_China::~CryOmni3DEngine_China() {
@@ -226,6 +229,7 @@ Common::Error CryOmni3DEngine_China::run() {
 	}
 	setCursorSprite(11);
 	CursorMan.showMouse(true);
+	_panoramaSpeed = CLIP(ConfMan.getInt("panorama_speed"), 0, 4);
 
 	const int saveSlot = ConfMan.getInt("save_slot");
 	if (saveSlot >= 0 && loadGameState(saveSlot).getCode() == Common::kNoError) {
@@ -257,6 +261,15 @@ Common::Error CryOmni3DEngine_China::run() {
 			}
 		} else if (choice == kMenuDocumentation) {
 			documentation();
+			continue;
+		} else if (choice == kMenuOptions) {
+			optionsScreen();
+			continue;
+		} else if (choice == kMenuSave) {
+			// The menu's save (E-0505) through ScummVM's dialog, of the game as it was left
+			_inMenu = true;
+			saveGameDialog();
+			_inMenu = false;
 			continue;
 		} else if (choice != kMenuResume) {
 			warning("China: menu choice %d is not implemented", choice);
@@ -303,12 +316,13 @@ bool CryOmni3DEngine_China::menuButtonEnabled(uint button) {
 	case 0:
 		return true;
 	case 1:
-		// Any save (E-0505); ScummVM saves stand in for the original's 12 emblem slots
-		return !getSaveFileManager()->listSavefiles(getMetaEngine()->getSavegameFilePattern(_targetName.c_str())).empty();
+		// Any save, or save mode (E-0505); ScummVM saves stand in for the original's 12 emblem slots
+		return ConfMan.getBool("manual_save") ||
+		       !getSaveFileManager()->listSavefiles(getMetaEngine()->getSavegameFilePattern(_targetName.c_str())).empty();
 	case 2:
 		return _gameRunning || visitMode();
 	case 3:
-		return false; // save mode only (E-0505)
+		return ConfMan.getBool("manual_save") && _gameRunning; // E-0505
 	default:
 		return true;
 	}
@@ -353,7 +367,7 @@ MenuChoice CryOmni3DEngine_China::mainMenu() {
 		}
 		if (getDragStatus() == kDragStatus_Finished && hovered >= 0 && menuButtonEnabled(hovered)) {
 			static const MenuChoice choices[kMenuButtons] = {
-				kMenuNewGame, kMenuLoad, kMenuResume, kMenuSave, kMenuVisit, kMenuDocumentation, kMenuNone, kMenuQuit
+				kMenuNewGame, kMenuLoad, kMenuResume, kMenuSave, kMenuVisit, kMenuDocumentation, kMenuOptions, kMenuQuit
 			};
 			if (choices[hovered] != kMenuNone) {
 				return choices[hovered];
@@ -364,6 +378,90 @@ MenuChoice CryOmni3DEngine_China::mainMenu() {
 		g_system->delayMillis(10);
 	}
 	return kMenuNone;
+}
+
+// The options screen (spec/china-boot.md Options screen, E-1153): five lines over the menu's
+// background; the values live in the game's settings (chine.cfg in the original, E-0501).
+void CryOmni3DEngine_China::optionsScreen() {
+	static const char *const speeds[5] = { "tres_lent", "lent", "normal", "rapide", "tres_rapide" };
+	static const char *const noYes[2] = { "non", "oui" };
+	static const char *const saveModes[2] = { "auto", "manu" };
+	static const char *const keys[5] = { "omni3D", "sous_titre", "musique", "save", "retour" };
+	PuzzleInput in;
+	puzzleStart(in);
+	setCursorSprite(11);
+	while (!shouldAbort()) {
+		puzzlePoll(in);
+		if (in.escape) {
+			break;
+		}
+		const Common::Point m = getMousePos();
+		_screen.blitFrom(_menuBackground);
+		_fontManager.setCurrentFont(1); // the menu font (E-0801); Q-1155
+		int clicked = -1;
+		for (int i = 0; i < 5; i++) {
+			Common::String value;
+			switch (i) {
+			case 0:
+				value = label(speeds[_panoramaSpeed]);
+				break;
+			case 1:
+				value = label(noYes[ConfMan.getBool("subtitles")]);
+				break;
+			case 2:
+				value = label(noYes[!ConfMan.getBool("music_mute")]);
+				break;
+			case 3:
+				value = label(saveModes[ConfMan.getBool("manual_save")]);
+				break;
+			default:
+				break;
+			}
+			const Common::String text = label(keys[i]);
+			const int y = i < 4 ? 250 + 25 * i : 450;
+			const Common::Rect rect(280, y, 280 + _fontManager.getStrWidth(text) + _fontManager.getStrWidth(value), y + (i < 4 ? 23 : 25));
+			// The save mode cannot change while a game is in progress (E-1153)
+			const bool enabled = i != 3 || !_gameRunning;
+			const bool hovered = enabled && rect.contains(m);
+			if (hovered && in.press) {
+				clicked = i;
+			}
+			_fontManager.setForeColor(textColor(!enabled ? 0x9a73 : hovered ? 0xffff : 0x7020));
+			_fontManager.displayStr(280, y, text);
+			_fontManager.displayStr(280 + _fontManager.getStrWidth(text), y, value);
+		}
+		g_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, 640, 480);
+		g_system->updateScreen();
+		waitFrame();
+		if (clicked == 0) {
+			_panoramaSpeed = (_panoramaSpeed + 1) % 5;
+			ConfMan.setInt("panorama_speed", _panoramaSpeed);
+		} else if (clicked == 1) {
+			ConfMan.setBool("subtitles", !ConfMan.getBool("subtitles"));
+		} else if (clicked == 2) {
+			// Off stops the music, on resumes it (E-1153)
+			const bool on = ConfMan.getBool("music_mute");
+			ConfMan.setBool("music_mute", !on);
+			if (_mixer->isSoundHandleActive(_musicHandle)) {
+				_mixer->pauseHandle(_musicHandle, !on);
+			} else if (on && !_musicName.empty()) {
+				const Common::String track = _musicName;
+				_musicName.clear();
+				playMusic(track.c_str());
+			}
+		} else if (clicked == 3) {
+			// The auto mode's emblem chooser and automatic saves are not implemented (Q-0500)
+			ConfMan.setBool("manual_save", !ConfMan.getBool("manual_save"));
+		} else if (clicked == 4) {
+			break;
+		}
+	}
+	ConfMan.flushToDisk();
+	// The press that left must not reach the menu as a click on its release
+	while (getCurrentMouseButton() == 1 && !shouldAbort()) {
+		pollEvents();
+		g_system->delayMillis(10);
+	}
 }
 
 } // End of namespace China

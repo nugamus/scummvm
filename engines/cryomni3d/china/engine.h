@@ -61,7 +61,8 @@ enum MenuChoice {
 	kMenuSave = 4,
 	kMenuVisit = 5,
 	kMenuQuit = 6,
-	kMenuDocumentation = 7
+	kMenuDocumentation = 7,
+	kMenuOptions = 8
 };
 
 class CryOmni3DEngine_China : public CryOmni3DEngine {
@@ -107,6 +108,7 @@ private:
 
 	// Main menu
 	MenuChoice mainMenu();
+	void optionsScreen();
 	void drawMenu(int hovered);
 	Common::Rect menuButtonRect(uint button);
 	bool menuButtonEnabled(uint button);
@@ -243,6 +245,7 @@ private:
 
 	bool _loadedGame;
 	bool _inPlay;
+	bool _inMenu; // the menu's own save is running
 
 	Graphics::PixelFormat _format;
 	Graphics::ManagedSurface _screen;
