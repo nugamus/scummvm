@@ -39,6 +39,7 @@ MODULE_OBJS += \
 	china/dialogue.o \
 	china/endings.o \
 	china/interface.o \
+	china/map.o \
 	china/places.o \
 	china/puzzles.o \
 	china/saveload.o

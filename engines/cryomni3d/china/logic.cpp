@@ -328,26 +328,31 @@ void CryOmni3DEngine_China::warp(const char *name) {
 	_fadePending = true;
 }
 
+// A TGA picture converted to the screen format; false (and a warning) when it cannot be read.
+bool CryOmni3DEngine_China::loadTga(const Common::Path &path, Graphics::ManagedSurface &dst) {
+	Common::File file;
+	Image::TGADecoder tga;
+	if (!file.open(path) || !tga.loadStream(file) || !tga.getSurface()) {
+		warning("China: cannot read %s", path.toString().c_str());
+		return false;
+	}
+	Graphics::Surface *conv = tga.getSurface()->convertTo(_format);
+	dst.copyFrom(*conv);
+	conv->free();
+	delete conv;
+	return true;
+}
+
 // Still lookup (E-0510): Images\<stem>.hnm, then Images\<stem>.tga, then Loc\<stem>.
 bool CryOmni3DEngine_China::image(const char *name) {
 	const Common::String stem(name);
 	bool ok = false;
 	if (Common::File::exists(Common::Path("IMAGES/" + stem + ".HNM"))) {
 		ok = loadStill(Common::Path("IMAGES/" + stem + ".HNM"), _still);
+	} else if (Common::File::exists(Common::Path("IMAGES/" + stem + ".TGA"))) {
+		ok = loadTga(Common::Path("IMAGES/" + stem + ".TGA"), _still);
 	} else {
-		Common::File file;
-		if (file.open(Common::Path("IMAGES/" + stem + ".TGA"))) {
-			Image::TGADecoder tga;
-			if (tga.loadStream(file) && tga.getSurface()) {
-				Graphics::Surface *conv = tga.getSurface()->convertTo(_format);
-				_still.copyFrom(*conv);
-				conv->free();
-				delete conv;
-				ok = true;
-			}
-		} else {
-			ok = loadStill(Common::Path("LOC/" + stem + ".HNM"), _still);
-		}
+		ok = loadStill(Common::Path("LOC/" + stem + ".HNM"), _still);
 	}
 	if (!ok) {
 		warning("China: no image %s", name);
@@ -739,6 +744,8 @@ void CryOmni3DEngine_China::playLoop() {
 		if (spaceOpen || (right && !_rightLatch)) {
 			interfaceScreen();
 			_spacePressed = false;
+			// The button state from before the bar is stale: a press that closed it stays latched
+			_pressed = getCurrentMouseButton() == 1;
 			if (_pendingLoad >= 0 || shouldQuit()) {
 				continue;
 			}

@@ -26,8 +26,6 @@
 #include "common/file.h"
 #include "common/system.h"
 
-#include "image/tga.h"
-
 #include "cryomni3d/china/engine.h"
 
 namespace CryOmni3D {
@@ -378,21 +376,7 @@ int CryOmni3DEngine_China::docIndexPanel(int shift, int &scroll, const Common::P
 
 // INTERF\<name>.tga (0x416510), converted to the screen format
 bool CryOmni3DEngine_China::docLoadPicture(const Common::String &name, Graphics::ManagedSurface &dst) {
-	Common::File file;
-	if (!file.open(Common::Path(Common::String("INTERF/") + name + ".TGA"))) {
-		warning("China: cannot open fiche picture %s", name.c_str());
-		return false;
-	}
-	Image::TGADecoder tga;
-	if (!tga.loadStream(file) || !tga.getSurface()) {
-		warning("China: cannot decode fiche picture %s", name.c_str());
-		return false;
-	}
-	Graphics::Surface *conv = tga.getSurface()->convertTo(_format);
-	dst.copyFrom(*conv);
-	conv->free();
-	delete conv;
-	return true;
+	return loadTga(Common::Path(Common::String("INTERF/") + name + ".TGA"), dst);
 }
 
 // Word-wrapped text in the current font, 15 px lines (E-1304). `$` signs count no width; the

@@ -26,7 +26,6 @@
 
 #include "audio/audiostream.h"
 #include "audio/decoders/wave.h"
-#include "image/tga.h"
 
 #include "cryomni3d/china/engine.h"
 
@@ -39,10 +38,6 @@ enum {
 	kPuzzleCursorDefault = 11,
 	kPuzzleCursorUse = 14
 };
-
-static Common::Rect spriteRect(const Sprite &s) {
-	return Common::Rect(s.pos.x, s.pos.y, s.pos.x + s.surface.w, s.pos.y + s.surface.h);
-}
 
 // Pixel hit (E-1250): inside the sprite and not the key colour.
 // Original bug: the bottom test accepts y = top + height, a row past the sprite (E-1250); it does not hit here.
@@ -60,20 +55,9 @@ Common::Path CryOmni3DEngine_China::puzzlePath(const Common::String &file) const
 
 // setImage of the puzzle's TGA (E-1200): it becomes the still shown.
 bool CryOmni3DEngine_China::puzzleBackground(const Common::String &name) {
-	Common::File file;
-	if (!file.open(puzzlePath(name + ".TGA"))) {
-		warning("China: cannot open puzzle picture %s", name.c_str());
+	if (!loadTga(puzzlePath(name + ".TGA"), _still)) {
 		return false;
 	}
-	Image::TGADecoder tga;
-	if (!tga.loadStream(file) || !tga.getSurface()) {
-		warning("China: cannot decode puzzle picture %s", name.c_str());
-		return false;
-	}
-	Graphics::Surface *conv = tga.getSurface()->convertTo(_format);
-	_still.copyFrom(*conv);
-	conv->free();
-	delete conv;
 	_display = kDisplayStill;
 	_fadePending = false;
 	return true;

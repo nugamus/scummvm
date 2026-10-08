@@ -411,7 +411,7 @@ int32 CryOmni3DEngine_China::interfaceScreen() {
 	clearKeys();
 	barSlide(true);
 	int32 result = 1;
-	bool wasBelow = false;
+	bool wasBelow = false, travelled = false;
 	// A button still down while the bar opens does nothing until it is released (E-1100)
 	bool leftPrev = getCurrentMouseButton() == 1;
 	bool rightPrev = getCurrentMouseButton() == 2;
@@ -472,7 +472,15 @@ int32 CryOmni3DEngine_China::interfaceScreen() {
 				leftPrev = true;
 				continue;
 			} else if (barVisible(kBarCompass) && barRect(kBarCompass).contains(m)) {
-				warning("China: the map is not implemented (Q-1100)");
+				// A journey closes the bar at once, without the slide-out (E-1100, E-1151)
+				if (map()) {
+					travelled = true;
+					break;
+				}
+				leftPrev = true;
+				rightPrev = getCurrentMouseButton() == 2;
+				_cursorId = -1;
+				continue;
 			}
 		}
 		leftPrev = left;
@@ -494,7 +502,7 @@ int32 CryOmni3DEngine_China::interfaceScreen() {
 		barDraw(kBandRows, 0, hovered);
 		barPresent();
 	}
-	if (!shouldAbort()) {
+	if (!shouldAbort() && !travelled) {
 		barSlide(false);
 	}
 	// Back in the frame loop the next warp draw is a plain draw (E-1100, E-0903)

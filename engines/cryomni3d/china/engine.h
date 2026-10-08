@@ -49,6 +49,10 @@ struct Sprite {
 	Common::Point pos;
 };
 
+inline Common::Rect spriteRect(const Sprite &s) {
+	return Common::Rect(s.pos.x, s.pos.y, s.pos.x + s.surface.w, s.pos.y + s.surface.h);
+}
+
 enum MenuChoice {
 	kMenuNone = 0,
 	kMenuNewGame = 1,
@@ -89,6 +93,7 @@ private:
 	// Files: every name is relative to the game's DATA folder (`WARP/PNE140.HNM`).
 	bool loadStill(const Common::Path &path, Graphics::ManagedSurface &dst);
 	bool loadSprite(const Common::Path &path, Sprite &sprite);
+	bool loadTga(const Common::Path &path, Graphics::ManagedSurface &dst);
 	typedef Common::HashMap<Common::String, Common::String, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> TextMap;
 	void loadTextFile(const char *path, TextMap &dst);
 	Common::String label(const char *key) const;
@@ -374,6 +379,11 @@ private:
 	static const uint kDocSpriteCount = 29;
 	void documentation();
 	int32 documentFiche(const char *key);
+
+	// The map (map.cpp)
+	bool map();
+	Common::Point mapBuildings();
+	void mapPresent();
 	void docLoad();
 	void docLoadSprites();
 	bool docFind(const Common::String &label, int &theme, int &fiche) const;
