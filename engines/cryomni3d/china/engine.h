@@ -77,6 +77,7 @@ public:
 	Common::Error loadGameState(int slot) override;
 	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
 	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
+	bool keyEvent(const Common::Event &event) override;
 	void initializePath(const Common::FSNode &gamePath) override;
 
 protected:
@@ -139,7 +140,7 @@ public:
 	int clickedZone() const { return _clickedZone; }
 
 	void warp(const char *name);
-	void image(const char *name);
+	bool image(const char *name);
 	void video(const char *name);
 	void setAngles(double alpha, double beta);
 	void gotoPlace(const char *name);
@@ -341,6 +342,9 @@ private:
 	bool _gameRunning;
 	bool _endOfPlay;
 	bool _spacePressed;
+	// Space released since last looked at; armed when the frame loop took the press, so only
+	// that press's release opens the bar
+	bool _spaceUp, _spaceArmed;
 	uint32 _nextFrame;
 };
 

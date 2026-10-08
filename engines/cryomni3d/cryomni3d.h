@@ -118,6 +118,8 @@ public:
 	bool displayHLZ(const Common::Path &filepath, uint32 timeout = uint(-1));
 
 	bool pollEvents();
+	/** Called by pollEvents for every key down and key up event; true keeps a key down out of the queue. */
+	virtual bool keyEvent(const Common::Event &event) { return false; }
 	Common::Point getMousePos();
 	void setMousePos(const Common::Point &point);
 	uint getCurrentMouseButton() { return _lastMouseButton; }

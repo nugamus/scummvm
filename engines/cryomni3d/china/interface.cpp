@@ -43,7 +43,8 @@ static const char *const kObjectLabelKeys[CryOmni3DEngine_China::kObjectCount] =
 	"LISTE_BOITES", "ORIGINAUX", "POSTHUME", "CONFES1", "CONFES2", "CONFES3", "CONFES4", "INDIC1", "INDIC2",
 	"INDIC3", "INDIC4", "LISTE_VICTIMES", "PROCLA", "EDI", "LETTRE_VIERGE", "REBU", "PLBOMB",
 	"INDICE_CACHETS", "INDICE_CACHETS2", "SCEAUX", "TOURNEVIS", "CIRE", "RUYI", "PINCEAU", "BURIN", "MARTEAU",
-	"CLE_WANG", "CURE_DENTS", "PINCEAU_ESP", "PIECES", "MANDAT1", "MANDAT2", "MANDAT3", "MANDAT4", "CLE_JARRE"
+	"CLE_WANG", "CURE_DENTS", "PINCEAU_ESP", "PIECES", "MANDAT1", "MANDAT2", "MANDAT3", "MANDAT4", "CLE_JARRE",
+	"" // object 35 has no label (E-1107)
 };
 static const uint kDocumentCount = 19;
 static const char *const kObjectDocKeys[kDocumentCount] = {
@@ -264,8 +265,7 @@ void CryOmni3DEngine_China::wrapText(const Common::String &text, int width, Comm
 void CryOmni3DEngine_China::barDocument() {
 	const uint id = _heldObject;
 	Common::String key = objectDocKey(id);
-	image(key.c_str());
-	if (_display != kDisplayStill) {
+	if (!image(key.c_str())) {
 		return;
 	}
 	key.toLowercase();
@@ -499,6 +499,7 @@ int32 CryOmni3DEngine_China::interfaceScreen() {
 	}
 	// Back in the frame loop the next warp draw is a plain draw (E-1100, E-0903)
 	_skipFade = true;
+	_spaceArmed = _spaceUp = false;
 	_pressLatch = true;
 	_cursorId = -1;
 	clearKeys();

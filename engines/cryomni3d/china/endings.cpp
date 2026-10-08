@@ -73,8 +73,12 @@ void CryOmni3DEngine_China::credits() {
 	CursorMan.showMouse(false);
 	_fontManager.setCurrentFont(1);
 	while (!shouldAbort()) {
-		const bool end = file.eos();
-		Common::String line = end ? Common::String("/") : file.readLine();
+		Common::String line = file.eos() ? Common::String() : file.readLine();
+		// The file's end, or an empty last line, ends the credits
+		const bool end = file.eos() && line.empty();
+		if (end) {
+			line = "/";
+		}
 		if (line.size() && line.lastChar() == '\r') {
 			line.deleteLastChar();
 		}

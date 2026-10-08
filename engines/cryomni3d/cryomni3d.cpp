@@ -247,7 +247,8 @@ bool CryOmni3DEngine::pollEvents() {
 
 	int transitionalMask = 0;
 	while (g_system->getEventManager()->pollEvent(event)) {
-		if (event.type == Common::EVENT_KEYDOWN) {
+		const bool dropped = (event.type == Common::EVENT_KEYDOWN || event.type == Common::EVENT_KEYUP) && keyEvent(event);
+		if (event.type == Common::EVENT_KEYDOWN && !dropped) {
 			_keysPressed.push(event.kbd);
 		} else if (event.type == Common::EVENT_LBUTTONDOWN) {
 			transitionalMask |= Common::EventManager::LBUTTON;

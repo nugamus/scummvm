@@ -77,7 +77,12 @@ bool CryOmni3DEngine_China::syncGame(Common::Serializer &s) {
 	for (uint i = 0; i < count; i++) {
 		s.syncString(_minutes[i]);
 	}
-	// Version 2: the label and document keys places changed (E-1107)
+	// Version 2: the label and document keys places changed (E-1107); a version 1 save
+	// keeps the defaults
+	for (uint i = 0; i < kObjectCount && s.isLoading(); i++) {
+		_objLabelKey[i].clear();
+		_objDocKey[i].clear();
+	}
 	for (uint i = 0; i < kObjectCount; i++) {
 		s.syncString(_objLabelKey[i], 2);
 		s.syncString(_objDocKey[i], 2);

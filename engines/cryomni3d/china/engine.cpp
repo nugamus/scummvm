@@ -52,10 +52,13 @@ CryOmni3DEngine_China::CryOmni3DEngine_China(OSystem *syst, const CryOmni3DGameD
 	_fadePending(false), _alphaSpeed(0.), _betaSpeed(0.), _panoramaSpeed(2), _cursorId(-1), _hoveredZone(-1),
 	_clickedZone(-1), _pressLatch(false), _pressed(false), _place(nullptr), _entryPending(false),
 	_heldObject(kNoObject), _gameRunning(false), _nextFrame(0), _loadedGame(false), _inPlay(false),
-	_endOfPlay(false), _spacePressed(false), _inPlaceCall(false), _pendingLoad(-1), _puzzleMode(false), _rightLatch(false),
+	_endOfPlay(false), _spacePressed(false), _spaceUp(false), _spaceArmed(false), _inPlaceCall(false), _pendingLoad(-1), _puzzleMode(false), _rightLatch(false),
 	_fightStart(0), _barLoaded(false), _barWarp(false), _skipFade(false), _voiceRate(22050), _rnd("china") {
 	memset(_vars, 0, sizeof(_vars));
 	memset(_objects, 0, sizeof(_objects));
+	for (uint i = 0; i < kSlotCount; i++) {
+		_slots[i] = kNoObject;
+	}
 	// The original's options default to subtitles on (E-0501)
 	ConfMan.registerDefault("subtitles", true);
 }
