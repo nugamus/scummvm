@@ -38,7 +38,7 @@ static const int kBandRows = 65;
 static const int kCursorDefaultId = 11;
 
 // Objects' inventory names (LABELS.TXT keys, +0x2c) and document keys (+0x20, objects 0..18),
-// read from the original's object table (E-0905, E-1103).
+// from the original's object table (E-1107).
 static const char *const kObjectLabelKeys[CryOmni3DEngine_China::kObjectCount] = {
 	"LISTE_BOITES", "ORIGINAUX", "POSTHUME", "CONFES1", "CONFES2", "CONFES3", "CONFES4", "INDIC1", "INDIC2",
 	"INDIC3", "INDIC4", "LISTE_VICTIMES", "PROCLA", "EDI", "LETTRE_VIERGE", "REBU", "PLBOMB",
