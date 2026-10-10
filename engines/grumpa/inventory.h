@@ -103,6 +103,8 @@ public:
 	 *  `player` is the player's character (nullptr: none), where a full panel drops items. */
 	void update(const Character *player, const Common::Point &mouse);
 	Common::Array<Item> &items() { return _items; }
+	/** (agent adapter, agent.cpp) The panel rectangle of the slot holding item `id`; empty if none. */
+	Common::Rect slotRect(int id) const;
 	/** Whether a hovered item lies under `p` (the hotspot cursor). */
 	bool itemAt(const Common::Point &p) const;
 	/** The item's click rectangle: each side narrower than 40 px widened to centre +/- 30. */

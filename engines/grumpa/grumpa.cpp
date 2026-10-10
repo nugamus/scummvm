@@ -60,6 +60,7 @@ GrumpaEngine::GrumpaEngine(OSystem *syst, const ADGameDescription *gameDesc)
 }
 
 GrumpaEngine::~GrumpaEngine() {
+	agentFree();
 	delete _menuFont;
 	delete _voices;
 	delete _events;
@@ -305,6 +306,7 @@ Common::Error GrumpaEngine::run() {
 				dirty = false;
 			}
 		}
+		agentUpdate(state == kScene);
 		g_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0,
 								   kScreenWidth, kScreenHeight);
 		g_system->updateScreen();

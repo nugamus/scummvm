@@ -145,6 +145,9 @@ public:
 	const Graphics::Font *menuFont(int size);
 	static Common::U32String fromCp1252(const Common::String &s);
 	bool loadMenuText(Common::Array<Common::U32String> &items);
+	// Agent adapter (agent.cpp): answers the mailbox of game key agent_mailbox, if set.
+	void agentUpdate(bool inScene);
+	void agentFree();
 
 
 	// Saves (saveload.cpp, docs/spec/save.md) and the inventory (inventory.cpp).

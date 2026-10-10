@@ -19,6 +19,9 @@ MODULE_OBJS = \
 	items.o \
 	walk.o
 
+# The scummvm-agent-bridge adapter (BRIDGE commit, agent-bridge branch only).
+MODULE_OBJS += agent.o
+
 # This module can be built as a plugin
 ifeq ($(ENABLE_GRUMPA), DYNAMIC_PLUGIN)
 PLUGIN := 1
